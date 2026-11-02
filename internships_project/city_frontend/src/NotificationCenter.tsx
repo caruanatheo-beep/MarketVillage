@@ -24,18 +24,21 @@ export function NotificationCenter(props:Props){
   const julesActive=props.tasks.some(t=>t.agent_id==='job_hunter'&&['running','queued','waiting_approval'].includes(t.status));
   return <dialog ref={dialog} className="network-window notification-center" aria-labelledby="notifications-title" onCancel={props.onClose}>
     <header className="notification-heading"><div><span className="notification-eyebrow">TON VILLAGE, EN UN COUP D’ŒIL</span><h2 id="notifications-title">Centre de notifications</h2><p>Les décisions à prendre, les résultats à consulter et les missions à suivre.</p></div><button type="button" className="network-close" onClick={props.onClose} aria-label="Fermer les notifications">×</button></header>
+    <div className="notification-content">
     <div className="notification-summary">
       <button className="decision" onClick={()=>setFilter('decision')}><span>À toi de décider</span><strong>{decisions}</strong><small>Validations et propositions</small></button>
       <button className="success" onClick={()=>setFilter('completed')}><span>Missions terminées</span><strong>{completed}</strong><small>Résultats disponibles</small></button>
       <button className="failure" onClick={()=>setFilter('failed')}><span>À examiner</span><strong>{failures}</strong><small>Erreurs et relances</small></button>
     </div>
     <div className="notification-commands"><button disabled={!!busy||julesActive} onClick={()=>void action('jules',props.onRelaunch,'Nouvel audit Jules ajouté aux missions.')}>{busy==='jules'?'Lancement…':julesActive?'Jules a une mission active':'↻ Relancer l’audit de Jules'}</button><button disabled={!!busy} onClick={()=>void action('read',props.onRead,'Notifications marquées comme lues. Les décisions restent à traiter.')}>Tout marquer comme lu</button></div>
+    <details className="notification-tools"><summary>Outils de Jules · proposer une amélioration ou confier une mission</summary>
     <form className="jules-coding-form" onSubmit={e=>{e.preventDefault();void action('code',async()=>{await props.onCodeRequest(codeRequest);setCodeRequest('');},'Demande transmise à Jules. Sa proposition sera à valider avant le lancement de Codex.');}}>
       <div><strong>Jules · développeur Codex</strong><button type="button" disabled={!!busy||julesActive} onClick={()=>void action('codex-review',props.onCodexReview,'Analyse Codex demandée. Jules proposera une amélioration à valider.')}>Proposer une amélioration avec Codex</button></div>
       <label htmlFor="jules-code-request">Confier une correction ou fonctionnalité à Jules</label>
       <textarea id="jules-code-request" value={codeRequest} onChange={e=>setCodeRequest(e.target.value)} minLength={10} maxLength={3000} required rows={3} placeholder="Exemple : ajoute un filtre par agent dans le journal des missions…"/>
       <div><small>Codex · connexion ChatGPT locale · modifications dans une branche séparée, diff et vérifications à examiner.</small><button type="submit" disabled={!!busy||julesActive||codeRequest.trim().length<10}>Préparer la mission</button></div>
     </form>
+    </details>
     <div className="notification-tabs" role="group" aria-label="Filtrer les notifications">{[['all','Tout'],['decision','Décisions'],['unread','Non lues'],['completed','Terminées'],['active','En cours'],['failed','Erreurs']].map(([id,label])=><button key={id} aria-pressed={filter===id} className={filter===id?'selected':''} onClick={()=>setFilter(id)}>{label}</button>)}</div>
     <div className="notification-filters"><input aria-label="Rechercher une notification" placeholder="Mission, résultat ou identifiant…" value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="Agent des notifications" value={agent} onChange={e=>setAgent(e.target.value)}><option value="">Tous les agents</option>{props.agents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
     {error&&<p className="notification-feedback error" role="alert">{error}</p>}{notice&&<p className="notification-feedback" role="status">{notice}</p>}
@@ -55,6 +58,7 @@ export function NotificationCenter(props:Props){
         </article>;
       })}
       <details className="notification-journal"><summary>Journal détaillé · {props.events.length} événements récents</summary><ActivityTimeline events={props.events} agents={props.agents} onOpen={(_agent,id)=>props.onOpen(id)}/></details>
+    </div>
     </div>
     <footer className="notification-footer">Les validations sont explicites. Lire une notification n’autorise aucune action.</footer>
   </dialog>;
