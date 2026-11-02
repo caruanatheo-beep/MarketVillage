@@ -82,6 +82,15 @@ export async function checkLayout() {
   );
   const office = new OfficeState(buildOfficeLayout());
   validateAgentRoutes(office);
+  for (const [from, to] of [
+    [[23, worldY(10)], [23, worldY(19)]],
+    [[15, worldY(14)], [32, worldY(14)]],
+  ]) {
+    assert.ok(findPath(...from, ...to, office.tileMap, office.blockedTiles).length,
+      `Lounge passage blocked from ${from} to ${to}`);
+    assert.ok(findPath(...to, ...from, office.tileMap, office.blockedTiles).length,
+      `Lounge return passage blocked from ${to} to ${from}`);
+  }
   const floorCells=office.tileMap.flatMap((row,y)=>row.flatMap((tile,x)=>
     tile!==TileType.VOID&&tile!==TileType.WALL?[{x,y}]:[]));
   const connected=new Set(),pending=[floorCells[0]];

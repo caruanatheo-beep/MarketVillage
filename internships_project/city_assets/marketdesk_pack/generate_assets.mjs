@@ -359,6 +359,133 @@ function loungeCoffeeTable() {
   return c;
 }
 
+function atriumLibrary() {
+  const c = canvas(48, 48);
+  c.rect(2, 44, 44, 3, '#11182480');
+  c.box(1, 1, 46, 44, '#3c2920', '#172334');
+  c.rect(3, 2, 42, 3, '#a47747'); c.rect(4, 5, 40, 37, '#201c1b');
+  for (const y of [16, 28, 40]) {
+    c.rect(4, y, 40, 3, '#91633b'); c.rect(4, y, 40, 1, '#d9ae73');
+  }
+  for (let shelf = 0; shelf < 3; shelf++) for (let x = 6; x < 43; x += 4) {
+    const height = 6 + ((x + shelf * 3) % 4);
+    const color = ['#8c9d8f', '#c7a06b', '#a36953', '#6a8da0', '#d0bb8b'][(x + shelf) % 5];
+    c.rect(x, 16 + shelf * 12 - height, 3, height, color);
+    c.rect(x, 17 + shelf * 12 - height, 3, 1, '#f1daa7');
+  }
+  c.rect(22, 5, 3, 37, '#7a5336'); c.rect(1, 4, 2, 38, '#d1a46e');
+  c.rect(45, 4, 2, 38, '#d1a46e');
+  c.rect(15, 4, 15, 1, '#ffe3a0'); c.rect(18, 5, 9, 3, '#e4ad64');
+  return c;
+}
+
+function atriumHearth() {
+  const c = canvas(64, 32);
+  c.rect(2, 29, 60, 2, '#0c142280');
+  c.box(1, 2, 62, 27, '#60432c', '#172333');
+  c.rect(3, 4, 58, 2, '#ad7b49');
+  c.box(10, 6, 44, 20, '#122038', '#c39b62');
+  for (let x = 14; x < 50; x += 5) {
+    const height = 4 + (x * 3) % 6;
+    c.rect(x, 19 - height, 4, height + 3, '#26354d');
+    c.rect(x + 1, 14 - height, 1, 2, '#e9a861');
+  }
+  c.rect(26, 17, 12, 7, '#a95f32'); c.rect(29, 12, 6, 10, '#efab51');
+  c.rect(31, 9, 3, 12, '#ffe3a0'); c.rect(34, 14, 2, 6, '#fff3bf');
+  c.rect(3, 27, 58, 2, '#d2a672');
+  return c;
+}
+
+function atriumSofa(horizontal = true) {
+  const c = canvas(horizontal ? 64 : 32, horizontal ? 32 : 48);
+  const w = c.w, h = c.h;
+  c.rect(2, h - 3, w - 4, 2, '#11182480');
+  c.box(2, 4, w - 4, h - 9, '#b8a783', '#4f3b31');
+  c.rect(4, 5, w - 8, 5, '#fff0c8');
+  c.rect(4, 11, w - 8, h - 19, '#ead8ac');
+  c.rect(4, h - 9, w - 8, 3, '#bda77d');
+  if (horizontal) {
+    for (const x of [22, 42]) c.rect(x, 6, 2, h - 15, '#9e8e73');
+    c.rect(2, 8, 5, h - 15, '#f1dfb6'); c.rect(w - 7, 8, 5, h - 15, '#f1dfb6');
+    c.rect(7, 12, w - 14, 1, '#fff4d6');
+  } else {
+    for (const y of [17, 31]) c.rect(7, y, w - 14, 2, '#9e8e73');
+    c.rect(3, 9, 5, h - 18, '#f1dfb6'); c.rect(w - 8, 9, 5, h - 18, '#f1dfb6');
+    c.rect(9, 11, w - 18, 1, '#fff4d6');
+  }
+  c.rect(7, h - 6, 3, 3, '#594334'); c.rect(w - 10, h - 6, 3, 3, '#594334');
+  return c;
+}
+
+function atriumChair() {
+  const c = canvas(32, 32);
+  c.rect(4, 29, 24, 2, '#11182480');
+  c.box(4, 5, 24, 22, '#c8b58e', '#4f3b31');
+  c.rect(7, 6, 18, 6, '#fff0ca'); c.rect(8, 13, 16, 10, '#ead8ae');
+  c.rect(5, 13, 4, 11, '#f1dfb9'); c.rect(23, 13, 4, 11, '#f1dfb9');
+  c.rect(8, 25, 3, 4, '#594334'); c.rect(21, 25, 3, 4, '#594334');
+  return c;
+}
+
+function atriumConsole() {
+  const c = canvas(64, 32);
+  c.rect(2, 29, 60, 2, '#11182480');
+  c.box(1, 4, 62, 25, '#6f482d', '#28303a');
+  c.rect(2, 4, 60, 4, '#cb9b5c'); c.rect(3, 5, 58, 1, '#f2c98b');
+  for (let x = 6; x < 59; x += 5) {
+    c.rect(x, 18, 3, 8, ['#627f83','#a88460','#bd7359','#a7a783'][x % 4]);
+    c.rect(x, 19, 3, 1, '#ebd6a3');
+  }
+  c.rect(4, 16, 56, 2, '#b38350');
+  for (const x of [9, 48]) {
+    c.box(x, 8, 9, 7, '#607b8b', '#413b32');
+    c.rect(x + 3, 6, 3, 2, '#d6c29a');
+  }
+  c.rect(28, 9, 10, 5, '#ddcba3'); c.rect(31, 10, 3, 3, '#75858a');
+  return c;
+}
+
+function atriumPouf() {
+  const c = canvas(16, 16);
+  c.rect(2, 13, 12, 2, '#11182480');
+  c.box(2, 4, 12, 9, '#304b78', '#25334c');
+  c.rect(4, 3, 8, 2, '#6985b3'); c.rect(4, 6, 8, 1, '#8199bd');
+  return c;
+}
+
+function atriumLamp() {
+  const c = canvas(16, 32);
+  c.rect(3, 29, 10, 2, '#11182480');
+  c.rect(7, 17, 2, 12, '#ad8150'); c.rect(4, 27, 8, 2, '#725437');
+  c.poly([[5, 4], [11, 4], [14, 15], [2, 15]], '#dcb875');
+  c.rect(5, 7, 6, 7, '#ffe6a0'); c.rect(3, 15, 10, 2, '#f9d18b');
+  return c;
+}
+
+function atriumCoffeeTable() {
+  const c = canvas(48, 32);
+  c.rect(4, 27, 40, 3, '#11182480');
+  c.rect(6, 22, 5, 6, '#65462e'); c.rect(37, 22, 5, 6, '#65462e');
+  c.box(2, 7, 44, 18, '#9d6b3b', '#473329');
+  c.rect(4, 8, 40, 2, '#dbaf70'); c.rect(5, 11, 38, 11, '#bc8a52');
+  c.rect(5, 22, 38, 2, '#785334');
+  c.box(9, 13, 9, 6, '#597362', '#374c42');
+  c.rect(12, 11, 3, 3, '#7c9b69'); c.rect(12, 14, 3, 2, '#b6bb7b');
+  c.rect(25, 14, 8, 2, '#ead8b2'); c.rect(27, 12, 4, 2, '#f6e8cb');
+  c.box(36, 13, 4, 4, '#6f817a', '#3e504c');
+  return c;
+}
+
+function atriumCandle() {
+  const c = canvas(16, 16);
+  c.rect(3, 13, 10, 2, '#4d3929');
+  c.rect(5, 10, 6, 3, '#c7a26e');
+  c.rect(7, 5, 2, 5, '#e6d5b3');
+  c.rect(5, 3, 6, 5, '#ffd88c66');
+  c.rect(7, 1, 2, 6, '#fff0b5'); c.rect(8, 2, 1, 3, '#ffffff');
+  return c;
+}
+
 function meetingRoundTable() {
   const c = canvas(48, 32);
   c.rect(7, 27, 34, 3, '#10172170');
@@ -567,6 +694,16 @@ const specs = [
   ['MD_EXECUTIVE_GLASS_PARTITION', 'Executive glass partition', 'walls', 48, 16, 3, 1, false, 'executive_glass_partition.png', { canPlaceOnWalls: true, backgroundTiles: 1 }],
   ['MD_CENTRAL_LOUNGE_SOFA', 'Central lounge sofa', 'seating', 48, 32, 3, 2, false, 'central_lounge_sofa.png'],
   ['MD_EXECUTIVE_MEETING_TABLE', 'Executive meeting table', 'tables', 80, 32, 5, 2, false, 'executive_meeting_table.png'],
+  ['MD_ATRIUM_LIBRARY', 'Walnut lounge bookcase', 'storage', 48, 48, 3, 3, false, 'atrium_library.png', { backgroundTiles: 2 }],
+  ['MD_ATRIUM_HEARTH', 'Framed city hearth', 'wall', 64, 32, 4, 2, false, 'atrium_hearth.png', { backgroundTiles: 1 }],
+  ['MD_ATRIUM_SOFA_FRONT', 'Ivory three-seat sofa', 'seating', 64, 32, 4, 2, false, 'atrium_sofa_front.png'],
+  ['MD_ATRIUM_SOFA_SIDE', 'Ivory side sofa', 'seating', 32, 48, 2, 3, false, 'atrium_sofa_side.png'],
+  ['MD_ATRIUM_CHAIR', 'Ivory lounge armchair', 'seating', 32, 32, 2, 2, false, 'atrium_chair.png'],
+  ['MD_ATRIUM_TABLE', 'Walnut lounge coffee table', 'tables', 48, 32, 3, 2, false, 'atrium_table.png'],
+  ['MD_ATRIUM_CONSOLE', 'Low walnut bookcase', 'storage', 64, 32, 4, 1, false, 'atrium_console.png'],
+  ['MD_ATRIUM_POUF', 'Indigo lounge pouf', 'seating', 16, 16, 1, 1, false, 'atrium_pouf.png'],
+  ['MD_ATRIUM_LAMP', 'Warm lounge floor lamp', 'lighting', 16, 32, 1, 1, false, 'atrium_lamp.png'],
+  ['MD_ATRIUM_CANDLE', 'Coffee table candle', 'lighting', 16, 16, 1, 1, false, 'atrium_candle.png', { canPlaceOnSurfaces: true, backgroundTiles: 1 }],
 ];
 
 const images = new Map([
@@ -604,6 +741,16 @@ const images = new Map([
   ['MD_EXECUTIVE_GLASS_PARTITION', executiveGlassPartition()],
   ['MD_CENTRAL_LOUNGE_SOFA', loungeSofa()],
   ['MD_EXECUTIVE_MEETING_TABLE', executiveMeetingTable()],
+  ['MD_ATRIUM_LIBRARY', atriumLibrary()],
+  ['MD_ATRIUM_HEARTH', atriumHearth()],
+  ['MD_ATRIUM_SOFA_FRONT', atriumSofa(true)],
+  ['MD_ATRIUM_SOFA_SIDE', atriumSofa(false)],
+  ['MD_ATRIUM_CHAIR', atriumChair()],
+  ['MD_ATRIUM_TABLE', atriumCoffeeTable()],
+  ['MD_ATRIUM_CONSOLE', atriumConsole()],
+  ['MD_ATRIUM_POUF', atriumPouf()],
+  ['MD_ATRIUM_LAMP', atriumLamp()],
+  ['MD_ATRIUM_CANDLE', atriumCandle()],
 ]);
 
 function crc32(buf) {

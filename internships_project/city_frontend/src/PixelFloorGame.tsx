@@ -50,7 +50,7 @@ const FURNITURE_DIRS = ["BIN", "BOOKSHELF", "CACTUS", "CLOCK", "COFFEE", "COFFEE
 const uid = (id: string) => `marketdesk-${id}`;
 const textiles: Record<string, HTMLImageElement> = {};
 async function loadTextiles() {
-  for (const name of ['ivory', 'slate']) textiles[name] = await loadImage(`${ROOT}/furniture/MARKETDESK_PACK/premium/rug-${name}.png`);
+  for (const name of ['ivory', 'slate', 'navy']) textiles[name] = await loadImage(`${ROOT}/furniture/MARKETDESK_PACK/premium/rug-${name}.png`);
   for (const name of ['oak-night', 'lamp-amber']) textiles[name] = await loadImage(`${ROOT}/furniture/MARKETDESK_PACK/premium/${name}.png`);
 }
 
@@ -98,7 +98,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error(`Sprite introuvable : ${url}`));
     // A rebuilt bundle must not reuse an older palette from browser PNG cache.
-    image.src = url.includes('/MARKETDESK_PACK/') ? `${url}?v=tower-objects-20261101-5` : url;
+    image.src = url.includes('/MARKETDESK_PACK/') ? `${url}?v=atrium-20261102` : url;
   });
 }
 
@@ -268,7 +268,9 @@ export async function loadFurniture(
     "MD_EXECUTIVE_CHAIR", "MD_CONTACT_PHONE", "MD_CENTRAL_LOUNGE_SOFA", "MD_EXECUTIVE_MEETING_TABLE",
     "MD_EXECUTIVE_GLASS_PARTITION", "MD_LOUNGE_SOFA_L", "MD_LOUNGE_ARMCHAIR", "MD_LOUNGE_COFFEE_TABLE",
     "MD_MEETING_ROUND_TABLE", "MD_MEETING_CHAIR", "MD_LOUNGE_PLANTER", "MD_SERVER_RACK_CLUSTER", "MD_CAREER_CABINET",
-    "MD_NETWORK_WORLD_MAP", "MD_TERRACE_TOPIARY"]) {
+    "MD_NETWORK_WORLD_MAP", "MD_TERRACE_TOPIARY", "MD_ATRIUM_LIBRARY", "MD_ATRIUM_HEARTH",
+    "MD_ATRIUM_SOFA_FRONT", "MD_ATRIUM_SOFA_SIDE", "MD_ATRIUM_CHAIR", "MD_ATRIUM_TABLE",
+    "MD_ATRIUM_CONSOLE", "MD_ATRIUM_POUF", "MD_ATRIUM_LAMP", "MD_ATRIUM_CANDLE"]) {
     if (!sprites[required]) throw new Error(`Sprite requis absent du manifeste : ${required}.`);
     if (!getCatalogEntry(required)) throw new Error(`Sprite chargé mais absent du catalogue : ${required}.`);
   }
@@ -440,14 +442,23 @@ export function buildOfficeLayout(): OfficeLayout {
   put("manager-sofa", "MD_CENTRAL_LOUNGE_SOFA", 29, 6); put("manager-hanging-plant", "HANGING_PLANT", 30, 1);
   for(const col of [5,13,33,41])put(`terrace-topiary-${col}`,"MD_TERRACE_TOPIARY",col,5);
 
-  // One shared lounge; circulation runs around the furniture, not through it.
-  put("lounge-sofa-west", "MD_LOUNGE_SOFA_L", 20, 11);
-  put("lounge-chair-west", "MD_LOUNGE_ARMCHAIR", 25, 12);
-  put("lounge-chair-east", "MD_LOUNGE_ARMCHAIR", 25, 15);
-  put("lounge-coffee-table-west", "MD_LOUNGE_COFFEE_TABLE", 21, 15);
-  // Keep the central north-south route clear between the atrium and executive suite.
-  put("lounge-planter", "MD_LOUNGE_PLANTER", 16, 16);
-  put("lounge-plant-east", "PLANT_2", 30, 16);
+  // The library wall frames the north entry; seating leaves a route down the east side.
+  put("atrium-library-west", "MD_ATRIUM_LIBRARY", 17, 10);
+  put("atrium-hearth", "MD_ATRIUM_HEARTH", 22, 10);
+  put("atrium-library-east", "MD_ATRIUM_LIBRARY", 28, 10);
+  put("atrium-sofa-north", "MD_ATRIUM_SOFA_FRONT", 21, 12);
+  put("atrium-sofa-west", "MD_ATRIUM_SOFA_SIDE", 17, 13);
+  put("atrium-chair-north", "MD_ATRIUM_CHAIR", 28, 13);
+  put("atrium-chair-south", "MD_ATRIUM_CHAIR", 28, 15);
+  put("atrium-table", "MD_ATRIUM_TABLE", 21, 14);
+  put("atrium-candle", "MD_ATRIUM_CANDLE", 22, 14);
+  put("atrium-pouf-west", "MD_ATRIUM_POUF", 20, 16);
+  put("atrium-pouf-east", "MD_ATRIUM_POUF", 26, 16);
+  put("atrium-console", "MD_ATRIUM_CONSOLE", 18, 17);
+  put("atrium-lamp-west", "MD_ATRIUM_LAMP", 16, 11);
+  put("atrium-lamp-east", "MD_ATRIUM_LAMP", 30, 11);
+  put("atrium-plant-west", "PLANT_2", 16, 16);
+  put("atrium-plant-east", "PLANT_2", 30, 16);
 
   // Department-specific details are tucked against the room edges, away from seats and doors.
   put("markets-library", "BOOKSHELF", 3, 10); put("markets-ticker", "MD_MARKET_TICKER", 8, 10);
@@ -609,7 +620,7 @@ function renderFloorFinishes(ctx: CanvasRenderingContext2D, offsetX: number, off
   renderCorridorFloor(ctx, offsetX, offsetY, zoom);
   const cell = TILE_SIZE * zoom;
   for (const [name, x, y, w, h] of [
-    ['slate',20,2,8,6], ['ivory',19,10,9,8],
+    ['slate',20,2,8,6], ['navy',17,11,14,7],
     ['slate',1,23,11,6], ['ivory',17,23,6,6], ['slate',25,23,6,6], ['slate',39,22,6,4],
   ] as const) {
     if (textiles[name]) ctx.drawImage(textiles[name],offsetX+x*cell,offsetY+worldY(y)*cell,w*cell,(worldY(y+h)-worldY(y))*cell);

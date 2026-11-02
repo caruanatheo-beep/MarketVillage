@@ -324,6 +324,7 @@ function board(w,h,kind) {
 }
 for(const a of manifest.assets) {
  let c;const id=a.id;
+  if(id.startsWith('MD_ATRIUM_')) continue;
  if(id==='MD_NETWORK_WORLD_MAP'){
  c=canvas(a.width,a.height);
  c.frame(0,0,64,31,'#312e27','#b28c57');c.frame(2,2,60,27,'#e3cc9d','#244555');
@@ -427,11 +428,12 @@ for(const a of manifest.assets) {
  await mkdir(resolve(out,'premium'),{recursive:true});await writeFile(resolve(out,a.file),encodePng(c));saved.push(id);
 }
 // Standalone textile PNG, used as a nonblocking floor finish.
-for(const [name,base,edge] of [['rug-ivory','#c8baa1','#e5d9c2'],['rug-slate','#58636b','#9ca4a4']]){
+ for(const [name,base,edge] of [['rug-ivory','#c8baa1','#e5d9c2'],['rug-slate','#58636b','#9ca4a4'],
+   ['rug-navy','#26344d','#b69a68']]){
  const c=canvas(96,64);c.rect(0,0,96,64,'#17202c35');c.rect(1,1,94,61,edge);c.rect(3,3,90,57,base);
  c.frame(5,5,86,52,edge,base);
  // Woven border, corner rosettes and tiny fringe, rather than a plain inset box.
- const motif=name==='rug-ivory'?'#a08b6e':'#74888f';
+  const motif=name==='rug-ivory'?'#a08b6e':name==='rug-navy'?'#d2b682':'#74888f';
  for(let x=10;x<87;x+=6){c.put(x,7,motif);c.put(x,56,motif);}
  for(let y=12;y<54;y+=6){c.put(7,y,motif);c.put(88,y,motif);}
  for(const [x,y] of [[11,11],[84,11],[11,52],[84,52]]){
