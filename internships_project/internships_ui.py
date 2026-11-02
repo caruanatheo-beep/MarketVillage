@@ -270,11 +270,11 @@ careerNavObserver.observe(document.querySelector('#internships-app') || document
                                     elem_id="internship-family",
                                 )
                             with gr.Column(elem_id="internship-period-field"):
-                                gr.HTML('<span class="job-filter-label">Date de publication</span>')
+                                gr.HTML('<span class="job-filter-label">Publication ou détection</span>')
                                 internship_period = gr.Dropdown(
                                     [("Toutes les dates", "all"), ("Aujourd’hui", "daily"),
                                      ("7 derniers jours", "weekly")],
-                                    value="all", label="Date de publication", show_label=False,
+                                    value="all", label="Publication ou détection", show_label=False,
                                     container=False, elem_id="internship-period",
                                 )
                             with gr.Column(elem_id="internship-start-field"):

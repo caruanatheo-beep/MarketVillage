@@ -190,6 +190,7 @@ _source_job_cache: dict[str, dict] = {}
 _source_job_cache_path: Path | None = None
 _force_source_refresh = False
 _refresh_previous_jobs: dict[str, "Opportunity"] = {}
+_refresh_first_seen: dict[str, str] = {}
 CACHE_REFRESH_SECONDS = 3600
 CACHE_PATH = Path(__file__).resolve().parent / "data" / "internships_cache.json"
 JOBTEASER_CACHE_PATH = CACHE_PATH.with_name("jobteaser_sitemap_cache.json")
@@ -462,8 +463,7 @@ def _opportunity_sort_key(job: Opportunity) -> tuple:
 
 def _recent_sort_key(job: Opportunity) -> tuple:
     published = int(job.published.replace("-", "")) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", job.published) else 0
-    return (job.published_inferred, -published, -job.score, job.company.casefold(),
-            job.title.casefold(), job.url.casefold())
+    return (-published, -job.score, job.company.casefold(), job.title.casefold(), job.url.casefold())
 
 
 def matching_opportunities(jobs: list[Opportunity], category: str = "Toutes", query: str = "",
@@ -489,8 +489,8 @@ def matching_opportunities(jobs: list[Opportunity], category: str = "Toutes", qu
       and (not query or query in f"{job.title} {job.company} {job.location}".casefold())
       and (not only_new or job.url not in seen)
       and (not hide_dismissed or job.url not in dismissed)
-      and (not weekly or (not job.published_inferred and _published_this_week(job.published, today)))
-      and (not daily or (not job.published_inferred and job.published == today.isoformat()))]
+      and (not weekly or _published_this_week(job.published, today))
+      and (not daily or job.published == today.isoformat())]
     return sorted(filtered, key=_recent_sort_key if sort_by == "recent" else _opportunity_sort_key)
 
 
@@ -2232,6 +2232,19 @@ def _deduplicate_opportunities(jobs: list[Opportunity]) -> list[Opportunity]:
     return sorted(unique.values(), key=_opportunity_sort_key)
 
 
+def _date_detected_offer(job: Opportunity, previous: Opportunity | None, today: date) -> Opportunity:
+    if job.published and not job.published_inferred:
+        return job
+    if previous and previous.published and not previous.published_inferred:
+        return replace(job, published=previous.published, published_inferred=False)
+    candidates = [value for value in (job.published, previous.published if previous else "",
+                                      _refresh_first_seen.get(job.url, ""))
+                  if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)]
+    first_seen = min(candidates, default=today.isoformat())
+    _refresh_first_seen[job.url] = first_seen
+    return replace(job, published=first_seen, published_inferred=True)
+
+
 def _publish_refresh_progress(completed_jobs: list[Opportunity], errors: list[str]) -> None:
     """Make completed source results visible while slower connectors continue running."""
     global _cache
@@ -2241,11 +2254,7 @@ def _publish_refresh_progress(completed_jobs: list[Opportunity], errors: list[st
     now = _last_attempt or datetime.now(timezone.utc)
     for job in _deduplicate_opportunities(list(merged.values())):
         previous = _refresh_previous_jobs.get(job.url)
-        published = job.published or (previous.published if previous else "")
-        inferred = job.published_inferred if job.published else bool(previous and previous.published_inferred)
-        if not published:
-            published, inferred = now.date().isoformat(), True
-        dated.append(replace(job, published=published, published_inferred=inferred))
+        dated.append(_date_detected_offer(job, previous, now.date()))
     snapshot = (now, sorted(dated, key=_opportunity_sort_key), list(errors))
     with _lock:
         _cache = snapshot
@@ -2352,6 +2361,9 @@ def _read_cache() -> tuple[datetime, list[Opportunity], list[str]] | None:
         # earliest detection date we can recover without inventing history.
         jobs = [replace(job, published=updated.date().isoformat(), published_inferred=True)
                 if not job.published else job for job in jobs]
+        first_seen = _first_seen_from_history(_read_history_document())
+        jobs = [replace(job, published=min(job.published, first_seen[job.url]))
+                if job.published_inferred and job.url in first_seen else job for job in jobs]
         jobs = _without_jobteaser_duplicates(jobs)
         checks = payload.get("source_checks") or {}
         _source_checks = {str(name): dict(check) for name, check in checks.items()
@@ -2372,10 +2384,28 @@ def _read_history_document() -> dict:
                 "version": 1,
                 "baseline": payload.get("baseline") if isinstance(payload.get("baseline"), dict) else None,
                 "snapshots": payload.get("snapshots") if isinstance(payload.get("snapshots"), list) else [],
+                "first_seen": payload.get("first_seen") if isinstance(payload.get("first_seen"), dict) else {},
             }
     except (OSError, ValueError, TypeError, AttributeError):
         pass
-    return {"version": 1, "baseline": None, "snapshots": []}
+    return {"version": 1, "baseline": None, "snapshots": [], "first_seen": {}}
+
+
+def _first_seen_from_history(payload: dict) -> dict[str, str]:
+    """Recover the earliest detection, including snapshots from before the durable index existed."""
+    dates: dict[str, str] = {}
+    def remember(url: object, value: object) -> None:
+        if isinstance(url, str) and url and isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            dates[url] = min(dates.get(url, value), value)
+    for url, value in (payload.get("first_seen") or {}).items():
+        remember(url, value)
+    for snapshot in [payload.get("baseline"), *(payload.get("snapshots") or [])]:
+        if not isinstance(snapshot, dict):
+            continue
+        for job in snapshot.get("jobs") or []:
+            if isinstance(job, dict) and job.get("published_inferred"):
+                remember(job.get("url"), job.get("published"))
+    return dates
 
 
 def _remember_opportunity_snapshot(updated: datetime, jobs: list[Opportunity],
@@ -2387,6 +2417,11 @@ def _remember_opportunity_snapshot(updated: datetime, jobs: list[Opportunity],
     try:
         with _history_lock:
             payload = _read_history_document()
+            first_seen = _first_seen_from_history(payload)
+            for job in jobs:
+                if job.published_inferred and job.published:
+                    first_seen[job.url] = min(first_seen.get(job.url, job.published), job.published)
+            payload["first_seen"] = first_seen
             if baseline:
                 if payload.get("baseline") is not None:
                     return
@@ -2452,7 +2487,7 @@ def _write_cache(updated: datetime, jobs: list[Opportunity], errors: list[str]) 
 
 def refresh_opportunities(force: bool = False, *, notify_email: bool = True,
                           fail_if_busy: bool = False) -> tuple[list[Opportunity], list[str], datetime]:
-    global _cache, _last_attempt, _force_source_refresh, _refresh_previous_jobs
+    global _cache, _last_attempt, _force_source_refresh, _refresh_previous_jobs, _refresh_first_seen
     if not _refresh_guard.acquire(blocking=False):
         if fail_if_busy:
             raise RuntimeError("Une autre collecte est déjà en cours.")
@@ -2473,20 +2508,17 @@ def refresh_opportunities(force: bool = False, *, notify_email: bool = True,
             baseline_snapshot = _cache
             _refresh_previous_jobs = previous_jobs
             _force_source_refresh = force
+        _refresh_first_seen = _first_seen_from_history(_read_history_document())
+        for job in previous_jobs.values():
+            if job.published_inferred and job.published:
+                _refresh_first_seen[job.url] = min(_refresh_first_seen.get(job.url, job.published), job.published)
         if baseline_snapshot:
             _remember_opportunity_snapshot(*baseline_snapshot, baseline=True)
         ordered, errors = _fetch_opportunities()
         dated = []
         for job in ordered:
-            if job.published:
-                dated.append(job)
-                continue
             previous = previous_jobs.get(job.url)
-            if previous and previous.published:
-                dated.append(replace(job, published=previous.published,
-                                     published_inferred=previous.published_inferred))
-            else:
-                dated.append(replace(job, published=now.date().isoformat(), published_inferred=True))
+            dated.append(_date_detected_offer(job, previous, now.date()))
         ordered = sorted(dated, key=_opportunity_sort_key)
         with _lock:
             if ordered or _cache is None:
@@ -2506,6 +2538,7 @@ def refresh_opportunities(force: bool = False, *, notify_email: bool = True,
     finally:
         _force_source_refresh = False
         _refresh_previous_jobs = {}
+        _refresh_first_seen = {}
         _refresh_guard.release()
 
 

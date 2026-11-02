@@ -902,7 +902,7 @@ def test_daily_view_uses_only_todays_dated_offers():
     assert "Undated Trading Intern" not in view
 
 
-def test_detected_today_is_not_treated_as_published_today_or_this_week():
+def test_detected_today_appears_in_today_and_week_filters():
     from dataclasses import replace
     from internships_project.internships import matching_opportunities
 
@@ -919,7 +919,7 @@ def test_detected_today_is_not_treated_as_published_today_or_this_week():
     for period in ("daily", "weekly"):
         view = render_opportunities(jobs, [], stamp, today=today, **{period: True})
         assert "Sales Intern" in view
-        assert "FO Controls" not in view
+        assert "FO Controls" in view
 
     all_view = render_opportunities(jobs, [], stamp, today=today)
     assert "FO Controls" in all_view
@@ -1376,6 +1376,48 @@ def test_undated_offer_gets_first_detection_date_and_keeps_it(tmp_path, monkeypa
     assert "Publication inconnue<br>Détectée le 2026-10-20" in render_opportunities(jobs, [], old_snapshot)
     _, reloaded, _ = internships._read_cache()
     assert reloaded[0].published == "2026-10-20"
+
+
+def test_bpce_detection_recovers_earliest_history_after_cache_date_resets(tmp_path, monkeypatch):
+    from internships_project import internships
+
+    offer = _opportunity("Stage FO Controls on Equity and Fixed Income", "Natixis CIB", "Paris", "Stage",
+                         "https://recrutement.bpce.fr/job/stage-fo-controls", "")
+    assert offer is not None
+    cache = tmp_path / "internships_cache.json"
+    current = internships.replace(offer, published="2026-11-02", published_inferred=True)
+    old = internships.replace(offer, published="2026-10-25", published_inferred=True)
+    cache.write_text(json.dumps({"version": 3, "updated": "2026-11-02T18:00:00+00:00",
+                                 "jobs": [asdict(current)], "errors": []}), encoding="utf-8")
+    history = cache.with_name("internships_history.json")
+    history.write_text(json.dumps({"version": 1, "baseline": None, "snapshots": [
+        {"updated": "2026-10-27T12:00:00+00:00", "jobs": [asdict(old)], "errors": []},
+        {"updated": "2026-11-02T18:00:00+00:00", "jobs": [asdict(current)], "errors": []},
+    ]}), encoding="utf-8")
+    monkeypatch.setattr(internships, "CACHE_PATH", cache)
+    monkeypatch.setattr(internships, "_cache", None)
+    assert internships._read_cache()[1][0].published == "2026-10-25"
+    def fetch():
+        internships._publish_refresh_progress([offer], [])
+        assert internships._cache[1][0].published == "2026-10-25"
+        return [offer], []
+    monkeypatch.setattr(internships, "_fetch_opportunities", fetch)
+
+    jobs, _, _ = internships.refresh_opportunities(notify_email=False)
+    assert jobs[0].published == "2026-10-25"
+    assert jobs[0].published_inferred
+    assert internships._read_history_document()["first_seen"][offer.url] == "2026-10-25"
+    assert not internships.matching_opportunities(jobs, daily=True, today=date(2026, 11, 2))
+    assert not internships.matching_opportunities(jobs, weekly=True, today=date(2026, 11, 2))
+
+    history_payload = internships._read_history_document()
+    history_payload["baseline"] = None
+    history_payload["snapshots"] = []
+    history.write_text(json.dumps(history_payload), encoding="utf-8")
+    cache.unlink()
+    monkeypatch.setattr(internships, "_cache", None)
+    jobs, _, _ = internships.refresh_opportunities(notify_email=False)
+    assert jobs[0].published == "2026-10-25"
 
 
 def test_new_undated_offer_uses_current_detection_date(tmp_path, monkeypatch):
