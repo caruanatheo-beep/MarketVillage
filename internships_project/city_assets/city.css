@@ -1345,3 +1345,6 @@ body { overflow:hidden; }
 .notification-filters input,.notification-filters select { background:#0d3034; border-color:#538b85; color:#e4f5ee; }
 .notification-footer { background:#103438; border-color:#386b70; color:#c6ded8; }
 .game-app .manager-chat-window .manager-chat-content { background:#103438; }
+.game-app .manager-chat-window .chat-heading { flex-wrap:wrap; gap:8px; }
+.game-app .manager-chat-window .chat-heading>div { flex:1 1 170px; }
+.game-app .manager-chat-window .chat-heading button { white-space:nowrap; }

@@ -24,6 +24,20 @@ sont accessibles dans Réglages. Le chat du Manager et les contacts conservent l
 
 Mira, Iris et le Desk Manager conservent leurs autres responsabilités.
 
+Le Desk Manager propose un bouton « Briefing du matin » dans son chat et un outil
+de lecture sur demande. Il rassemble les derniers résultats enregistrés de Lina,
+Hugo et Mira avec leurs dates, puis les propositions et validations en attente.
+Ce briefing déterministe est isolé par compte, conservé dans le chat et ne lance
+ni collecte ni appel IA supplémentaire. Une mission en erreur reste à examiner
+dans Notifications ; le briefing ne la présente pas comme un résultat.
+
+Hugo classe les stages actualisés selon les métiers, lieux et mois de début
+explicitement renseignés dans le premier profil enregistré. Le classement est
+indicatif ; sans profil, l'ordre général est conservé. Une date limite apparaît
+uniquement si l'offre porte une date ISO encore valable, avec son lien source.
+La collecte quotidienne reprend ces indications dans le chat du Manager et garde
+la liste complète dans le résultat. Le texte du CV n'est pas envoyé au collecteur.
+
 ## Relance et notifications
 
 Le Manager accepte les noms Jules, Noé/Noe, Axel et Nova, ainsi que les identifiants

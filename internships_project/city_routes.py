@@ -332,6 +332,22 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
         except ValueError as exc:
             return JSONResponse({"detail": str(exc)}, status_code=404)
 
+    @server.post("/city/api/manager/briefing")
+    async def manager_briefing(request: Request):
+        username = owner(request)
+        if not username:
+            return denied()
+        if not safe_post(request):
+            return JSONResponse({"detail": "Requête refusée."}, status_code=403)
+        try:
+            if await bounded_json(request, 200):
+                raise CityError("Le briefing ne prend aucun paramètre.")
+            content = store.morning_briefing(username)
+            store.append_chat_message(username, "desk_manager", "assistant", content)
+            return JSONResponse({"content": content}, headers={"Cache-Control": "private, no-store"})
+        except (ValueError, TypeError) as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=400)
+
     @server.post("/city/api/chat/{agent_id}")
     async def city_chat_message(agent_id: str, request: Request):
         username = owner(request)

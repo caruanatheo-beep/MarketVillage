@@ -78,7 +78,12 @@ def run_agent(agent_id: str, username: str, parameters: dict | None = None) -> d
         if parameters.get("operation", "refresh_internships") != "refresh_internships":
             raise CityError("Hugo peut uniquement actualiser les stages via Internships.")
         detected = parameters.get('report_mode') == 'detected_today'
-        return {**refresh_jobs_workflow(published_today=not detected, detected_today=detected), "source": "Service Python Internships, sans interface Gradio"}
+        from .candidate_profiles import clean_catalog
+        from .state_store import load_user_data
+        profiles = clean_catalog(load_user_data(username, "profiles"))
+        profile = next(iter(profiles.values()), None)
+        return {**refresh_jobs_workflow(published_today=not detected, detected_today=detected,
+                                        profile=profile), "source": "Service Python Internships, sans interface Gradio"}
     if agent_id == "networker" and parameters.get("operation") == "refresh_internships":
         return {**refresh_jobs_workflow(), "title": "Lina · collecte Internships", "source": "Service Python Internships, sans interface Gradio"}
     if agent_id == 'networker' and parameters.get('operation') == 'enrich_schools':

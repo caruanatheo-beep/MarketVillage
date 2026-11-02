@@ -537,6 +537,50 @@ class CityStore:
             history.append(message)
         return history
 
+    def morning_briefing(self, username: str, now: datetime | None = None) -> str:
+        """Summarize persisted work for one account; no model call or new collection."""
+        from zoneinfo import ZoneInfo
+        moment = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Paris"))
+        names = {"networker": "Lina", "internship_scout": "Hugo", "market_analyst": "Mira"}
+        with self.db() as db:
+            latest = {agent: db.execute(
+                "SELECT description,finished_at,result_json FROM city_tasks WHERE username=? AND agent_id=? "
+                "AND status='completed' ORDER BY finished_at DESC,rowid DESC LIMIT 1", (username, agent)).fetchone()
+                for agent in names}
+            proposals = db.execute(
+                "SELECT description FROM city_tasks WHERE username=? AND status='completed' "
+                "AND agent_id IN ('job_hunter','innovation_lab') "
+                "AND json_extract(COALESCE(result_json,'{}'),'$.role_version')=2 "
+                "AND json_extract(COALESCE(result_json,'{}'),'$.approval_required')=1 "
+                "AND COALESCE(json_extract(COALESCE(result_json,'{}'),'$.review_decision'),'')='' "
+                "AND COALESCE(json_extract(COALESCE(result_json,'{}'),'$.branch'),'')='' "
+                "ORDER BY finished_at DESC LIMIT 5", (username,)).fetchall()
+            waiting = db.execute(
+                "SELECT description FROM city_tasks WHERE username=? AND status='waiting_approval' "
+                "ORDER BY created_at DESC LIMIT 5", (username,)).fetchall()
+            failures = db.execute(
+                "SELECT COUNT(*) FROM city_tasks WHERE username=? AND status='failed' AND finished_at>=?",
+                (username, (moment - timedelta(days=7)).astimezone(timezone.utc).isoformat())).fetchone()[0]
+        lines = [f"### Briefing du {moment:%d/%m/%Y} · Desk Manager", "", "**Derniers résultats enregistrés**"]
+        for agent, label in names.items():
+            row = latest[agent]
+            if not row:
+                lines.append(f"- {label} : aucun résultat enregistré.")
+                continue
+            result = json.loads(row["result_json"] or "{}")
+            finished = datetime.fromisoformat(row["finished_at"]).astimezone(ZoneInfo("Europe/Paris"))
+            summary = str(result.get("text") or row["description"]).splitlines()[0][:220]
+            lines.append(f"- {label} ({finished:%d/%m %H:%M}) : {summary}")
+        decisions = [row["description"] for row in [*proposals, *waiting]]
+        lines.extend(["", "**À décider**"])
+        lines.extend(f"- {item[:180]}" for item in decisions[:5])
+        if not decisions:
+            lines.append("- Aucune décision en attente.")
+        if failures:
+            lines.append(f"- {failures} mission(s) en erreur sur les sept derniers jours : voir Notifications.")
+        lines.append("\nLes horaires sont à l'heure de Paris. Ouvre Notifications pour consulter les sources et les résultats complets.")
+        return "\n".join(lines)
+
     def conversation_id(self, username: str, agent_id: str) -> str:
         if agent_id not in AGENT_BY_ID:
             raise CityError("Agent inconnu.")
@@ -1224,7 +1268,12 @@ class CityStore:
             if task['agent_id'] == 'internship_scout' and json.loads(task['parameters_json'] or '{}').get('daily_digest'):
                 digest = ("Hugo · actualisation quotidienne impossible : " + error if error else
                           str((result or {}).get('text') or 'Hugo · actualisation terminée.') + "\n\n" +
-                          "\n".join(f"• {offer['title']} · {offer['company']} — {offer['url']}"
+                          str((result or {}).get('ranking_note') or '') + "\n" +
+                          "\n".join(f"• {offer['title']} · {offer['company']}"
+                                    + (f" · {offer['relevance']} ({', '.join(offer['match_reasons'])})"
+                                       if offer.get('match_reasons') else "")
+                                    + (f" · date limite indiquée : {offer['deadline']}" if offer.get('deadline') else "")
+                                    + f" — {offer['url']}"
                                     for offer in (result or {}).get('offers', [])[:20]))
                 db.execute("INSERT OR IGNORE INTO city_chat_conversations(username,agent_id,conversation_id) VALUES(?,'desk_manager',?)",
                            (task['username'], uuid.uuid4().hex))
@@ -1483,7 +1532,8 @@ class CityStore:
                 db.execute(f"DELETE FROM {table} WHERE username=?", (username,))
 
 
-def refresh_jobs_workflow(*, published_today: bool = False, detected_today: bool = False) -> dict:
+def refresh_jobs_workflow(*, published_today: bool = False, detected_today: bool = False,
+                          profile: dict | None = None) -> dict:
     """Run the existing collector once, without its optional email side effect."""
     from . import internships
 
@@ -1513,6 +1563,10 @@ def refresh_jobs_workflow(*, published_today: bool = False, detected_today: bool
         prioritized = sorted((job for job in (discovered if detected_today else jobs) if job.kind.casefold() in {"stage", "internship"}
                               and (detected_today or (job.published == today and not job.published_inferred))),
                              key=lambda job: job.score, reverse=True)
+    from .internship_relevance import rank_offers
+    from zoneinfo import ZoneInfo
+    ranked = rank_offers(prioritized, profile, datetime.now(ZoneInfo("Europe/Paris")).date())
+    prioritized = [job for job, _ in ranked]
     featured = prioritized[0] if prioritized else None
     selection_reason = ("Paris / La Defense; start between April and September 2027"
                         if featured in priority else "Highest relevance score among newly detected offers") if featured else ""
@@ -1537,10 +1591,16 @@ def refresh_jobs_workflow(*, published_today: bool = False, detected_today: bool
                                 "published": featured.published, "published_inferred": featured.published_inferred,
                                 "source": featured.source, "detected_at": updated.isoformat(),
                                 "selection_reason": selection_reason} if featured else None),
+            "profile_name": str(profile.get("name") or "")[:100] if profile else "",
+            "ranking_note": ("Classement indicatif d'après les métiers, lieux et dates de début renseignés dans le premier profil enregistré."
+                             if profile else "Aucun profil renseigné : classement général des offres."),
             "offers": [{"title": job.title, "company": job.company, "location": job.location,
                         "url": job.url, "kind": job.kind, "start_period": job.start_period,
                         "published": job.published, "published_inferred": job.published_inferred,
-                        "source": job.source} for job in (prioritized if published_today or detected_today else prioritized[:12])]}
+                        "source": job.source, "relevance": detail["relevance"],
+                        "match_reasons": detail["match_reasons"],
+                        "deadline": detail["deadline"]}
+                       for job, detail in (ranked if published_today or detected_today else ranked[:12])]}
 
 
 class CityWorker:

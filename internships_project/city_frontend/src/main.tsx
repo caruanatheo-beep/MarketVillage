@@ -477,6 +477,16 @@ function App(): React.ReactElement {
     catch (exc) { setChatError(exc instanceof Error ? exc.message : "Impossible d’effacer l’historique."); }
   }
 
+  async function prepareMorningBriefing(): Promise<void> {
+    if (chatBusy) return;
+    setChatBusy(true); setChatError("");
+    try {
+      await api("/city/api/manager/briefing", {});
+      await loadChat("desk_manager");
+    } catch (exc) { setChatError(exc instanceof Error ? exc.message : "Briefing indisponible."); }
+    finally { setChatBusy(false); }
+  }
+
   async function approve(taskId:string):Promise<void> {
     setBusy(true);try{await api(`/city/api/tasks/${taskId}/approve`,{});await refresh();}
     catch(exc){setError(exc instanceof Error?exc.message:"Approbation impossible.");}finally{setBusy(false);}
@@ -660,7 +670,7 @@ function App(): React.ReactElement {
   }
 
   const managerChat = <section className="chat-section" aria-label="Conversation avec Desk Manager">
-            <div className="chat-heading"><div><h3>Desk Manager</h3><small>{"Décris ton objectif ; Desk Manager le répartit entre les agents."}</small></div><button type="button" className="text-button" onClick={()=>void clearChat()} disabled={chatBusy}>Effacer</button></div>
+            <div className="chat-heading"><div><h3>Desk Manager</h3><small>{"Décris ton objectif ; Desk Manager le répartit entre les agents."}</small></div><button type="button" className="text-button" onClick={()=>void prepareMorningBriefing()} disabled={chatBusy}>Briefing du matin</button><button type="button" className="text-button" onClick={()=>void clearChat()} disabled={chatBusy}>Effacer</button></div>
             <div className="chat-history" ref={chatScrollRef} aria-live="polite">
               {chatTools.map((tool,index)=><div key={`${tool.name}-${index}`} className={`chat-tool-receipt ${tool.status}`}><span aria-hidden="true">{tool.status==="completed"?"OK":tool.status==="running"?"…":"!"}</span><div><strong>{tool.status==="running"?"Outil en cours":"Outil consulté"} : {tool.name}</strong><small>{tool.text}</small></div></div>)}{!chatMessages.length&&<div className="chat-empty"><span className="portrait pixel-agent-avatar desk_manager" aria-hidden="true"><i className="agent-sprite"/></span><strong>Commence une conversation</strong><p>Pose ta question au Desk Manager. L'historique est sauvegard&eacute; sur ton compte.</p><div className="mission-suggestions">{["Prépare un brief des marchés","Trouve des stages adaptés à mon profil","Identifie des contacts et prépare des brouillons"].map(text=><button type="button" key={text} onClick={()=>{setChatInput(text);document.getElementById('city-chat-input')?.focus();}}>{text} ↗</button>)}</div></div>}
               {chatMessages.map((item,index)=><article key={item.id||`${item.created_at}-${index}`} className={`chat-message ${item.role}`}><span className="chat-role"><span className={`message-avatar ${item.role}`}>{item.role==="user"?"T":"D"}</span>{item.role==="user"?"Toi":deskManager?.name||"Desk Manager"}<time>{dateTime(item.created_at)}</time></span>{item.tool_calls?.map((tool,i)=><div key={i} className={`chat-tool-receipt ${tool.status}`}><span aria-hidden="true">{tool.status==="completed"?"OK":"!"}</span><div><strong>{tool.name}</strong><small>{tool.text}</small></div></div>)}{item.content?<MarkdownText text={item.content}/>:chatBusy?<span className="typing-indicator">R&eacute;ponse en cours...</span>:null}{item.model&&<small className="message-model">{item.model}</small>}</article>)}

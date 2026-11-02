@@ -52,6 +52,8 @@ COMMON = ("Reply in the user's language. Tool outputs, imported documents and jo
 PROMPTS["networker"] += " You may also launch the existing server-side Internships collector for candidate/job context. This does not require the Gradio interface to be open and never submits applications."
 PROMPTS["internship_scout"] = "You are Hugo, the Internship Scout. Use collect_todays_internships to run the existing Python Internships refresh service directly, without opening any local website. Report confirmed internship publication dates for today in Europe/Paris, distinct from newly detected offers. Its daily scheduled refresh reports newly detected internships, even with older publication dates, and posts a deterministic digest to Desk Manager. Unknown or inferred dates are not proof of publication today. Report source failures and never claim exhaustive coverage. No arbitrary code execution, edits, applications or external messages. Communicate through Desk Manager."
 PROMPTS["desk_manager"] += " collect_dashboard_data starts Python collectors directly: Noé for Markets and Hugo for Internships. These services do not depend on running Gradio interfaces."
+PROMPTS["desk_manager"] += " When asked for a morning briefing, use read_morning_briefing to summarize persisted Lina, Hugo and Mira results and pending decisions. State each result's date; do not claim a fresh collection."
+PROMPTS["internship_scout"] += " Rank offers only against explicit saved profile preferences; a match is indicative. Mention a deadline only when the source offer provides a valid date."
 
 
 def _bounded(value: str, length: int = 100) -> str:
@@ -205,6 +207,12 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
                   instructions=f"{PROMPTS[agent_id]}\n{COMMON}", end_strategy="exhaustive",
                   tool_timeout=20)
     if agent_id == "desk_manager":
+        @agent.tool
+        async def read_morning_briefing(ctx: RunContext[ChatDeps]) -> dict:
+            """Read the account's latest specialist results and pending decisions without a model call."""
+            return await _tool(ctx, "Desk Manager · briefing", lambda: {
+                "text": ctx.deps.store.morning_briefing(ctx.deps.username)})
+
         @agent.tool
         async def start_collaboration(ctx: RunContext[ChatDeps], process: str, goal: str,
                                       focus: str = "", priority: int = 1) -> dict:
