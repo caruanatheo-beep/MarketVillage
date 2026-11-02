@@ -9,7 +9,7 @@ export async function loadTowerArchitecture(): Promise<void> {
       const image = new Image();
       image.onload = () => { images[name] = image; resolve(); };
       image.onerror = () => reject(new Error(`Architecture introuvable : ${name}`));
-      image.src = `/city/pixel-assets/tower/${name}.png?v=partitions-2`;
+      image.src = `/city/pixel-assets/tower/${name}.png?v=${name === 'manhattan-canyon' ? 'emerald-1' : 'partitions-2'}`;
     })));
 }
 
