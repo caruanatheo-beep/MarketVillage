@@ -38,15 +38,65 @@ def test_daily_selection_prioritizes_sales_after_dedup_and_keeps_existing_data(t
     added, _ = network.save_leads('alice', traders+sales, sales_first=True)
     assert len(added) == 10
     assert sum(network.contact_focus(c)['sales_priority'] for c in added) == 8
-    # Existing Sales cannot justify adding another ten non-Sales contacts tomorrow.
+    # Remaining adjacent roles are eligible even when all Sales are already known.
     added, _ = network.save_leads('alice', traders+sales, sales_first=True)
-    assert added == []
-    assert len(network.list_contacts('alice')) == 10
+    assert len(added) == 8
+    assert len(network.list_contacts('alice')) == 18
     assert sum(c['sales_priority'] for c in network.list_contacts('alice')) == 8
 
 
 def result(name="Alex Martin", role="Fixed Income Sales", company="Bank A", city="Paris", slug="alex-martin"):
     return f'<div class="result"><a class="result__a" href="https://fr.linkedin.com/in/{slug}?trk=search">{name} - {role} - {company} | LinkedIn</a><a class="result__snippet">{city}. {role} chez {company}.</a></div>'
+
+
+def test_sales_first_fills_ten_with_adjacent_roles_without_ratio(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store,'USER_DB_PATH',tmp_path/'accounts.sqlite3')
+    leads=network.parse_results(''.join(result(name=f'Alex Martin{i}',role='Fixed Income Sales' if i<3 else 'Trader',slug=f'alex-{i}') for i in range(15)),'Paris')
+    added,_=network.save_leads('alice',leads,sales_first=True)
+    assert len(added)==10
+    assert sum(network.contact_focus(c)['sales_priority'] for c in added)==3
+    assert all(network.contact_focus(c)['sales_priority'] for c in added[:3])
+
+
+@pytest.mark.parametrize('completion',['success','error','budget'])
+def test_one_topup_targets_only_shortfall_and_preserves_initial_contacts(tmp_path,monkeypatch,completion):
+    from internships_project import city_chat
+    monkeypatch.setattr(state_store,'USER_DB_PATH',tmp_path/'accounts.sqlite3')
+    monkeypatch.delenv('MARKETDESK_NETWORK_SEARCH_MODE',raising=False)
+    leads=network.parse_results(''.join(result(name=f'Alex Martin{i}',role='Trader',slug=f'alex-{i}') for i in range(10)),'Paris')
+    calls=[]
+    def research(username,target=10,*,top_up=False):
+        calls.append((target,top_up))
+        if not top_up:
+            return leads[:3],0
+        assert len(network.list_contacts(username))==3
+        if completion=='error':
+            raise CityError('Network unavailable')
+        return leads[3:],0
+    def budget(*args,**kwargs):
+        if completion=='budget':
+            raise CityError('Budget exhausted')
+    monkeypatch.setattr(network,'research_contacts',research)
+    monkeypatch.setattr(city_chat,'_budget_guard',budget)
+    report=network.discover_contacts('alice')
+    assert report['count']==(10 if completion=='success' else 3)
+    assert calls==([(10,False)] if completion=='budget' else [(10,False),(7,True)])
+    assert len(network.list_contacts('alice'))==report['count']
+    assert bool(report['warnings'])==(completion!='success')
+    assert network.list_contacts('bob')==[]
+
+
+def test_complete_batch_stops_after_first_request(tmp_path,monkeypatch):
+    monkeypatch.setattr(state_store,'USER_DB_PATH',tmp_path/'accounts.sqlite3')
+    monkeypatch.delenv('MARKETDESK_NETWORK_SEARCH_MODE',raising=False)
+    leads=network.parse_results(''.join(result(name=f'Alex Martin{i}',role='Trader',slug=f'alex-{i}') for i in range(10)),'Paris')
+    calls=[]
+    def research(username):
+        calls.append(1)
+        return leads,0
+    monkeypatch.setattr(network,'research_contacts',research)
+    assert network.discover_contacts('alice')['count']==10
+    assert calls==[1]
 
 
 def test_public_evidence_and_filters():
@@ -118,6 +168,23 @@ def test_daily_queue_once_across_workers_restart_pause_and_next_day(tmp_path):
     assert store.network_schedule("bob")["last_task_id"] == ""
 
 
+def test_network_offline_days_group_into_one_search(tmp_path):
+    from datetime import datetime,timedelta
+    from zoneinfo import ZoneInfo
+    store=CityStore(tmp_path/'city.sqlite3')
+    store.ensure_agents('alice')
+    today=datetime.now(ZoneInfo('Europe/Paris')).date()
+    with store.db() as db:
+        db.execute('UPDATE city_network_schedule SET last_day=? WHERE username=?',((today-timedelta(days=6)).isoformat(),'alice'))
+    assert store.enqueue_network_daily('alice')==1
+    task=store.claim_next()
+    payload=json.loads(task['parameters_json'])
+    assert payload['catch_up']=={'from':(today-timedelta(days=5)).isoformat(),'to':today.isoformat(),'periods':6}
+    assert CityStore(store.path).enqueue_network_daily('alice')==0
+    store.finish(task['id'],result={'count':0,'text':'No new contacts'})
+    assert store.enqueue_network_daily('alice')==0
+
+
 def test_complete_worker_collection_no_llm_and_no_duplicate_second_day(tmp_path, monkeypatch):
     monkeypatch.setenv("MARKETDESK_NETWORK_SEARCH_MODE", "public")
     monkeypatch.setattr(state_store, "USER_DB_PATH", tmp_path / "city.sqlite3")
@@ -170,6 +237,86 @@ def test_web_research_tokens_and_search_actions_are_costed(tmp_path, monkeypatch
     with llm_usage.llm_user("alice"):
         llm_usage.record_response("lina_contact_discovery", "gpt-5.4-mini", response)
     assert llm_usage.usage_report()['estimated_usd'] == Decimal('0.01120')
+
+
+@pytest.mark.parametrize('school_url,evidence,expected',[
+    ('https://www.linkedin.com/in/alex-martin','Alex Martin studied at SKEMA Business School','SKEMA Business School'),
+    ('https://example.com/unseen','Alex Martin studied at SKEMA Business School',''),
+    ('https://www.linkedin.com/in/alex-martin','Another Person studied at SKEMA Business School',''),
+    ('https://www.linkedin.com/in/alex-martin','Alex Martin, no education listed',''),
+])
+def test_school_requires_returned_source_name_and_evidence(tmp_path,monkeypatch,school_url,evidence,expected):
+    monkeypatch.setattr(state_store,'USER_DB_PATH',tmp_path/'accounts.sqlite3')
+    url='https://www.linkedin.com/in/alex-martin'
+    record={'name':'Alex Martin','role':'Rates Sales','company':'Bank A','location':'Paris',
+            'source_url':url,'linkedin_url':url,'evidence':'Alex Martin, Rates Sales at Bank A, Paris',
+            'school':'SKEMA Business School','school_source_url':school_url,'school_evidence':evidence}
+    payload={'output':[{'type':'web_search_call','status':'completed','action':{'type':'search','sources':[{'url':url}]}},
+                       {'type':'message','content':[{'type':'output_text','text':json.dumps({'contacts':[record]})}]}]}
+    leads,rejected=network.validate_research(payload)
+    assert len(leads)==1 and rejected==0
+    assert leads[0]['school']==expected
+    network.save_leads('alice',leads,sales_first=True)
+    saved=network.list_contacts('alice')[0]
+    assert saved['school']==expected
+    assert saved['school_source_url']==(url if expected else '')
+    assert network.list_contacts('bob')==[]
+
+
+@pytest.mark.parametrize('evidence,expected',[
+    ('Alex Martin, Bank A, graduated from SKEMA Business School',1),
+    ('Alex Martin, Bank A, attended an event at SKEMA Business School',0),
+    ('Alex Martin, another bank, graduated from SKEMA Business School',0),
+])
+def test_targeted_school_search_disambiguates_and_requires_education(evidence,expected):
+    target={'id':'known','name':'Alex Martin','company':'Bank A','linkedin_url':'https://www.linkedin.com/in/alex'}
+    url='https://alumni.example.com/alex-martin'
+    record={'id':'known','school':'SKEMA Business School','school_source_url':url,'school_evidence':evidence}
+    response={'output':[{'type':'web_search_call','status':'completed','action':{'sources':[{'url':url}]}},
+                        {'type':'message','content':[{'type':'output_text','text':json.dumps({'contacts':[record]})}]}]}
+    assert len(network.validate_school_research(response,[target])[0])==expected
+    assert network.validate_school_research(response,[])[0]==[]
+
+
+def test_school_enrichment_fills_only_missing_and_preserves_concurrent_edits(tmp_path,monkeypatch):
+    monkeypatch.setattr(state_store,'USER_DB_PATH',tmp_path/'accounts.sqlite3')
+    leads=network.parse_results(result()+result(name='Other Person',slug='other-person'),'Paris')
+    network.save_leads('alice',leads)
+    def research(username,**kwargs):
+        targets=kwargs['education_targets']
+        current=state_store.load_user_data('alice','mail_contacts')
+        current[targets[0]['id']]['school']='Manual school'
+        state_store.save_user_data('alice','mail_contacts',current)
+        return [{'id':c['id'],'school':'Sourced school','school_source_url':'https://example.com/alumni','school_evidence':'Education evidence'} for c in targets],0
+    monkeypatch.setattr(network,'research_contacts',research)
+    report=network.enrich_schools('alice')
+    assert report['school_count']==1
+    assert {c['school'] for c in network.list_contacts('alice')}=={'Manual school','Sourced school'}
+    assert network.list_contacts('bob')==[]
+
+
+def test_school_enrichment_route_is_private_deduplicated_and_keeps_daily_schedule(tmp_path,monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from internships_project.city_routes import add_city_routes
+    monkeypatch.setattr(state_store,'USER_DB_PATH',tmp_path/'city.sqlite3')
+    store=CityStore(state_store.USER_DB_PATH)
+    store.network_schedule('alice',False)
+    with store.db() as db:
+        db.execute("UPDATE city_network_schedule SET last_day='2026-11-01' WHERE username='alice'")
+    app=FastAPI()
+    add_city_routes(app,lambda request:request.headers.get('x-test-user'),store,CityWorker(store))
+    headers={'x-test-user':'alice','X-MarketDesk-City':'1'}
+    with TestClient(app) as client:
+        assert client.post('/city/api/network',json={'enrich_schools':True}).status_code==401
+        assert client.post('/city/api/network',headers={**headers,'Origin':'https://evil.invalid'},json={'enrich_schools':True}).status_code==403
+        assert client.post('/city/api/network',headers=headers,json={'enrich_schools':True}).json()['queued']==1
+        assert client.post('/city/api/network',headers=headers,json={'enrich_schools':True}).json()['queued']==0
+    task=store.claim_next()
+    assert json.loads(task['parameters_json'])['operation']=='enrich_schools'
+    assert store.network_schedule('alice')['enabled'] is False
+    assert store.network_schedule('alice')['last_day']=='2026-11-01'
+    assert store.snapshot('bob')['tasks']==[]
 
 
 def test_network_routes_are_private_and_require_browser_origin(tmp_path, monkeypatch):
@@ -234,11 +381,15 @@ def test_ai_daily_mission_saves_contacts_and_attributes_cost_without_real_api(tm
     assert store.network_schedule('alice')['report']['count'] == 1
     assert len(network.list_contacts('alice')) == 1
     assert calls[0]['model'] == 'gpt-5.4-mini' and calls[0]['tools'][0]['type'] == 'web_search'
-    assert calls[0]['max_tool_calls'] == 4 and calls[0]['store'] is False
+    assert calls[0]['max_tool_calls'] == 2 and calls[0]['store'] is False
+    assert calls[0]['tools'][0]['search_context_size']=='low'
+    assert calls[0]['max_output_tokens']==4500
     with store.db() as db:
         task=db.execute("SELECT api_cost_usd FROM city_tasks WHERE agent_id='networker'").fetchone()
         assert float(task[0]) > 0.01
-    assert store.enqueue_network_daily('alice') == 0 and len(calls) == 1
+    assert store.enqueue_network_daily('alice') == 0 and len(calls) == 2
+    assert calls[1]['max_tool_calls']==1
+    assert json.loads(calls[1]['input'])['target_new_contacts']==9
 
 
 @pytest.mark.parametrize('error,expected', [

@@ -14,7 +14,7 @@ import unicodedata
 import uuid
 from collections import Counter
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -28,7 +28,7 @@ AGENTS = (
     {"id": "market_analyst", "name": "Mira", "role": "Market Analyst", "area": "Trading Floor",
      "description": "Lit les indicateurs, actualités et calendriers de Market Brief.", "available": True},
     {"id": "finance_tutor", "name": "Noé", "role": "Quant Research", "area": "Quant Research",
-     "description": "Recherche quantitative, backtests datés et rapports hebdomadaires avec coûts et limites.", "available": True},
+     "description": "Recherche quantitative, backtests datés et rapports sur demande avec coûts et limites.", "available": True},
     {"id": "job_hunter", "name": "Jules", "role": "Software Engineer", "area": "Engineering",
      "description": "Audite le code City chaque jour et prépare des propositions sur branche isolée, sans intégration automatique.", "available": True},
     {"id": "networker", "name": "Lina", "role": "Networker", "area": "Network",
@@ -36,12 +36,12 @@ AGENTS = (
     {"id": "outreach_agent", "name": "Iris", "role": "Outreach Agent", "area": "Career Center",
      "description": "Prépare un brouillon depuis un contact et ton profil. Aucun envoi depuis City.", "available": True},
     {"id": "developer", "name": "Axel", "role": "Interview Coach", "area": "Interview Studio",
-     "description": "Prépare cinq questions par jour, évalue les réponses et organise un entretien blanc hebdomadaire.",
+     "description": "Prépare des questions, évalue les réponses et organise des entretiens blancs sur demande.",
      "available": True},
     {"id": "innovation_lab", "name": "Nova", "role": "Innovation Lab", "area": "Innovation Lab",
-     "description": "Veille open source hebdomadaire et deux propositions documentées, soumises au Desk Manager.", "available": True},
+     "description": "Veille open source le lundi et le jeudi, avec deux propositions documentées soumises au Desk Manager.", "available": True},
     {"id": "internship_scout", "name": "Hugo", "role": "Internship Scout", "area": "Internships",
-     "description": "Actualise directement Internships sur demande et présente les stages publiés aujourd’hui, sans ouvrir son interface.", "available": True},
+     "description": "Actualise Internships chaque jour et transmet les nouveaux stages détectés au Desk Manager. Recherche aussi sur demande.", "available": True},
 )
 AGENT_BY_ID = {agent["id"]: agent for agent in AGENTS}
 TASK_REFRESH = "refresh_opportunities"
@@ -115,6 +115,40 @@ def _utc() -> str:
 
 class CityError(ValueError):
     """A safe error that may be returned to the browser."""
+
+
+def _due_schedule_periods(operation: str, known: list[str], today: date) -> list[tuple[str, date]]:
+    """Group missed periods since the last recorded run; never backfill before first use."""
+    if operation == 'innovation_review':
+        known = known + [period+'-Mon' for period in known if re.fullmatch(r'\d{4}-W\d{2}',period)]
+    def period_for(day: date) -> str:
+        if operation == 'innovation_review':
+            return day.strftime('%G-W%V') + ('-Mon' if day.weekday() < 3 else '-Thu')
+        return day.isoformat()
+    previous = []
+    for period in known:
+        try:
+            if operation == 'innovation_review':
+                day = datetime.strptime(period[:8]+'-1', '%G-W%V-%u').date()
+                if period.endswith('-Thu'):
+                    day += timedelta(days=3)
+            else:
+                day = date.fromisoformat(period)
+            if day <= today:
+                previous.append(day)
+        except ValueError:
+            continue
+    current = period_for(today)
+    if current in known:
+        return []
+    start = max(previous) + timedelta(days=1) if previous else today
+    missing = {}
+    for offset in range(max(0, (today-start).days)+1):
+        day = start + timedelta(days=offset)
+        period = period_for(day)
+        if period not in known:
+            missing.setdefault(period, day)
+    return list(missing.items())
 
 
 class CityStore:
@@ -287,13 +321,22 @@ class CityStore:
         moment = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Paris"))
         day, week = moment.date().isoformat(), moment.strftime("%G-W%V")
         schedules = [("job_hunter", "repository_audit", day, "Revue quotidienne du code City"),
-                     ("finance_tutor", "quant_report", week, "Recherche quantitative hebdomadaire"),
-                     ("developer", "daily_questions", day, "Cinq questions de finance de marché"),
-                     ("developer", "mock_interview", week, "Entretien blanc hebdomadaire"),
-                     ("innovation_lab", "innovation_review", week, "Deux innovations open source")]
+                     ("internship_scout", "refresh_internships", day, "Nouveaux stages détectés aujourd’hui"),
+                     ("innovation_lab", "innovation_review", week + ("-Mon" if moment.weekday() < 3 else "-Thu"), "Deux innovations open source")]
         count = 0
         with self.db() as db:
             db.execute("BEGIN IMMEDIATE")
+            # Cancel only pending automatic missions removed from the schedule, preserving manual requests/history.
+            retired = db.execute("SELECT t.* FROM city_tasks t JOIN city_specialist_schedule s ON s.task_id=t.id "
+                                 "AND s.username=t.username WHERE t.agent_id IN ('developer','finance_tutor') "
+                                 "AND t.status IN ('queued','waiting_approval')").fetchall()
+            for task in retired:
+                db.execute("UPDATE city_tasks SET status='cancelled',finished_at=? WHERE id=?", (_utc(), task['id']))
+                self._event(db, task, 'cancelled', 'Mission désormais disponible sur demande uniquement.')
+            # An existing weekly Nova run already counts as the first half of this week.
+            db.execute("INSERT OR IGNORE INTO city_specialist_schedule(username,operation,period,task_id) "
+                       "SELECT username,operation,?,task_id FROM city_specialist_schedule "
+                       "WHERE operation='innovation_review' AND period=?", (week+'-Mon',week))
             users = db.execute("SELECT DISTINCT username FROM city_agents").fetchall()
             for user in users:
                 saved = db.execute("SELECT settings_json FROM city_settings WHERE username=?", (user[0],)).fetchone()
@@ -303,13 +346,23 @@ class CityStore:
                     if db.execute("SELECT 1 FROM city_tasks WHERE username=? AND agent_id=? AND status IN ('queued','running','waiting_approval')", (user[0], agent_id)).fetchone():
                         continue
                     task_id = uuid.uuid4().hex
-                    inserted = db.execute("INSERT OR IGNORE INTO city_specialist_schedule VALUES(?,?,?,?)", (user[0], operation, period, task_id))
-                    if not inserted.rowcount:
+                    known = [row[0] for row in db.execute("SELECT period FROM city_specialist_schedule WHERE username=? AND operation=?", (user[0],operation))]
+                    due = _due_schedule_periods(operation, known, moment.date())
+                    if not due:
                         continue
-                    parameters = json.dumps(dict(operation=operation, period=period, role_version=VERSION))
+                    db.executemany("INSERT INTO city_specialist_schedule VALUES(?,?,?,?)",
+                                   [(user[0], operation, missed, task_id) for missed,_ in due])
+                    payload = dict(operation=operation, period=period, role_version=VERSION)
+                    task_title = title
+                    if len(due) > 1:
+                        payload['catch_up'] = {'from':due[0][1].isoformat(), 'to':day, 'periods':len(due)}
+                        task_title = f"Rattrapage · {title} ({due[0][1].isoformat()} → {day})"
+                    if agent_id == 'internship_scout':
+                        payload.update(report_mode='detected_today', daily_digest=True)
+                    parameters = json.dumps(payload)
                     db.execute("INSERT INTO city_tasks(id,username,agent_id,task_type,description,status,created_at,parameters_json) VALUES(?,?,?,?,?,'queued',?,?)",
-                               (task_id, user[0], agent_id, 'agent:'+agent_id, title, _utc(), parameters))
-                    self._event(db, dict(id=task_id, username=user[0], agent_id=agent_id), 'queued', title)
+                               (task_id, user[0], agent_id, 'agent:'+agent_id, task_title, _utc(), parameters))
+                    self._event(db, dict(id=task_id, username=user[0], agent_id=agent_id), 'queued', task_title)
                     count += 1
         return count
 
@@ -386,13 +439,25 @@ class CityStore:
                     continue
                 task = {"id": uuid.uuid4().hex, "username": row['username'], "agent_id": "networker",
                         "status": "queued", "created_at": _utc()}
+                payload = {"discover_public": True, "day": today}
+                try:
+                    missed = (date.fromisoformat(today)-date.fromisoformat(row['last_day'])).days
+                except ValueError:
+                    missed = 0
+                if missed > 1:
+                    payload['catch_up'] = {'from':(date.fromisoformat(row['last_day'])+timedelta(days=1)).isoformat(),
+                                           'to':today, 'periods':missed}
+                description = "Trouver 10 nouveaux contacts, priorité Sales de marché à Paris"
+                if payload.get('catch_up'):
+                    description = f"Rattrapage contacts Lina ({payload['catch_up']['from']} → {today})"
                 db.execute("INSERT INTO city_tasks(id,username,agent_id,task_type,description,status,created_at,parameters_json) "
                            "VALUES(?,?,'networker','agent:networker',?,'queued',?,?)",
-                           (task['id'], row['username'], "Trouver 10 nouveaux contacts, priorité Sales de marché à Paris", task['created_at'],
-                            json.dumps({"discover_public": True, "day": today})))
+                           (task['id'], row['username'], description, task['created_at'],
+                            json.dumps(payload)))
                 db.execute("UPDATE city_network_schedule SET last_day=?,last_task_id=? WHERE username=?",
                            (today, task['id'], row['username']))
-                self._event(db, task, "queued", "Recherche manuelle de contacts publics demandée à Lina." if manual
+                self._event(db, task, "queued", description if payload.get('catch_up') else
+                            "Recherche manuelle de contacts publics demandée à Lina." if manual
                             else "Collecte quotidienne de contacts publics planifiée pour Lina.")
                 count += 1
         return count
@@ -1112,6 +1177,13 @@ class CityStore:
             if row is None:
                 return
             task = dict(row)
+            catch_up = json.loads(task['parameters_json'] or '{}').get('catch_up')
+            if catch_up and not error:
+                result = dict(result or {})
+                result['catch_up'] = catch_up
+                result['text'] = (f"Rattrapage regroupé : {catch_up['periods']} périodes du {catch_up['from']} au {catch_up['to']}. "
+                                  "Une seule actualisation exécutée maintenant ; les états historiques manqués ne sont pas reconstitués.\n\n"
+                                  + str(result.get('text') or result.get('title') or 'Résultat disponible.'))
             new_count = max(0, int((result or {}).get("new_count", 0))) if not error else 0
             awarded = 0
             if not error:
@@ -1137,6 +1209,18 @@ class CityStore:
                 summary = str((result or {}).get("text") or (result or {}).get("title") or "Résultat disponible.")
                 message = summary[:250]
             self._event(db, task, status, message)
+            if task['agent_id'] == 'internship_scout' and json.loads(task['parameters_json'] or '{}').get('daily_digest'):
+                digest = ("Hugo · actualisation quotidienne impossible : " + error if error else
+                          str((result or {}).get('text') or 'Hugo · actualisation terminée.') + "\n\n" +
+                          "\n".join(f"• {offer['title']} · {offer['company']} — {offer['url']}"
+                                    for offer in (result or {}).get('offers', [])[:20]))
+                db.execute("INSERT OR IGNORE INTO city_chat_conversations(username,agent_id,conversation_id) VALUES(?,'desk_manager',?)",
+                           (task['username'], uuid.uuid4().hex))
+                conversation = db.execute("SELECT conversation_id FROM city_chat_conversations WHERE username=? AND agent_id='desk_manager'",
+                                          (task['username'],)).fetchone()[0]
+                db.execute("INSERT INTO city_chat_messages(username,agent_id,role,content,model,created_at,conversation_id,input_tokens,output_tokens,tool_calls_json) "
+                           "VALUES(?,'desk_manager','assistant',?,'',?,?,0,0,'[]')",
+                           (task['username'], digest[:12000], _utc(), conversation))
             if not error and task["agent_id"] in {"job_hunter", "networker", "market_analyst", "finance_tutor", "developer", "innovation_lab", "internship_scout"}:
                 compact = json.dumps(result or {}, ensure_ascii=False)
                 if len(compact) <= 24000:
@@ -1361,7 +1445,7 @@ class CityStore:
                 db.execute(f"DELETE FROM {table} WHERE username=?", (username,))
 
 
-def refresh_jobs_workflow(*, published_today: bool = False) -> dict:
+def refresh_jobs_workflow(*, published_today: bool = False, detected_today: bool = False) -> dict:
     """Run the existing collector once, without its optional email side effect."""
     from . import internships
 
@@ -1385,18 +1469,25 @@ def refresh_jobs_workflow(*, published_today: bool = False) -> dict:
     remaining = sorted((job for job in discovered if job.url not in priority_urls),
                        key=lambda job: (job.score, job.published or "", job.title.casefold()), reverse=True)
     prioritized = priority + remaining
-    if published_today:
+    if published_today or detected_today:
         from zoneinfo import ZoneInfo
         today = datetime.now(ZoneInfo("Europe/Paris")).date().isoformat()
-        prioritized = sorted((job for job in jobs if job.kind.casefold() in {"stage", "internship"}
-                              and job.published == today and not job.published_inferred),
+        prioritized = sorted((job for job in (discovered if detected_today else jobs) if job.kind.casefold() in {"stage", "internship"}
+                              and (detected_today or (job.published == today and not job.published_inferred))),
                              key=lambda job: job.score, reverse=True)
     featured = prioritized[0] if prioritized else None
     selection_reason = ("Paris / La Defense; start between April and September 2027"
                         if featured in priority else "Highest relevance score among newly detected offers") if featured else ""
     if published_today:
         selection_reason = "Publication confirmée aujourd’hui, Europe/Paris" if featured else ""
-    return {**({"title": "Hugo · stages publiés aujourd’hui", "as_of": today,
+    if detected_today:
+        selection_reason = "Stage nouvellement détecté pendant la collecte du jour" if featured else ""
+    return {**({"title": "Hugo · nouveaux stages détectés", "as_of": today,
+                "text": f"Hugo : {len(prioritized)} nouveaux stages détectés lors de la collecte du {today} (Europe/Paris). "
+                        f"{len(errors)} erreur(s) de source. La date de détection ne garantit pas une publication aujourd’hui."
+                        + (" Les 20 premières offres sont reprises dans le chat ; le résultat contient la liste complète." if len(prioritized) > 20 else ""),
+                "today_count":len(prioritized)} if detected_today else
+              {"title": "Hugo · stages publiés aujourd’hui", "as_of": today,
                 "text": f"{len(prioritized)} stages avec publication confirmée le {today} (Europe/Paris). "
                         f"{len(errors)} erreur(s) de source. Les dates inconnues ou estimées sont exclues.",
                 "today_count": len(prioritized)} if published_today else {}),
@@ -1411,7 +1502,7 @@ def refresh_jobs_workflow(*, published_today: bool = False) -> dict:
             "offers": [{"title": job.title, "company": job.company, "location": job.location,
                         "url": job.url, "kind": job.kind, "start_period": job.start_period,
                         "published": job.published, "published_inferred": job.published_inferred,
-                        "source": job.source} for job in (prioritized if published_today else prioritized[:12])]}
+                        "source": job.source} for job in (prioritized if published_today or detected_today else prioritized[:12])]}
 
 
 class CityWorker:
@@ -1546,8 +1637,9 @@ class CityWorker:
                 result = self.workflow()
             else:
                 from .city_services import run_agent
-                if task["agent_id"] == "outreach_agent" or (task["agent_id"] == "networker" and parameters.get("discover_public")
-                        and os.getenv("MARKETDESK_NETWORK_SEARCH_MODE", "ai") != "public"):
+                if task["agent_id"] == "outreach_agent" or (task["agent_id"] == "networker" and
+                        (parameters.get('operation')=='enrich_schools' or parameters.get("discover_public")
+                         and os.getenv("MARKETDESK_NETWORK_SEARCH_MODE", "ai") != "public")):
                     from .city_chat import _budget_guard
                     from .llm_usage import _connect, llm_user, generation_slot
                     action = "lina_contact_discovery" if task["agent_id"] == "networker" else "speculative_mail"

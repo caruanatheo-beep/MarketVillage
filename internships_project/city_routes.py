@@ -134,6 +134,15 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
                     raise ValueError("Activation invalide.")
                 store.network_schedule(username, payload["enabled"])
             queued = store.enqueue_network_daily(username, manual=True) if payload.get("collect") is True else 0
+            if payload.get('enrich_schools') is True:
+                store.ensure_agents(username)
+                active = any(t['agent_id']=='networker' and t['status'] in {'queued','running','waiting_approval'}
+                             for t in store.snapshot(username)['tasks'])
+                if not active:
+                    task = store.create_task(username,'networker','Rechercher les écoles de cinq contacts',{'operation':'enrich_schools'},auto_run=True)
+                    with store.db() as db:
+                        db.execute('UPDATE city_network_schedule SET last_task_id=? WHERE username=?',(task['id'],username))
+                    queued = 1
             return JSONResponse({"queued": queued, "schedule": store.network_schedule(username)},
                                 headers={"Cache-Control": "private, no-store"})
         except (ValueError, TypeError) as exc:

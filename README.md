@@ -19,6 +19,16 @@ tags:
 
 # AI Sales Desk Assistant
 
+## MarketVillage / MarketDesk City
+
+This repository also contains **MarketDesk City**, the standalone pixel-art agent
+workspace. Start it with `python -m internships_project.city_app` after installing
+`requirements.txt`. See [City setup](MARKETDESK_CITY.md) and
+[current agent roles and schedules](internships_project/CITY_AGENT_ROLES.md).
+Markets (`app.py`), Internships (`app_internships.py`) and City keep separate
+interfaces while sharing selected server-side services. Secrets, personal data,
+SQLite databases and local exports are excluded from this repository.
+
 AI Sales Desk Assistant is an agent-first Python and Gradio application designed for financial-markets Sales professionals. Its main product is an AI Sales Copilot that turns live public-market data, official economic releases, macro events and approved research into usable desk intelligence and client-conversation preparation.
 
 The application is built to produce concise and auditable market intelligence. It separates observed data from interpretation, attaches sources to research outputs and preserves a deterministic fallback when model inference is unavailable.

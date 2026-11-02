@@ -199,7 +199,7 @@ function App(): React.ReactElement {
     setChatError("");
     try {
       const data = await api<{messages:ChatMessage[]}>(`/city/api/chat/${agentId}`);
-      setChatMessages(data.messages || []);
+      if(!chatAbort.current)setChatMessages(data.messages || []);
     } catch (exc) { setChatError(exc instanceof Error ? exc.message : "Historique indisponible."); }
   }, []);
 
@@ -248,6 +248,8 @@ function App(): React.ReactElement {
 
   useEffect(() => {
     void loadChat("desk_manager");
+    const interval=window.setInterval(()=>{if(!document.hidden&&!chatAbort.current)void loadChat("desk_manager");},10000);
+    return()=>window.clearInterval(interval);
   }, [loadChat]);
   useEffect(() => { if(!chatMessages.length)return; chatScrollRef.current?.scrollTo({top:chatScrollRef.current.scrollHeight,behavior:"smooth"}); }, [chatMessages, chatStatus]);
 

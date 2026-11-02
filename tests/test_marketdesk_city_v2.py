@@ -4,7 +4,7 @@ from __future__ import annotations
 def test_all_agents_have_real_allowlisted_workflows():
     from internships_project.marketdesk_city import AGENTS
     assert {agent["id"] for agent in AGENTS if agent["available"]} == {
-        "desk_manager", "market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab"
+        "desk_manager", "market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout"
     }
 
 

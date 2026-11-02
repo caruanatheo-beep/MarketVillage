@@ -32,7 +32,7 @@ def _budget_guard(username: str, settings: dict, reserve_usd: float = 0) -> None
     reserve = Decimal(str(reserve_usd))
     if reserve and (daily + reserve > Decimal(str(settings["daily_limit_usd"]))
                     or monthly + reserve > Decimal(str(settings["monthly_limit_usd"]))):
-        raise CityError("Budget restant insuffisant pour cette recherche Web (prévoir 0,20 $ de marge).")
+        raise CityError(f"Budget restant insuffisant pour cette recherche Web (prévoir {reserve} $ de marge).")
 
 
 def _limits() -> UsageLimits:

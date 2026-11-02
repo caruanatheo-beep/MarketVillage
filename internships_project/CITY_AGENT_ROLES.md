@@ -8,11 +8,11 @@ donnent aucun accès aux anciens outils. Le Desk Manager est l'unique chat utili
 | Agent | Opérations serveur | Récurrence (Europe/Paris) | Livrable |
 |---|---|---|---|
 | Jules | `repository_audit`, préparation de branche après validation humaine | Quotidienne | Audit AST, risques à examiner, proposition, révision Git ; branche de test isolée |
-| Noé | `quant_report`, `collect_markets` | Rapport hebdomadaire | Courbe de capital, rendement net, Sharpe à taux sans risque nul, volatilité, drawdown, hypothèses et limites |
-| Axel | `daily_questions`, `mock_interview`, `evaluate_answer` | 5 questions par jour + entretien hebdomadaire | Questions Sales/S&T/Global Markets, HireVue, grille de couverture indicative et historique des réponses |
-| Nova | `innovation_review` | Hebdomadaire | Deux projets publics GitHub non déjà proposés, licence, spécification de prototype isolé, complexité et coûts à mesurer |
+| Noé | `quant_report`, `collect_markets` | Sur demande uniquement | Courbe de capital, rendement net, Sharpe à taux sans risque nul, volatilité, drawdown, hypothèses et limites |
+| Axel | `daily_questions`, `mock_interview`, `evaluate_answer` | Sur demande uniquement | Questions Sales/S&T/Global Markets, HireVue, grille de couverture indicative et historique des réponses |
+| Nova | `innovation_review` | Deux fois par semaine : lundi et jeudi | Deux projets publics GitHub non déjà proposés par revue, licence, spécification de prototype isolé, complexité et coûts à mesurer |
 | Lina | Recherche de contacts existante + `refresh_internships` | Collecte quotidienne de contacts inchangée | Contacts ; collecte réelle des offres sur demande |
-| Hugo | `refresh_internships` via le service Python existant | Sur demande, renouvelable chaque jour ou plusieurs fois par jour | Stages avec date de publication confirmée aujourd’hui, heure de Paris |
+| Hugo | `refresh_internships` via le service Python existant | Chaque jour + sur demande | Bilan des nouveaux stages détectés par la collecte quotidienne dans le chat Manager ; recherche des publications du jour sur demande |
 
 Mira, Iris et le Desk Manager conservent leurs autres responsabilités.
 
@@ -33,8 +33,49 @@ Les dates de publication inconnues ou estimées et les VIE sont exclus du bilan 
 stages du jour. Les offres déjà en cache publiées aujourd’hui restent incluses ;
 « nouvellement détecté » et « publié aujourd’hui » sont deux notions distinctes.
 Les erreurs de sources sont signalées : la collecte ne garantit pas l’exhaustivité.
-City doit fonctionner pour exécuter la demande ; aucune collecte automatique
-supplémentaire n'est activée pour Hugo. Lina conserve son ancien accès pour compatibilité.
+City doit fonctionner pour exécuter les missions. La collecte quotidienne Hugo rapporte
+les stages nouvellement détectés pendant son actualisation, sans les confondre avec des
+publications du jour. Le chat du Manager reçoit un bilan déterministe, y compris pour
+zéro résultat ou une erreur ; aucun appel LLM supplémentaire ni envoi externe.
+Les 20 premières offres sont listées dans le chat ; le résultat conserve la liste complète.
+Lina conserve son ancien accès Internships pour compatibilité.
+
+Nova utilise deux périodes : lundi–mercredi et jeudi–dimanche, heure de Paris, avec
+un seul lancement par période. Une ancienne revue
+hebdomadaire compte pour la première période lors du changement de configuration.
+Les tâches automatiques Axel/Noé encore en attente sont annulées ; les tâches manuelles,
+les missions déjà en cours et l'historique sont conservés.
+
+Lina conserve GPT-5.4 mini et sa collecte quotidienne. L'objectif est désormais le coût
+d'un lot de dix nouveaux contacts : Sales en priorité, puis traders, structureurs, quants
+de marché, analystes Market Risk, brokers et gérants de portefeuille pour compléter.
+Aucun quota minimum de Sales ne bloque les métiers proches. Les métiers hors cible,
+sources invérifiables et doublons restent exclus.
+La première requête combine Sales et métiers proches avec deux appels d'outils maximum,
+contexte Web faible, extraits courts et plafond de 4 500 tokens. Si dix contacts sont
+enregistrés, aucun complément n'est lancé. Sinon, une seule requête supplémentaire vise
+uniquement le nombre manquant, avec un seul appel d'outil, une réponse plus courte et
+un contrôle du budget restant. Les premiers contacts sont conservés si le complément
+échoue ou dépasse le budget ; la limite de dix et la déduplication restent transactionnelles.
+Test réel isolé : dix contacts (un Sales, neuf métiers proches) en une requête pour
+0,0351202 $ estimé, soit 0,003512 $ par contact. Ce test ne garantit pas un minimum global
+de coût ni dix résultats pour chaque recherche : aucune fiche non sourcée n'est inventée.
+
+Lina extrait aussi l'école ou l'université fréquentée si les sources publiques déjà
+consultées l'indiquent. Le nom, l'établissement et l'extrait doivent être accompagnés
+d'une URL effectivement retournée par la recherche. Aucune recherche supplémentaire
+n'est lancée uniquement pour la formation. La fiche Contacts affiche l'établissement,
+l'extrait et la source, ou « Non renseignée ». Aucun diplôme n'est déduit ; les anciens
+contacts et les corrections manuelles ne sont pas remplacés par la collecte.
+
+Le bouton « Rechercher les écoles » et l'outil `enrich_contact_schools` lancent aussi
+un enrichissement ciblé des fiches existantes : cinq contacts sans école par lot,
+avec trois appels d'outils Web maximum et le budget IA habituel. Les fiches jamais
+recherchées passent en premier. Seules l'école et ses preuves sont ajoutées dans une
+transaction ; les changements manuels survenus pendant la recherche sont conservés.
+Une source doit identifier la personne et sa formation, et correspondre au profil
+enregistré ou citer aussi son employeur pour limiter les homonymes. Un simple événement
+dans une école ne suffit pas. Les recherches infructueuses laissent le champ vide.
 
 Lina peut aussi rechercher de nouveaux contacts à tout moment via « Rechercher
 maintenant » dans Contacts ou son outil de recherche depuis le Manager. La limite
@@ -47,7 +88,15 @@ contacts validés et aucune fiche rejetée, sur un compte de test isolé.
 
 Le serveur City doit rester démarré. Fermer les interfaces Markets/Internships est possible ;
 éteindre l'ordinateur arrête aussi City sauf s'il est hébergé ailleurs. Les planifications
-sont rattrapées une fois au prochain contrôle, sans rejouer tous les jours d'absence.
+sont rattrapées au prochain contrôle : Jules, Hugo, Lina et Nova regroupent les périodes
+manquées depuis leur dernière mission planifiée en une seule actualisation par agent.
+Le résultat et les paramètres indiquent la plage de dates et le nombre de périodes.
+Toutes les périodes couvertes sont enregistrées pour éviter les doublons au redémarrage.
+Une première utilisation ne déclenche pas de rattrapage antérieur à l'activation.
+Les sources sont interrogées maintenant : aucun état historique indisponible n'est inventé,
+et Hugo distingue toujours détection et publication. Les limites de dépenses et les
+interrupteurs de suspension restent appliqués. Axel et Noé restent sur demande ;
+Mira et Iris n'ont pas de récurrence à rattraper. Les missions déjà en attente restent en file.
 `auto_tasks=false` suspend les nouvelles récurrences spécialistes ; Lina garde son interrupteur existant.
 
 ## Périmètre réel et limites

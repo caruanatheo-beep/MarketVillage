@@ -50,3 +50,41 @@ def test_manager_hugo_refresh_and_same_day_repeat(tmp_path, monkeypatch):
     hugo=build_agent('internship_scout',TestModel())
     assert 'collect_todays_internships' in hugo._function_toolset.tools
     assert 'delegate_to_agent' not in hugo._function_toolset.tools
+
+
+def test_daily_hugo_reports_detection_not_publication_and_posts_once(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store,'USER_DB_PATH',tmp_path/'accounts.sqlite3')
+    now=datetime.now(timezone.utc)
+    old=(now-timedelta(days=7)).date().isoformat()
+    jobs=[internships.Opportunity('Older publication, new detection','Bank','Paris','Stage','https://example.com/new',old,90),
+          internships.Opportunity('Known offer','Bank','Paris','Stage','https://example.com/known',old,90)]
+    monkeypatch.setattr(internships,'opportunities_loading',lambda:False)
+    monkeypatch.setattr(internships,'load_opportunities',lambda **kwargs:([jobs[1]],[],now-timedelta(seconds=1)))
+    monkeypatch.setattr(internships,'refresh_opportunities',lambda **kwargs:(jobs,[],now))
+    store=CityStore(state_store.USER_DB_PATH)
+    store.ensure_agents('alice')
+    store.enqueue_specialist_schedules()
+    # Run only the daily Hugo task; keep unrelated services out of this test.
+    with store.db() as db:
+        db.execute("UPDATE city_tasks SET status='cancelled' WHERE agent_id!='internship_scout'")
+    assert CityWorker(store).run_once()
+    task=next(t for t in store.snapshot('alice')['tasks'] if t['agent_id']=='internship_scout')
+    assert [o['url'] for o in task['result']['offers']]==['https://example.com/new']
+    assert task['result']['today_count']==1
+    store.finish(task['id'],result=task['result'])
+    chat=store.chat_history('alice','desk_manager')
+    assert len(chat)==1 and 'https://example.com/new' in chat[0]['content']
+    assert 'publication' in chat[0]['content']
+    assert store.chat_history('bob','desk_manager')==[]
+    assert store.enqueue_specialist_schedules()==0
+
+
+def test_daily_hugo_failure_is_reported_once(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store,'USER_DB_PATH',tmp_path/'accounts.sqlite3')
+    store=CityStore(state_store.USER_DB_PATH)
+    task=store.create_task('alice','internship_scout','Daily refresh',{'operation':'refresh_internships','daily_digest':True})
+    assert store.claim_next()['id']==task['id']
+    store.finish(task['id'],error='Source unavailable')
+    store.finish(task['id'],error='Source unavailable')
+    messages=store.chat_history('alice','desk_manager')
+    assert len(messages)==1 and 'Source unavailable' in messages[0]['content']

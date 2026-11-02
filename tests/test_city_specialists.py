@@ -52,18 +52,85 @@ def test_migration_archives_pending_keeps_history_and_is_idempotent(store):
 def test_scheduler_once_per_day_and_week_and_disabled_accounts(store):
     store.ensure_agents('alice')
     moment = datetime(2026, 11, 2, 9, tzinfo=timezone.utc)
-    assert store.enqueue_specialist_schedules(moment) == 4
+    assert store.enqueue_specialist_schedules(moment) == 3
     assert store.enqueue_specialist_schedules(moment) == 0
-    # Free Axel's daily slot; weekly mock interview then becomes due once.
+    assert {task['agent_id'] for task in store.snapshot('alice')['tasks']} == {'job_hunter','internship_scout','innovation_lab'}
     with store.db() as db:
-        db.execute("UPDATE city_tasks SET status='completed' WHERE agent_id='developer'")
-    assert store.enqueue_specialist_schedules(moment) == 1
+        db.execute("UPDATE city_tasks SET status='completed'")
     assert store.enqueue_specialist_schedules(moment) == 0
+    # Thursday starts Nova's second weekly slot, alongside two daily missions.
+    thursday = datetime(2026, 11, 5, 9, tzinfo=timezone.utc)
+    assert store.enqueue_specialist_schedules(thursday) == 3
+    assert store.enqueue_specialist_schedules(thursday) == 0
     store.ensure_agents('bob')
     settings = store.get_settings('bob')
     settings['auto_tasks'] = False
     store.save_settings('bob', settings)
-    assert store.enqueue_specialist_schedules(moment) == 0
+    assert store.enqueue_specialist_schedules(thursday) == 0
+
+
+def test_retired_automatic_tasks_cancel_but_manual_and_history_survive(store):
+    for agent,operation in [('developer','daily_questions'),('finance_tutor','quant_report')]:
+        task=store.create_task('alice',agent,'Automatic',{'operation':operation})
+        with store.db() as db:
+            db.execute('INSERT INTO city_specialist_schedule VALUES(?,?,?,?)',('alice',operation,'old',task['id']))
+    store.create_task('bob','developer','Manual interview',{'operation':'daily_questions'})
+    store.enqueue_specialist_schedules()
+    assert all(task['status']=='cancelled' for task in store.snapshot('alice')['tasks'] if task['agent_id'] in {'developer','finance_tutor'})
+    assert next(task for task in store.snapshot('bob')['tasks'] if task['agent_id']=='developer')['status']=='queued'
+
+
+def test_old_weekly_nova_review_counts_as_first_slot(store):
+    store.ensure_agents('alice')
+    with store.db() as db:
+        db.execute('INSERT INTO city_specialist_schedule VALUES(?,?,?,?)',('alice','innovation_review','2026-W45','old-nova'))
+    assert store.enqueue_specialist_schedules(datetime(2026,11,2,9,tzinfo=timezone.utc))==2
+    assert not any(t['agent_id']=='innovation_lab' for t in store.snapshot('alice')['tasks'])
+    assert store.enqueue_specialist_schedules(datetime(2026,11,5,9,tzinfo=timezone.utc))==1
+
+
+def test_offline_periods_are_grouped_persisted_and_never_queued_twice(store):
+    import json
+    from concurrent.futures import ThreadPoolExecutor
+    store.ensure_agents('alice')
+    assert store.enqueue_specialist_schedules(datetime(2026,11,2,9,tzinfo=timezone.utc))==3
+    with store.db() as db:
+        db.execute("UPDATE city_tasks SET status='completed'")
+    restart=datetime(2026,11,16,9,tzinfo=timezone.utc)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        assert sum(pool.map(lambda _:store.enqueue_specialist_schedules(restart),range(3)))==3
+    with store.db() as db:
+        tasks=db.execute("SELECT agent_id,parameters_json FROM city_tasks WHERE status='queued'").fetchall()
+    details={row[0]:json.loads(row[1]) for row in tasks}
+    assert details['job_hunter']['catch_up']['periods']==14
+    assert details['internship_scout']['catch_up']['periods']==14
+    assert details['innovation_lab']['catch_up']['periods']==4
+    assert details['innovation_lab']['catch_up']['from']=='2026-11-05'
+    assert CityStore(store.path).enqueue_specialist_schedules(restart)==0
+    task=store.claim_next()
+    store.finish(task['id'],result={'title':'Current result','text':'Current sources'})
+    completed=next(t for t in store.snapshot('alice')['tasks'] if t['id']==task['id'])
+    assert completed['result']['catch_up']['periods'] in (4,14)
+    assert 'ne sont pas reconstitués' in completed['result']['text']
+    assert not store.snapshot('bob')['tasks']
+
+
+def test_catchup_waits_for_active_task_and_respects_pause(store):
+    store.ensure_agents('alice')
+    store.enqueue_specialist_schedules(datetime(2026,11,2,9,tzinfo=timezone.utc))
+    assert store.enqueue_specialist_schedules(datetime(2026,11,16,9,tzinfo=timezone.utc))==0
+    with store.db() as db:
+        db.execute("UPDATE city_tasks SET status='completed'")
+    store.save_settings('alice',{'auto_tasks':False})
+    assert store.enqueue_specialist_schedules(datetime(2026,11,16,9,tzinfo=timezone.utc))==0
+
+
+def test_catchup_periods_handle_iso_year_and_first_use():
+    from datetime import date
+    from internships_project.marketdesk_city import _due_schedule_periods
+    assert _due_schedule_periods('innovation_review',['2026-W53-Thu'],date(2027,1,4))==[('2027-W01-Mon',date(2027,1,4))]
+    assert _due_schedule_periods('repository_audit',[],date(2026,11,2))==[('2026-11-02',date(2026,11,2))]
+    assert [period for period,_ in _due_schedule_periods('repository_audit',['2026-03-28'],date(2026,3,30))]==['2026-03-29','2026-03-30']
 
 
 def test_worker_never_executes_injected_legacy_task(store):
