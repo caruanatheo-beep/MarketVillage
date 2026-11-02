@@ -1,4 +1,5 @@
 import React, {useEffect, useRef, useState} from "react";
+import {LinkedInAssisted} from "./LinkedInAssisted";
 
 type Contact = {id:string;name:string;role:string;company:string;location:string;linkedin_url:string;school?:string;school_source_url?:string;school_evidence?:string;source_type?:string;source_date?:string;location_source_url?:string;location_evidence?:string;
   detected_at:string;source_url:string;source_title:string;source_excerpt:string;verification_status:string;employment_status:string;
@@ -82,6 +83,7 @@ export function NetworkContacts(){
     </div>}
   </section></div>;
   return <div className="network-directory">
+    <LinkedInAssisted onImported={load}/>
     <div className="network-summary"><div className="network-stats"><span><b>{salesCount}</b> Sales prioritaires</span><span className="network-today">+{newToday} aujourd’hui</span></div><span className={`network-collection-state ${active?"running":schedule?.enabled?"enabled":"paused"}`}><i/>{active?"Collecte en cours":schedule?.enabled?"Collecte quotidienne active":"Collecte suspendue"}</span></div>
     <details className="network-schedule"><summary><span>Collecte et dernier bilan<small>Objectif : 10 nouveaux contacts par jour, Sales en priorité puis métiers proches en finance de marché.</small></span><span className="network-details-chevron" aria-hidden="true">⌄</span></summary>
       <div className="network-schedule-body"><p>Collecte automatique une fois par jour, heure de Paris, tant que le serveur fonctionne. Tu peux aussi lancer une recherche à tout moment, même si la collecte automatique est suspendue. GPT‑5.4 mini + recherche Web, coût suivi dans les réglages IA.</p>
@@ -109,7 +111,7 @@ export function NetworkContacts(){
       <p><strong>École / université :</strong> {c.school||"Non renseignée"}</p>
       {c.school&&<details><summary>Source de la formation</summary><p>{c.school_evidence}</p>{safeSource(c.school_source_url||"")&&<a href={safeSource(c.school_source_url||"")} target="_blank" rel="noopener noreferrer">Consulter la source ↗</a>}<small>Formation mentionnée publiquement ; diplôme non confirmé.</small></details>}
       <footer><span className={`network-specialty ${c.sales_priority?"sales":"secondary"}`} title={c.focus_reason}>{c.sales_priority&&!c.specialty?.startsWith("Sales")?"Sales · ":""}{c.specialty||"Périmètre à préciser"}</span><span className="network-badge">{c.verification_status||"À vérifier"}</span><a href={safeLink(c.linkedin_url)||safeSource(c.source_url)} target="_blank" rel="noopener noreferrer">{safeLink(c.linkedin_url)?"Profil LinkedIn ↗":"Source publique ↗"}</a></footer>
-      <details><summary>Source et détails</summary><p><strong>Poste :</strong> {c.role||"À confirmer"}</p><p>{c.employment_status}</p><p className="network-targeting-note">{c.focus_reason}</p><p>{c.source_excerpt||c.source_title}</p>{safeSource(c.source_url)&&<a href={safeSource(c.source_url)} target="_blank" rel="noopener noreferrer">Consulter la source du contact</a>}<small>Détecté le {new Date(c.detected_at).toLocaleDateString("fr-FR")} · Extrait indexé, poste actuel à confirmer. Fiche également disponible dans Internships → Mail.</small></details>
+      <details><summary>Source et détails</summary><p><strong>Poste :</strong> {c.role||"À confirmer"}</p><p>{c.employment_status}</p><p className="network-targeting-note">{c.focus_reason}</p><p>{c.source_excerpt||c.source_title}</p>{safeSource(c.source_url)&&<a href={safeSource(c.source_url)} target="_blank" rel="noopener noreferrer">Consulter la source du contact</a>}<small>Détecté le {new Date(c.detected_at).toLocaleDateString("fr-FR")} · {c.source_type==='Sélection LinkedIn'?'Informations sélectionnées manuellement, poste à confirmer.':'Extrait indexé, poste actuel à confirmer.'} Fiche également disponible dans Internships → Mail.</small></details>
     </article>)}</div>
     {filtered.length>visibleCount&&<button onClick={()=>setVisibleCount(v=>v+50)}>Afficher 50 contacts de plus</button>}
   </div>;

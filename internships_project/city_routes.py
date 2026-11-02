@@ -120,6 +120,21 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
         return JSONResponse({"contacts": list_contacts(username), "schedule": store.network_schedule(username)},
                             headers={"Cache-Control": "private, no-store"})
 
+    @server.post('/city/api/network/assisted')
+    async def import_network_assisted(request: Request):
+        username = owner(request)
+        if not username:
+            return denied()
+        if not safe_post(request):
+            return JSONResponse({'detail':'Requête refusée.'},status_code=403)
+        try:
+            from .network_discovery import import_assisted_contact
+            result = import_assisted_contact(username,await bounded_json(request,8000))
+            return JSONResponse(result,status_code=201 if result['imported'] else 200,
+                                headers={'Cache-Control':'private, no-store'})
+        except (ValueError,TypeError) as exc:
+            return JSONResponse({'detail':str(exc)},status_code=400)
+
     @server.post("/city/api/network")
     async def configure_city_network(request: Request):
         username = owner(request)

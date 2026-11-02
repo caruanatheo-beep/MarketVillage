@@ -105,6 +105,12 @@ h1, h2, h3, p { margin-top: 0; }
 .network-close:hover { color:#fff; background:#254260; }
 .network-directory { flex:1; min-height:0; overflow:auto; padding:20px 26px 24px; color:#d8e4f1; font-size:13px; scrollbar-width:thin; scrollbar-color:#3c5874 transparent; }
 .network-directory p { line-height:1.55; margin:6px 0; }
+.network-assisted label { display:flex; flex-direction:column; gap:5px; margin:10px 0; color:#c6d7e8; font-size:12px; }
+.network-assisted input,.network-assisted textarea { width:100%; min-width:0; padding:9px; border:1px solid #39536e; border-radius:7px; background:#071627; color:#e6eef7; font:inherit; box-sizing:border-box; }
+.network-assisted textarea { resize:vertical; }
+.network-assisted-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 14px; }
+.network-assisted form { margin-top:18px; border-top:1px solid #263e56; padding-top:12px; }
+@media(max-width:600px) { .network-assisted-fields { grid-template-columns:1fr; } }
 .network-directory small { color:#9eb2c7; line-height:1.5; font-size:11px; }
 .network-summary { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
 .network-stats { display:flex; align-items:center; gap:14px; color:#a8bbcd; font-size:12px; }

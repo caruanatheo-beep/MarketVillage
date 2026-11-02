@@ -50,6 +50,13 @@ les dates disponibles et, si nécessaire, une source distincte prouvant la local
 
 Le bouton **Rechercher les écoles** enrichit jusqu’à cinq fiches existantes par lot. L’établissement, l’extrait et le lien source sont affichés ; une école ou un diplôme ne sont jamais déduits pour remplir une case vide.
 
+Dans **Contacts → LinkedIn · mode assisté**, choisis une requête Sales, trading ou
+recherche/gestion, puis ouvre-la sur LinkedIn. Tu te connectes et navigues toi-même.
+Le formulaire permet ensuite d’ajouter un profil sélectionné avec son lien et un
+extrait confirmant nom, poste, entreprise, localisation et éventuellement école.
+L’import est local, sans appel IA ni accès à la session LinkedIn ; il conserve les
+fiches existantes et écarte les doublons. City ne pilote pas la navigation LinkedIn.
+
 **Hugo** appelle directement le collecteur Python Internships, sans ouvrir son site. Son bilan quotidien distingue les stages nouvellement détectés des offres dont la publication est confirmée aujourd’hui. Les erreurs de sources sont signalées.
 
 ## Démarrer City

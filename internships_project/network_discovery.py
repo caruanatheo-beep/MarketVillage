@@ -308,7 +308,7 @@ def validate_school_research(data: dict, targets: list[dict]) -> tuple[list[dict
 def enrich_schools(username: str) -> dict:
     """One small sourced batch; transactionally fill missing schools only."""
     contacts = state_store.load_user_data(username,'mail_contacts')
-    candidates = sorted(((key,c) for key,c in contacts.items() if c.get('origin')=='lina_public_search' and not c.get('school')),
+    candidates = sorted(((key,c) for key,c in contacts.items() if c.get('origin') in {'lina_public_search','lina_assisted'} and not c.get('school')),
                         key=lambda pair:pair[1].get('school_checked_at',''))[:5]
     if not candidates:
         return {'title':'Lina · formations','text':'Aucune école manquante à rechercher.','school_count':0}
@@ -473,6 +473,38 @@ def save_leads(username: str, leads: list[dict], limit: int = 10, *, sales_first
     return added, duplicates
 
 
+def import_assisted_contact(username: str, payload: dict) -> dict:
+    """Import only professional facts explicitly selected by the user; no LinkedIn request."""
+    from .marketdesk_city import CityError
+    fields = ('name','role','company','location','linkedin_url','school','evidence')
+    if any(not isinstance(payload.get(field,''),str) for field in fields):
+        raise CityError('Les informations du contact doivent être du texte.')
+    values = {field:payload.get(field,'').strip() for field in fields}
+    if any(len(value) > (4000 if key=='evidence' else 300) for key,value in values.items()):
+        raise CityError('Informations trop longues ; garde uniquement les éléments professionnels utiles.')
+    url = linkedin_url(values['linkedin_url'])
+    excerpt = normalized(values['evidence'])
+    if (not url or len(values['name'].split()) < 2 or not values['company']
+            or any(normalized(values[field]) not in excerpt for field in ('name','role','company'))
+            or not values['role'] or not _paris_location(values['location'])
+            or not _paris_location(excerpt,values['name'],values['company'])):
+        raise CityError('Indique un lien de profil LinkedIn et un extrait contenant le nom, le poste, l’entreprise et une localisation Paris/Île-de-France explicite.')
+    if values['school'] and normalized(values['school']) not in excerpt:
+        raise CityError('L’école doit apparaître dans l’extrait sélectionné ; laisse ce champ vide sinon.')
+    contact = {**{key:values[key] for key in ('name','role','company','location','school')},
+               'linkedin_url':url,'source_url':url,'source_title':values['name']+' · sélection utilisateur',
+               'source_excerpt':values['evidence'],'source_type':'Sélection LinkedIn',
+               'school_source_url':url if values['school'] else '',
+               'school_evidence':values['evidence'] if values['school'] else '',
+               'employment_status':'Poste sélectionné par l’utilisateur, à confirmer',
+               'origin':'lina_assisted','search_engine':'Navigation manuelle'}
+    if contact_focus(contact)['contact_segment'] not in {'sales','secondary'}:
+        raise CityError('Ce poste ne permet pas de confirmer un métier en finance de marché.')
+    added,duplicates = save_leads(username,[contact],sales_first=True)
+    return {'imported':len(added),'duplicates':duplicates,
+            'text':'Contact ajouté à ton dossier.' if added else 'Ce contact est déjà enregistré ; sa fiche est conservée.'}
+
+
 def discover_contacts(username: str) -> dict:
     from .marketdesk_city import CityError
     if os.getenv("MARKETDESK_NETWORK_SEARCH_MODE", "ai") != "public":
@@ -532,4 +564,4 @@ def list_contacts(username: str) -> list[dict]:
               "conversation", "detected_at", "source_url", "source_title", "source_excerpt", "employment_status", "notes",
               "school", "school_source_url", "school_evidence", "source_type", "source_date", "location_source_url", "location_evidence")
     return [{"id": key, **{f: str(c.get(f) or "") for f in fields}, **contact_focus(c)}
-            for key, c in contacts.items() if c.get("origin") == "lina_public_search"]
+            for key, c in contacts.items() if c.get("origin") in {"lina_public_search","lina_assisted"}]

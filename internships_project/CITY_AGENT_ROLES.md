@@ -67,6 +67,15 @@ preuve explicite ; un nom de famille contenant « Paris » ne prouve pas la loca
 La fiche affiche le type et la date de source, le lien principal et la preuve de localisation.
 Le collecteur public sans IA conserve son extraction bornée de profils LinkedIn ;
 l'élargissement aux articles et biographies est porté par la recherche Web IA.
+
+Le mode LinkedIn assisté est distinct : les liens de recherche sont préparés localement,
+et l'utilisateur ouvre LinkedIn et sélectionne lui-même les profils. Le formulaire
+authentifié importe uniquement les informations professionnelles saisies et un extrait
+qui les appuie, dans son propre dossier. Les comptes, cookies et mots de passe LinkedIn
+ne sont ni demandés ni stockés. Aucun scraping de session, clic automatisé, invitation
+ou message n'est effectué. L'import ne consomme aucun appel LLM et utilise la
+déduplication existante, sans écraser les fiches déjà enregistrées. Sa provenance est
+« Sélection LinkedIn » et reste distincte des résultats de recherche Web automatique.
 La première requête combine Sales et métiers proches avec deux appels d'outils maximum,
 contexte Web faible, extraits courts et plafond de 4 500 tokens. Si dix contacts sont
 enregistrés, aucun complément n'est lancé. Sinon, une seule requête supplémentaire vise
