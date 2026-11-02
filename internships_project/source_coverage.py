@@ -14,7 +14,7 @@ class SourceCoverage:
 
 SOURCE_COVERAGE: dict[str, SourceCoverage] = {
     # Banks
-    "BNP Paribas": SourceCoverage("connected", "https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/stage/france", "Public Playwright browser collector; requires Chromium"),
+    "BNP Paribas": SourceCoverage("connected", "https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/stage/france", "Public Playwright collector in graphical Chromium; requires an interactive desktop"),
     "Société Générale": SourceCoverage("connected", "https://careers.societegenerale.com/en/Technical/all-job-offers", "Global English job index and direct public offer pages; includes international locations"),
     "Crédit Agricole CIB": SourceCoverage("connected", "https://jobs.ca-cib.com/offre-de-emploi/liste-offres.aspx?mode=layer&lcid=1036"),
     "Santander CIB": SourceCoverage("connected", "https://santander.wd3.myworkdayjobs.com/SantanderCareers", "Public Workday CXS board; filtered by existing market-role, contract and hub rules"),
@@ -50,7 +50,7 @@ SOURCE_COVERAGE: dict[str, SourceCoverage] = {
     "Exoé": SourceCoverage("unverified"),
     # Asset managers
     "Amundi": SourceCoverage("connected", "https://jobs.amundi.com/offre-de-emploi/liste-toutes-offres.aspx?lcid=1036"),
-    "BNP Paribas AM": SourceCoverage("shared", "https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/bnp-paribas-asset-management", "Public Playwright browser collector; requires Chromium"),
+    "BNP Paribas AM": SourceCoverage("shared", "https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/bnp-paribas-asset-management", "Public Playwright collector in graphical Chromium; requires an interactive desktop"),
     "Ostrum": SourceCoverage("shared", "https://recrutement.bpce.fr/", "BPCE / Natixis / BRED"),
     "Ofi Invest AM": SourceCoverage("connected", "https://ofiinvestassetmanagement.flatchr.io/fr/company/ofiinvestassetmanagement/", "Public Flatchr postings parsed from direct offer pages"),
     "Groupama AM": SourceCoverage("connected", "https://www.groupama-am.com/fra/fr/intermediaire/carriere/groupama-asset-management-carriere", "Official AM career page and its directly linked vacancies"),

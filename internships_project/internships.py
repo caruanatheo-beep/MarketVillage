@@ -1170,7 +1170,7 @@ def _render_public_career_page(url: str, link_selector: str) -> str:
 
 
 def _bnp_group_jobs(company: str, listing_url: str) -> list[Opportunity]:
-    """Read BNP's public career listings in Chromium; never bypass access controls."""
+    """Read BNP's public career listings in a regular browser window."""
     try:
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
         from playwright.sync_api import sync_playwright
@@ -1182,7 +1182,8 @@ def _bnp_group_jobs(company: str, listing_url: str) -> list[Opportunity]:
     candidates: dict[str, str] = {}
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
+            # BNP serves the public listings to graphical Chromium, but returns HTTP 403 headless.
+            browser = playwright.chromium.launch(headless=False)
             try:
                 page = browser.new_page()
                 response = page.goto(listing_url, wait_until="domcontentloaded", timeout=20_000)
