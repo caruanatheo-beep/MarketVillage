@@ -1308,40 +1308,40 @@ body { overflow:hidden; }
 .cockpit-metrics span { min-height:28px; }
 .cockpit-scroll { scrollbar-width:thin; scrollbar-color:#425c70 transparent; }
 
-/* Electric indigo: shared chrome, with semantic amber/red states preserved. */
-:root { --city-base:#151538; --city-panel:#25245c; --city-card:#343477; --city-border:#6560a5; --city-accent:#7c6cff; --city-cyan:#64e8ea; background:var(--city-base); }
-.city-app.game-app { background:radial-gradient(ellipse at 20% 0,#4a3580 0,transparent 48%),radial-gradient(ellipse at 100% 10%,#28386c 0,transparent 45%),var(--city-base); }
-.game-app .game-brand-hud,.game-app .game-hud,.game-app .game-status-hud { background:#25245cf2; border-color:var(--city-border); box-shadow:0 6px 24px #100d3438,inset 0 1px #bcb2ff24; }
-.game-app .game-brand-hud { box-shadow:0 0 22px #7c6cff35,inset 0 1px #c8c0ff38; }
-.game-app .game-brand-hud small,.game-app .game-status-hud small { color:#d0ccec; }
-.game-app .game-hud button { color:#e0ddf6; }
-.game-app .game-hud button.active,.game-app .game-hud button:hover { background:#48418d; border-color:var(--city-accent); color:#fff; }
-.game-app .command-search { background:#201e50; border-color:var(--city-border); color:var(--city-cyan); }
-.game-app .command-search input { color:#f2efff; }
-.game-app .command-search input::placeholder { color:#bdb7de; }
+/* Petrol and emerald: shared chrome, with semantic amber/red states preserved. */
+:root { --city-base:#0c2428; --city-panel:#123d43; --city-card:#20535a; --city-border:#4e8589; --city-accent:#27d9b3; --city-cyan:#75f0df; background:var(--city-base); }
+.city-app.game-app { background:radial-gradient(ellipse at 20% 0,#19675e 0,transparent 48%),radial-gradient(ellipse at 100% 10%,#144851 0,transparent 45%),var(--city-base); }
+.game-app .game-brand-hud,.game-app .game-hud,.game-app .game-status-hud { background:#123d43f2; border-color:var(--city-border); box-shadow:0 6px 24px #061d2038,inset 0 1px #a4f0dd24; }
+.game-app .game-brand-hud { box-shadow:0 0 22px #27d9b335,inset 0 1px #b4f7df38; }
+.game-app .game-brand-hud small,.game-app .game-status-hud small { color:#c2ded9; }
+.game-app .game-hud button { color:#d9eeea; }
+.game-app .game-hud button.active,.game-app .game-hud button:hover { background:#247168; border-color:var(--city-accent); color:#fff; }
+.game-app .command-search { background:#102f35; border-color:var(--city-border); color:var(--city-cyan); }
+.game-app .command-search input { color:#edfaf5; }
+.game-app .command-search input::placeholder { color:#abcac5; }
 .game-app .command-search-results { background:var(--city-panel); border-color:var(--city-border); }
-.game-app .city-dashboard .command-console { background:linear-gradient(155deg,#30296c,var(--city-panel) 46%,#201e50); border-color:var(--city-border); box-shadow:0 10px 34px #100d3440,inset 0 1px #c9bbff26; }
-.game-app .world-column { border-color:#635c9b; }
-.cockpit-eyebrow,.cockpit-link,.cockpit-agent-status { color:#b9f2f2; }
-.cockpit-heading h2,.cockpit-section h3,.cockpit-agent-identity h4 { color:#f5f1ff; }
+.game-app .city-dashboard .command-console { background:linear-gradient(155deg,#17535a,var(--city-panel) 46%,#102f35); border-color:var(--city-border); box-shadow:0 10px 34px #061d2040,inset 0 1px #a4efd626; }
+.game-app .world-column { border-color:#497a7e; }
+.cockpit-eyebrow,.cockpit-link,.cockpit-agent-status { color:#9cf4df; }
+.cockpit-heading h2,.cockpit-section h3,.cockpit-agent-identity h4 { color:#f2fcf7; }
 .cockpit-metrics button:not(.needs-attention),.cockpit-agent-identity,.cockpit-active,.cockpit-last { background:var(--city-card); border-color:var(--city-border); }
-.cockpit-metrics span,.cockpit-section p,.cockpit-result small,.cockpit-task-title small,.cockpit-agent-identity p { color:#d1cdea; }
-.cockpit-section,.cockpit-footer,.cockpit-result { border-color:#575087; }
-.cockpit-idle { background:linear-gradient(115deg,#3e397b,#303064); border-color:#776bb3; }
-.cockpit-idle strong,.cockpit-result strong { color:#f0edff; }
+.cockpit-metrics span,.cockpit-section p,.cockpit-result small,.cockpit-task-title small,.cockpit-agent-identity p { color:#c6ded8; }
+.cockpit-section,.cockpit-footer,.cockpit-result { border-color:#386b70; }
+.cockpit-idle { background:linear-gradient(115deg,#23615e,#194b50); border-color:#508f87; }
+.cockpit-idle strong,.cockpit-result strong { color:#eefaf5; }
 .cockpit-agent-identity { border-left-color:var(--city-cyan); }
-.cockpit-primary { background:linear-gradient(115deg,#654de0,#5141ba); border-color:#a799ff; color:#fff; box-shadow:0 3px 12px #7c6cff28; }
+.cockpit-primary { background:linear-gradient(115deg,#087d69,#096453); border-color:#62ddbc; color:#fff; box-shadow:0 3px 12px #27d9b328; }
 .cockpit-decision .cockpit-primary { background:#54432b; border-color:#9a7c49; color:#fff0ce; box-shadow:none; }
-.cockpit-footer button,.cockpit-icon,.cockpit-team-select select { background:#333069; border-color:#6b619f; color:#eeeaff; }
-.cockpit-request textarea { background:#1d1a49; border-color:#7770b4; color:#f2efff; }
-.command-console>.cockpit-scroll { scrollbar-color:#8074b7 transparent; }
+.cockpit-footer button,.cockpit-icon,.cockpit-team-select select { background:#205157; border-color:#51827f; color:#e4f5ee; }
+.cockpit-request textarea { background:#0d3034; border-color:#578f89; color:#edfaf5; }
+.command-console>.cockpit-scroll { scrollbar-color:#63a399 transparent; }
 .command-console button:focus-visible,.cockpit-team-select select:focus-visible,.cockpit-request textarea:focus-visible { outline-color:var(--city-cyan); }
 .game-app .game-popup,.notification-center { background:var(--city-panel); border-color:var(--city-border); }
-.game-popup-heading,.notification-heading { background:linear-gradient(115deg,#3a3078,#29265e); border-color:var(--city-border); }
-.notification-card:not(.decision),.notification-tools { background:#302e68; border-color:#67609a; }
+.game-popup-heading,.notification-heading { background:linear-gradient(115deg,#1d615e,#16484e); border-color:var(--city-border); }
+.notification-card:not(.decision),.notification-tools { background:#19494f; border-color:#497b7c; }
 .notification-card.failed { border-left-color:#ee91a3; }.notification-card.completed { border-left-color:#69bca2; }
-.notification-tabs button,.notification-commands button,.notification-actions button { background:#363171; border-color:#7469aa; color:#f2efff; }
-.notification-tabs .selected { background:#604bd0; border-color:#b1a6ff; color:#fff; }
-.notification-filters input,.notification-filters select { background:#1d1a49; border-color:#7469aa; color:#eeeaff; }
-.notification-footer { background:#211e50; border-color:#575087; color:#d1cdea; }
-.game-app .manager-chat-window .manager-chat-content { background:#211e50; }
+.notification-tabs button,.notification-commands button,.notification-actions button { background:#24565a; border-color:#538b85; color:#edfaf5; }
+.notification-tabs .selected { background:#087d69; border-color:#7ae9c9; color:#fff; }
+.notification-filters input,.notification-filters select { background:#0d3034; border-color:#538b85; color:#e4f5ee; }
+.notification-footer { background:#103438; border-color:#386b70; color:#c6ded8; }
+.game-app .manager-chat-window .manager-chat-content { background:#103438; }
