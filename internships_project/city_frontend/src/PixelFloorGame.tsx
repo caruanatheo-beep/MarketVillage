@@ -228,13 +228,13 @@ export async function loadFurniture(
       canPlaceOnWalls: asset.canPlaceOnWalls, backgroundTiles: asset.backgroundTiles });
   }));
   // Keep the existing door catalogue/footprints and replace only their artwork.
-  sprites.MD_DOUBLE_GLASS_DOOR = await readSprite(`${ROOT}/tower/md_entry_glass.png?v=partitions-5`,64,32);
-  sprites.MD_GLASS_DOOR = await readSprite(`${ROOT}/tower/md_entry_jamb.png?v=partitions-5`,16,32);
+  sprites.MD_DOUBLE_GLASS_DOOR = await readSprite(`${ROOT}/tower/md_entry_glass.png?v=partitions-6`,64,32);
+  sprites.MD_GLASS_DOOR = await readSprite(`${ROOT}/tower/md_entry_jamb.png?v=partitions-6`,16,32);
   for(const [id,file,width,height,footprintW,footprintH,backgroundTiles]of [
     ['MD_SIDE_GLASS_DOOR','md_side_entry',16,32,1,2,2],
     ['MD_INTERNAL_DOUBLE_DOOR','md_entry_pair',32,32,2,1,1],
   ] as const){
-    sprites[id]=await readSprite(`${ROOT}/tower/${file}.png?v=partitions-5`,width,height);
+    sprites[id]=await readSprite(`${ROOT}/tower/${file}.png?v=partitions-6`,width,height);
     catalog.push({id,label:'Open glass doorway',category:'walls',width,height,footprintW,footprintH,
       isDesk:false,groupId:id,canPlaceOnWalls:true,backgroundTiles});
   }
@@ -294,7 +294,7 @@ async function loadEnvironmentSprites(): Promise<void> {
     .sort((a, b) => Number.parseInt(a.id.slice(-2), 16) - Number.parseInt(b.id.slice(-2), 16));
   if (wallModules.length !== 16) throw new Error("Le pack de cloisons doit contenir ses 16 jonctions auto-raccordables.");
   const wallSprites = await Promise.all(wallModules.map((_,mask) =>
-    loadSprite(`${ROOT}/tower/md_partition_${mask.toString(16).padStart(2,'0')}.png?v=partitions-5`, 16, 24)));
+    loadSprite(`${ROOT}/tower/md_partition_${mask.toString(16).padStart(2,'0')}.png?v=partitions-6`, 16, 24)));
   // Authored module colors are preserved; wall cells remain collision tiles in the layout.
   setWallSprites([wallSprites]);
 }
@@ -410,13 +410,14 @@ export function buildOfficeLayout(): OfficeLayout {
   ] as Array<[string, number, number]>) put(id, "MD_PANORAMA_WINDOW", col, row);
   // Open sliding-door overlays make existing passable openings read as intentional architecture.
   // Their background rows are non-blocking, so routes and collisions remain unchanged.
-  put("manager-glass-entry", "MD_DOUBLE_GLASS_DOOR", 22, 8);
+  furniture.push({uid:uid("manager-glass-entry"),type:"MD_DOUBLE_GLASS_DOOR",col:22,row:10});
   furniture.push({uid:uid("tech-glass-entry"),type:"MD_INTERNAL_DOUBLE_DOOR",col:6,row:18});
-  put("career-glass-entry", "MD_DOUBLE_GLASS_DOOR", 22, 20);
+  furniture.push({uid:uid("career-glass-entry"),type:"MD_DOUBLE_GLASS_DOOR",col:22,row:19});
+  furniture.push({uid:uid("research-gallery-entry"),type:"MD_INTERNAL_DOUBLE_DOOR",col:39,row:17});
   furniture.push({uid:uid("network-glass-entry"),type:"MD_INTERNAL_DOUBLE_DOOR",col:39,row:19});
   // Door drawings use their resolved collision coordinates, never a second
   // room offset. Side doors cover two rows; front doors cover two columns.
-  for(const [id,col,row]of [['markets',13,14],['research',32,14],['network',32,22],['outreach',32,26]] as const)
+  for(const [id,col,row]of [['markets',13,14],['research',32,14],['network',32,22],['outreach',32,26],['innovation',24,25]] as const)
     furniture.push({uid:uid(`${id}-side-entry`),type:'MD_SIDE_GLASS_DOOR',col,row});
   furniture.push({uid:uid('network-outreach-entry'),type:'MD_INTERNAL_DOUBLE_DOOR',col:39,row:24});
   put("manager-chair", "MD_EXECUTIVE_CHAIR", manager.col + 2, manager.row + 2);
@@ -525,9 +526,9 @@ export function buildOfficeLayout(): OfficeLayout {
   const wallAt=(col:number,row:number)=>{
     projectedTiles[row*cols+col]=TileType.WALL;projectedColors[row*cols+col]=null;
   };
-  for(let row=11;row<=17;row++) if(![14,15].includes(row)) wallAt(13,row);
+  for(let row=10;row<=18;row++) if(![14,15].includes(row)) wallAt(13,row);
   floorAt(13,14);floorAt(13,15);
-  for(let row=10;row<=16;row++) if(![14,15].includes(row)) wallAt(32,row);
+  for(let row=9;row<=19;row++) if(![14,15].includes(row)) wallAt(32,row);
   floorAt(32,14);floorAt(32,15);
   // A real glazed boundary separates both upper departments from the gallery.
   for(let col=1;col<=12;col++) if(![6,7].includes(col)) wallAt(col,18);
@@ -537,7 +538,13 @@ export function buildOfficeLayout(): OfficeLayout {
   floorAt(39,17);floorAt(40,17);
   // The shared partition between Network and Outreach has one two-tile door.
   floorAt(39,24);floorAt(40,24);
-  floorAt(32,23);floorAt(32,27);floorAt(40,19);
+  floorAt(32,23);floorAt(32,27);
+  // Close corners on the final grid, after all wing setbacks. Door sprites
+  // sit in these openings, never on the adjacent circulation gallery.
+  wallAt(15,19);
+  floorAt(39,19);floorAt(40,19);
+  for(let col=0;col<=46;col++) if(col<22||col>25) wallAt(col,29);
+
   for(let row=worldY(22);row<=worldY(30);row++) if(![worldY(27),worldY(28)].includes(row)) wallAt(24,row);
   return { version: 1, cols, rows:GOLF_ROWS, tiles:projectedTiles, tileColors:projectedColors, furniture, carpetTiles: [], areas: [], areaTiles: [] };
 }

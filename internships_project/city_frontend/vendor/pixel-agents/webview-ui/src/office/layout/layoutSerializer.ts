@@ -49,8 +49,10 @@ export function layoutToFurnitureInstances(furniture: PlacedFurniture[]): Furnit
     const chairInset = entry.category === 'chairs' && entry.footprintW === 1
       ? (entry.sprite[0].length - TILE_SIZE) / 2 : 0;
     const x = item.col * TILE_SIZE - chairInset;
-    const y = item.row * TILE_SIZE;
     const spriteH = entry.sprite.length;
+    // Doors share the bottom anchor used by adjacent raised wall tiles.
+    const y = item.row * TILE_SIZE - (['MD_DOUBLE_GLASS_DOOR', 'MD_GLASS_DOOR', 'MD_INTERNAL_DOUBLE_DOOR', 'MD_SIDE_GLASS_DOOR'].includes(item.type)
+      ? spriteH - entry.footprintH * TILE_SIZE : 0);
     let zY = y + spriteH;
 
     // Chair z-sorting: ensure characters sitting on chairs render correctly

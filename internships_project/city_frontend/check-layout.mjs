@@ -132,6 +132,19 @@ export async function checkLayout() {
   for(const col of [33,34,35,36,37,38,41,42,43,44,45,46])assert.equal(office.tileMap[17][col],TileType.WALL,'Research south partition');
   for(const [col,row]of [[6,18],[7,18],[39,17],[40,17],[39,24],[40,24]])
     assert.notEqual(office.tileMap[row][col],TileType.WALL,'Double doorway stays open');
+  // Every portal occupies a real opening, bounded by joined partition ends.
+  const doors=office.layout.furniture.filter(item=>['MD_DOUBLE_GLASS_DOOR','MD_INTERNAL_DOUBLE_DOOR','MD_SIDE_GLASS_DOOR'].includes(item.type));
+  for(const door of doors){
+    const side=door.type==='MD_SIDE_GLASS_DOOR',width=side?1:door.type==='MD_DOUBLE_GLASS_DOOR'?4:2,height=side?2:1;
+    for(let dy=0;dy<height;dy++)for(let dx=0;dx<width;dx++)
+      assert.notEqual(office.tileMap[door.row+dy][door.col+dx],TileType.WALL,`Open portal ${door.uid}`);
+    const ends=side?[[door.col,door.row-1],[door.col,door.row+height]]:[[door.col-1,door.row],[door.col+width,door.row]];
+    for(const [x,y]of ends)assert.equal(office.tileMap[y][x],TileType.WALL,`Attached jamb ${door.uid} (${x},${y})`);
+    const drawing=office.furniture[office.layout.furniture.indexOf(door)];
+    assert.equal(drawing.y+drawing.sprite.length,(door.row+height)*16,`Bottom-anchored portal ${door.uid}`);
+  }
+  for(const [x,y]of [[13,10],[13,18],[32,9],[32,17],[32,19],[15,19],[15,29],[32,29]])
+    assert.equal(office.tileMap[y][x],TileType.WALL,`Closed partition corner (${x},${y})`);
   console.log(`Structure OK: connected plate interiors, ${edges.length} attached edges, ${piers.length} native glass piers, ${lintels.length} door-safe glazing runs.`);
   for (const [x,y] of [[5,7],[42,7]]) {
     assert.ok(findPath(23,worldY(19),x,y,office.tileMap,office.blockedTiles).length,'Penthouse terrace must be accessible');

@@ -15,21 +15,21 @@ def main():
         north, east, south, west = (bool(mask & bit) for bit in (1, 2, 4, 8))
         horizontal, vertical = east or west, north or south
         if horizontal or not vertical:
-            left, right = (0 if west else 3), (15 if east else 12)
+            left, right = 0, 15  # End caps meet adjacent door jambs at tile edges.
             # Clear glass: the indoor foundation stays visible. No repeated
             # diagonal symbols or opaque blue fills on adjacent tile modules.
             for y in range(6, 21):
                 d.line((left,y,right,y), fill=(78,122,151,145 if y<10 else 118))
             d.rectangle((left, 3, right, 5), fill='#22323f')
             d.line((left, 3, right, 3), fill='#8c999e')
-            d.line((left, 6, right, 6), fill='#a6c0c142')
+            d.line((left, 11, right, 11), fill='#a6c0c142')
             d.rectangle((left, 21, right, 23), fill='#253542')
             d.line((left, 21, right, 21), fill='#9b9989')
             d.line((left, 23, right, 23), fill='#101d29')
             if not west: d.rectangle((left, 4, left+1, 22), fill='#32424e')
             if not east: d.rectangle((right-1, 4, right, 22), fill='#32424e')
         if vertical:
-            top, bottom = (0 if north else 14), (23 if south else 21)
+            top, bottom = (0 if north else 3), 23
             d.rectangle((5, top, 9, bottom), fill='#6590aa88')
             d.line((4, top, 4, bottom), fill='#89979d')
             d.line((5, top, 5, bottom), fill='#2c3d49')
@@ -46,15 +46,15 @@ def main():
     # An open sliding glass entrance. The clear centre is a genuine doorway.
     image = Image.new('RGBA', (64, 32))
     d = ImageDraw.Draw(image)
-    for left, right in ((1, 21), (42, 62)):
-        d.rectangle((left, 6, right, 28), outline='#32434e', width=2)
-        d.rectangle((left+2, 8, right-2, 24), fill='#84a9bd70')
-        d.line((left+3, 9, left+3, 23), fill='#cad9d333')
-        d.line((left, 6, right, 6), fill='#94aabb')
-        d.line((left+1, 27, right-1, 27), fill='#c7ad7b')
-    d.rectangle((0, 4, 63, 6), fill='#1a324c')
-    d.line((1, 4, 62, 4), fill='#9cabb3')
-    d.line((0, 29, 63, 29), fill='#172b3f')
+    for left, right in ((0, 20), (43, 63)):
+        d.rectangle((left, 11, right, 30), outline='#32434e', width=2)
+        d.rectangle((left+2, 14, right-2, 28), fill='#84a9bd70')
+        d.line((left+3, 14, left+3, 27), fill='#cad9d333')
+        d.line((left, 11, right, 11), fill='#94aabb')
+        d.line((left+1, 29, right-1, 29), fill='#c7ad7b')
+    d.rectangle((0, 11, 63, 13), fill='#1a324c')
+    d.line((0, 11, 63, 11), fill='#9cabb3')
+    d.line((0, 31, 63, 31), fill='#172b3f')
     image.save(OUT / 'md_entry_glass.png')
 
     image = Image.new('RGBA', (16, 32))
@@ -79,13 +79,13 @@ def main():
 
     image = Image.new('RGBA', (32, 32))
     d = ImageDraw.Draw(image)
-    d.rectangle((0, 5, 31, 7), fill='#142d47')
-    d.line((1, 5, 30, 5), fill='#9aaeb8')
-    for left, right in ((1, 7), (24, 30)):
-        d.rectangle((left, 8, right, 28), outline='#32434e')
-        d.rectangle((left+1, 9, right-1, 26), fill='#84a9bd70')
-        d.line((left+1, 10, left+1, 25), fill='#cad9d344')
-    d.line((0, 29, 31, 29), fill='#b99f74')
+    d.rectangle((0, 11, 31, 13), fill='#142d47')
+    d.line((0, 11, 31, 11), fill='#9aaeb8')
+    for left, right in ((0, 7), (24, 31)):
+        d.rectangle((left, 14, right, 30), outline='#32434e')
+        d.rectangle((left+1, 15, right-1, 28), fill='#84a9bd70')
+        d.line((left+1, 15, left+1, 27), fill='#cad9d344')
+    d.line((0, 31, 31, 31), fill='#b99f74')
     image.save(OUT / 'md_entry_pair.png')
     image = Image.new('RGBA', (16, 48))
     d = ImageDraw.Draw(image)
@@ -131,6 +131,14 @@ def main():
         assert glass.size == (16, 24)
         assert 0 < glass.getpixel((8, 14))[3] < 200, 'Glass must stay translucent'
         assert glass.getpixel((8, 3))[3] == 255, 'Frame must stay solid'
+    # Wall/door rails coincide in world space despite their different heights.
+    for mask in (0, 2, 8, 10):
+        with Image.open(OUT / f'md_partition_{mask:02x}.png') as wall:
+            assert wall.getpixel((0, 3))[3] == wall.getpixel((15, 3))[3] == 255
+    for name, width in [('md_entry_glass', 64), ('md_entry_pair', 32)]:
+        with Image.open(OUT / f'{name}.png') as door:
+            assert door.getpixel((0, 11))[3] == door.getpixel((width-1, 11))[3] == 255
+            assert 11 - (door.height - 16) == 3 - (24 - 16), 'Door/wall lintel alignment'
     for name, point in [('md_side_entry', (8, 16)), ('md_entry_pair', (16, 16)), ('md_entry_glass', (31, 16))]:
         with Image.open(OUT / f'{name}.png') as door:
             assert door.getpixel(point)[3] == 0, f'{name}: doorway is visually obstructed'
