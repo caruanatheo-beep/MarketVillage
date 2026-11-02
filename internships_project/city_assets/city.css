@@ -1292,3 +1292,18 @@ body { overflow:hidden; }
 .cockpit-error-link { display:flex; justify-content:space-between; gap:8px; width:100%; padding:10px; border:1px solid #694450; border-radius:8px; background:#382632; color:#e8b9c2; font:inherit; font-size:12px; cursor:pointer; }
 .cockpit-footer { border-top:1px solid #2b4055; padding-top:10px; }.cockpit-footer nav { display:flex; gap:7px; }.cockpit-footer button { flex:1; min-width:0; padding:8px 4px; border:1px solid #32485e; border-radius:8px; background:#17263b; color:#bcd0e0; font:inherit; font-size:11px; cursor:pointer; }.cockpit-footer p { font-size:12px; color:#f2b7b9; overflow-wrap:anywhere; }
 .cockpit-scroll button:disabled { opacity:.45; cursor:default; }.command-console button:focus-visible,.cockpit-team-select select:focus-visible,.cockpit-request textarea:focus-visible { outline:2px solid #7bc9de; outline-offset:3px; }.cockpit-scroll button:hover:not(:disabled),.cockpit-footer button:hover:not(:disabled) { filter:brightness(1.15); }
+
+/* Quiet states leave room for the selected agent and useful results. */
+.cockpit-section.is-clear { display:flex; align-items:center; gap:9px; padding:5px 0 10px; }
+.cockpit-section.is-clear>header { display:none; }
+.cockpit-section.is-clear::before { content:'\2713'; color:#91d7c1; font-size:13px; }
+.cockpit-section.is-clear p { margin:0; font-size:11px; }
+.cockpit-section.is-idle { padding:10px 0 12px; }
+.cockpit-section.is-idle>header { display:none; }
+.cockpit-idle { display:grid; grid-template-columns:1fr auto; gap:6px 10px; padding:10px 12px; background:linear-gradient(120deg,#1b3345,#152337); border:1px solid #304b60; }
+.cockpit-idle .cockpit-orbit { grid-column:2; grid-row:1 / 3; align-self:center; margin:0; }
+.cockpit-idle .cockpit-link { justify-self:start; }
+.cockpit-agent-identity { padding:10px; border-radius:10px; background:#192b3d; border-left:2px solid #83ced9; }
+.cockpit-metrics button { min-height:73px; }
+.cockpit-metrics span { min-height:28px; }
+.cockpit-scroll { scrollbar-width:thin; scrollbar-color:#425c70 transparent; }

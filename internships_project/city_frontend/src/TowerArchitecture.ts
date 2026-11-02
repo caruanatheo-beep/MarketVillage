@@ -16,7 +16,7 @@ export async function loadTowerArchitecture(): Promise<void> {
 export function renderTowerBackdrop(ctx: CanvasRenderingContext2D, ox:number, oy:number, zoom:number):void {
   const backdrop=images['manhattan-canyon'];if(!backdrop)return;
   const c=16*zoom,width=72*c,height=width*backdrop.height/backdrop.width;
-  ctx.save();ctx.imageSmoothingEnabled=false;ctx.globalAlpha=.66;
+  ctx.save();ctx.imageSmoothingEnabled=false;ctx.globalAlpha=.42;
   ctx.drawImage(backdrop,ox-12*c,oy-c,width,height);
   ctx.globalAlpha=1;ctx.globalCompositeOperation='destination-over';
   ctx.fillStyle='#061021';ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);ctx.restore();

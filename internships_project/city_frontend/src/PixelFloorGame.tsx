@@ -13,7 +13,7 @@ import { AMBIENT_LAMPS, renderNightLight } from "./nightLighting";
 import { GolfPractice, GOLF_BAYS, GOLF_ROWS } from "./GolfPractice";
 import { worldY, wingPosition } from "./worldGeometry";
 import { loadTowerArchitecture, renderTowerArchitecture, renderTowerBackdrop, renderTowerRelief, renderTowerSign } from "./TowerArchitecture";
-import { renderTowerPerspective, unprojectTowerX, unprojectTowerY, towerDisplayRows } from "./TowerPerspective";
+import { renderTowerPerspective, projectTowerX, unprojectTowerX, unprojectTowerY, towerDisplayRows } from "./TowerPerspective";
 
 type Agent = { id: string; name: string; status: AgentStatus };
 type Task = { id: string; agent_id: string; description?: string; status?: string; depends_on?: string[]; delegated_by?: string; workflow_id?: string; result?: { approval_required?: boolean; role_version?: number; review_decision?: string; branch?: string } };
@@ -642,7 +642,7 @@ function renderLuminaires(ctx:CanvasRenderingContext2D,ox:number,oy:number,zoom:
     const px=ox+x*16*zoom,py=oy+y*16*zoom;
     ctx.drawImage(textiles['lamp-amber'],px,py,16*zoom,24*zoom);
     const halo=ctx.createRadialGradient(px+8*zoom,py+8*zoom,0,px+8*zoom,py+8*zoom,9*zoom);
-    halo.addColorStop(0,'#fff0bde6');halo.addColorStop(.25,'#ffd070a0');halo.addColorStop(.55,'#ffb52e45');halo.addColorStop(1,'#ff982000');
+    halo.addColorStop(0,'#fff0bdac');halo.addColorStop(.25,'#ffd07060');halo.addColorStop(.55,'#ffb52e28');halo.addColorStop(1,'#ff982000');
     ctx.fillStyle=halo;ctx.fillRect(px-zoom,py-zoom,18*zoom,18*zoom);
   }
   ctx.restore();
@@ -672,18 +672,19 @@ function renderZoneLabels(ctx: CanvasRenderingContext2D, zoom: number, offsetX: 
     { text: "OUTREACH", color: "#77d8e7", col: 40, row: 29.1 },
   ];
   ctx.save();
-  const fontSize = Math.max(7.5, 8.2 * zoom);
+  const fontSize = Math.max(10, Math.min(13, 8.8 * zoom));
   ctx.font = `600 ${fontSize}px Inter, "Segoe UI", Arial, sans-serif`;
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   for (const item of labels) {
-    const x = offsetX + item.col * TILE_SIZE * zoom, y = offsetY + worldY(item.row) * TILE_SIZE * zoom;
+    const y = offsetY + worldY(item.row) * TILE_SIZE * zoom;
+    const x = projectTowerX(offsetX + item.col * TILE_SIZE * zoom, y, offsetX, offsetY, zoom);
     const textWidth = ctx.measureText(item.text).width;
     const mark = Math.max(2, zoom * 1.05), gap = Math.max(3, zoom * 1.5);
     const padX = Math.max(4, zoom * 2.2), padY = Math.max(3, zoom * 1.35);
     const width = textWidth + mark + gap + padX * 2, height = fontSize + padY * 2;
     const left = x - width / 2, top = y - height / 2;
     // Compact wayfinding plaques echo the dark interface without obscuring the floor.
-    ctx.fillStyle = "rgba(12, 22, 35, 0.82)";
+    ctx.fillStyle = "rgba(9, 19, 31, 0.96)";
     ctx.fillRect(left, top, width, height);
     ctx.lineWidth = Math.max(0.8, zoom * 0.35);
     ctx.strokeStyle = item.color + "b8";
@@ -1063,7 +1064,7 @@ export function PixelFloorGame(props: Props): React.ReactElement {
         runtime.current?.golf.render(ctx,position.offsetX,position.offsetY,scale);
         const offers = latest.current.featuredOffers;
         const visibleOffer = offers.length ? offers[Math.min(offerIndexRef.current, offers.length - 1)] : null;
-        renderZoneLabels(ctx, scale, position.offsetX, position.offsetY);
+
         if (live) {
           live.scale = scale; live.offsetX = position.offsetX; live.offsetY = position.offsetY;
           node.dataset.viewScale=String(scale);node.dataset.viewX=String(position.offsetX);node.dataset.viewY=String(position.offsetY);
@@ -1073,6 +1074,20 @@ export function PixelFloorGame(props: Props): React.ReactElement {
         renderTowerBackdrop(output,position.offsetX,position.offsetY,scale);
         renderTowerPerspective(output,worldCanvas,position.offsetX,position.offsetY,scale);
         renderTowerSign(output,position.offsetX,position.offsetY,scale);
+        renderZoneLabels(output,scale,position.offsetX,position.offsetY);
+        const focus=floor.characters.get(index),agent=latest.current.agents.find(a=>a.id===selected.current);
+        if(focus&&agent){
+          const y=position.offsetY+focus.y*scale;
+          const x=projectTowerX(position.offsetX+focus.x*scale,y,position.offsetX,position.offsetY,scale);
+          output.save();output.strokeStyle='#8ee5ee';output.lineWidth=1.5;
+          output.beginPath();output.ellipse(x,y+5*scale,10*scale,4*scale,0,0,Math.PI*2);output.stroke();
+          output.font='600 12px Inter, "Segoe UI", sans-serif';
+          const width=output.measureText(agent.name).width+18,top=y-32*scale-22;
+          output.fillStyle='#0c2136f2';output.fillRect(x-width/2,top,width,22);
+          output.strokeRect(x-width/2,top,width,22);
+          output.textAlign='center';output.textBaseline='middle';output.fillStyle='#e5fbff';
+          output.fillText(agent.name,x,top+11);output.restore();
+        }
         // Billboards face the viewer: keep their type on a flat, legible plane.
         renderMarketDecor(output,scale,position.offsetX,position.offsetY,latest.current.marketPoints,
           latest.current.marketRetrievedAt,latest.current.marketError,visibleOffer,offerIndexRef.current,

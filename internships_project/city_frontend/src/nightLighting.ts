@@ -33,13 +33,13 @@ function bake(): void {
     ctx.fillStyle=g;ctx.fillRect(-r,-r,r*2,r*2);ctx.restore();
   }
   for(const [x,y] of AMBIENT_LAMPS){
-    pool(light,x+.5,y+.55,48,'255,153,26',1);
-    pool(light,x+.5,y+.55,12,'255,224,156',1);
-    pool(floor,x+.55,y+1.65,43,'243,183,98',.9,.48);
+    pool(light,x+.5,y+.55,48,'255,178,87',.65);
+    pool(light,x+.5,y+.55,12,'255,224,156',.7);
+    pool(floor,x+.55,y+1.65,43,'243,183,98',.5,.48);
   }
   for(const [x,y] of SCREENS){
-    pool(light,x,y+.7,29,'17,90,237',.8);
-    pool(floor,x,y+1.25,32,'55,178,255',.6,.35);
+    pool(light,x,y+.7,29,'64,133,207',.4);
+    pool(floor,x,y+1.25,32,'55,178,255',.3,.35);
   }
   // Emission from real display/board positions, independent of mission status.
   for(const [x,y] of [[10.8,10.8],[23,2.4],[18,22.7],[42.8,27.8]]){
@@ -63,7 +63,7 @@ export function renderNightLight(ctx:CanvasRenderingContext2D,x:number,y:number,
   ctx.globalAlpha=floor?.7:.9;
   ctx.drawImage((floor?reflectionMap:lightmap)!,x,y,MAP_WIDTH*scale,MAP_HEIGHT*scale);
   if(!floor){
-    ctx.globalCompositeOperation='screen';ctx.globalAlpha=.72;
+    ctx.globalCompositeOperation='screen';ctx.globalAlpha=.42;
     ctx.drawImage(lightmap!,x,y,MAP_WIDTH*scale,MAP_HEIGHT*scale);
   }
   ctx.restore();

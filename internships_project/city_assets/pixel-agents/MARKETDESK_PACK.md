@@ -90,3 +90,7 @@ The original 16x24 `tower/md_partition_*.png` sprites are loaded by the existing
 ### Connected office boundaries ? 2 November 2026
 
 Partitions close their corners on the final projected grid, including the south office boundary. Front and side portals occupy the actual navigation openings; the Research/gallery and Interview/Innovation passages now have explicit frames. City glass doors use the same bottom anchor as raised wall tiles, and the generated frames share rail heights and full-width endpoints. `check-layout.mjs` verifies door jamb neighbours, passable openings, sprite anchors and corner cells alongside all nine workstation routes. `scripts/generate_connected_structure.py` checks translucent glass, clear openings and rail alignment.
+
+### Visual readability pass ? 2 November 2026
+
+Five applied priorities: quieter skyline contrast; softer amber lighting and screen reflections; screen-space room plaques that stay legible under perspective; a cyan name/position marker following the selected agent; compact empty cockpit states to leave room for results. Selection and room labels reuse the scene projection. Lighting remains decorative, independent of mission status. Browser checks cover desktop, short viewport and mobile cockpit interactions with fixture data only.
