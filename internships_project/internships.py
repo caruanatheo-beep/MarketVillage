@@ -462,7 +462,8 @@ def _opportunity_sort_key(job: Opportunity) -> tuple:
 
 def _recent_sort_key(job: Opportunity) -> tuple:
     published = int(job.published.replace("-", "")) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", job.published) else 0
-    return (-published, -job.score, job.company.casefold(), job.title.casefold(), job.url.casefold())
+    return (job.published_inferred, -published, -job.score, job.company.casefold(),
+            job.title.casefold(), job.url.casefold())
 
 
 def matching_opportunities(jobs: list[Opportunity], category: str = "Toutes", query: str = "",
@@ -488,8 +489,8 @@ def matching_opportunities(jobs: list[Opportunity], category: str = "Toutes", qu
       and (not query or query in f"{job.title} {job.company} {job.location}".casefold())
       and (not only_new or job.url not in seen)
       and (not hide_dismissed or job.url not in dismissed)
-      and (not weekly or _published_this_week(job.published, today))
-      and (not daily or job.published == today.isoformat())]
+      and (not weekly or (not job.published_inferred and _published_this_week(job.published, today)))
+      and (not daily or (not job.published_inferred and job.published == today.isoformat()))]
     return sorted(filtered, key=_recent_sort_key if sort_by == "recent" else _opportunity_sort_key)
 
 
@@ -2626,14 +2627,15 @@ def render_opportunities(jobs: list[Opportunity], errors: list[str], updated: da
             + (f'<span class="job-fact deadline">Limite : {html.escape(job.deadline)}</span>'
                if job.deadline else '')
         )
+        publication = (f'Publication inconnue<br>Détectée le {html.escape(job.published)}'
+                       if job.published_inferred else f'Publié {html.escape(job.published or "date inconnue")}')
         content = (
             '<span class="job-card-header">'
             f'<span class="job-company-mark" aria-hidden="true">{html.escape(initials)}{company_mark}</span>'
             '<span class="job-company-block">'
             f'<span class="job-company">{html.escape(job.company)}</span>'
             f'<span class="job-location">{html.escape(job.location or "Lieu non indiqué")}</span></span>'
-            f'<span class="job-published">{"Détectée" if job.published_inferred else "Publié"} '
-            f'{html.escape(job.published or "date inconnue")}</span>'
+            f'<span class="job-published">{publication}</span>'
             '</span>'
             f'<strong class="job-title" title="{html.escape(job.title, quote=True)}">{html.escape(job.title)}</strong>'
             + f'<span class="job-card-tags">{details}{badges}</span>'

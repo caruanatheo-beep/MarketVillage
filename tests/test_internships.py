@@ -902,6 +902,32 @@ def test_daily_view_uses_only_todays_dated_offers():
     assert "Undated Trading Intern" not in view
 
 
+def test_detected_today_is_not_treated_as_published_today_or_this_week():
+    from dataclasses import replace
+    from internships_project.internships import matching_opportunities
+
+    today = date(2026, 11, 2)
+    stamp = datetime(2026, 11, 2, tzinfo=timezone.utc)
+    source_dated = _opportunity("Sales Intern", "Bank", "Paris", "Stage",
+                                "https://jobs.smartrecruiters.com/Bank/sales", "2026-11-02")
+    bpce = _opportunity("Stage FO Controls on Equity and Fixed Income", "Natixis CIB", "Paris", "Stage",
+                        "https://recrutement.bpce.fr/job/stage-fo-controls", "")
+    assert source_dated is not None and bpce is not None
+    bpce = replace(bpce, published="2026-11-02", published_inferred=True)
+    jobs = [source_dated, bpce]
+
+    for period in ("daily", "weekly"):
+        view = render_opportunities(jobs, [], stamp, today=today, **{period: True})
+        assert "Sales Intern" in view
+        assert "FO Controls" not in view
+
+    all_view = render_opportunities(jobs, [], stamp, today=today)
+    assert "FO Controls" in all_view
+    assert "Publication inconnue<br>Détectée le 2026-11-02" in all_view
+    recent = matching_opportunities(jobs, sort_by="recent", today=today)
+    assert [job.url for job in recent] == [source_dated.url, bpce.url]
+
+
 def test_start_period_requires_explicit_start_language():
     assert _start_period("Publié le 20 octobre 2026. À partir de janvier 2027.") == "janvier 2027"
     assert _start_period("The internship starts in January 2027.") == "January 2027"
@@ -1347,7 +1373,7 @@ def test_undated_offer_gets_first_detection_date_and_keeps_it(tmp_path, monkeypa
     jobs, _, _ = internships.refresh_opportunities()
     assert jobs[0].published == "2026-10-20"
     assert jobs[0].published_inferred
-    assert "Détectée 2026-10-20" in render_opportunities(jobs, [], old_snapshot)
+    assert "Publication inconnue<br>Détectée le 2026-10-20" in render_opportunities(jobs, [], old_snapshot)
     _, reloaded, _ = internships._read_cache()
     assert reloaded[0].published == "2026-10-20"
 
