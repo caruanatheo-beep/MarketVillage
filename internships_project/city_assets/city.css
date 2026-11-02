@@ -1348,3 +1348,54 @@ body { overflow:hidden; }
 .game-app .manager-chat-window .chat-heading { flex-wrap:wrap; gap:8px; }
 .game-app .manager-chat-window .chat-heading>div { flex:1 1 170px; }
 .game-app .manager-chat-window .chat-heading button { white-space:nowrap; }
+
+/* Keep every top-level City window on the same grid: title, close, then content. */
+.game-app .game-mission-control { top:50%; right:auto; left:50%; transform:translate(-50%,-50%); width:min(1060px,calc(100vw - 36px)); height:min(900px,calc(100dvh - 40px)); padding:0; }
+.game-app .game-mission-control .game-popup-heading,
+.network-window-heading,.notification-heading,.settings-heading { box-sizing:border-box; min-height:96px; align-items:center; padding:18px 28px; background:linear-gradient(115deg,#1d615e,#16484e); border-bottom:1px solid var(--city-border); }
+.game-app .game-mission-control .game-popup-heading strong { font-size:24px; letter-spacing:-.025em; }
+.game-app .game-mission-control .game-popup-heading small { font-size:12px; }
+.game-app .game-mission-control .manager-panel { padding:20px 28px 24px; scrollbar-color:#63a399 transparent; }
+.network-window { width:min(1060px,calc(100vw - 36px)); height:min(900px,calc(100dvh - 40px)); background:var(--city-panel); border-color:var(--city-border); }
+.notification-center { background:var(--city-panel); }
+.network-window-heading h2,.notification-heading h2,.settings-heading h2 { margin:4px 0; font-size:24px; line-height:1.2; }
+.network-kicker,.notification-eyebrow,.settings-heading .tiny-label { color:var(--city-cyan); }
+.network-window-heading p,.notification-heading p,.settings-dialog>p { color:#c6ded8; }
+.network-directory { padding:20px 28px 24px; scrollbar-color:#63a399 transparent; }
+.network-close,.game-app .game-mission-control .game-popup-heading button,.settings-heading .icon-button { width:34px; height:34px; flex:none; border:1px solid #68a79b; border-radius:9px; background:#24565a; color:#e9faf4; }
+.settings-dialog { width:min(1060px,100%); height:min(900px,calc(100dvh - 40px)); max-height:none; padding:0 28px 24px; border-color:var(--city-border); background:var(--city-panel); color:#edfaf5; scrollbar-color:#63a399 transparent; }
+.settings-heading { margin:0 -28px 20px; }
+.settings-dialog select,.settings-dialog input:not([type=checkbox]) { background:#0d3034; border-color:#538b85; color:#edfaf5; }
+.settings-dialog label { color:#d8eee8; }
+.settings-checkbox input { accent-color:var(--city-accent); }
+.game-app .mission-control-register,.game-app .workflow-builder-step,.game-app .integration-row { background:#19494f; border-color:#4e8589; }
+.game-app .mission-filters button,.notification-center .notification-commands button:first-child { background:#24565a; border-color:#538b85; color:#edfaf5; }
+.game-app .mission-filters button[aria-pressed=true],.game-app .panel-tabs button.selected,.game-app .agent-panel .panel-tabs button.selected,.game-app .command-console .panel-tabs button.selected { background:#087d69; border-color:#7ae9c9; color:#fff; box-shadow:0 0 12px #27d9b32b; }
+.game-app .panel-tabs,.game-app .agent-panel .panel-tabs { background:#103438; border-color:var(--city-border); }
+.game-app .roster-agent.desk_manager.chosen,.game-app .agent-choice.desk_manager.chosen { background:#20535a; border-color:#7ae9c9; box-shadow:inset 0 0 0 1px #7ae9c944; }
+.game-app .agent-choice.desk_manager.chosen .status-light { box-shadow:0 0 7px #75f0df,0 0 14px #27d9b3; }
+.notification-summary button:not(.decision):not(.failure),.notification-tools,.notification-tools .jules-coding-form { background:#19494f; border-color:#4e8589; }
+.notification-center .notification-commands button:first-child { background:#087d69; border-color:#7ae9c9; }
+.notification-card.decision { background:linear-gradient(110deg,#423a2c,#19494f 60%); }
+.network-directory button,.network-directory button.network-primary,.network-segments button[aria-pressed=true] { background:#24565a; border-color:#538b85; color:#edfaf5; }
+.network-directory button.network-primary { background:#087d69; border-color:#7ae9c9; }
+.network-segments button[aria-pressed=true] span { background:#087d69; color:#edfaf5; }
+.notification-summary .failure { background:linear-gradient(140deg,#472d32,#183d41); border-color:#a35f68; }
+.game-app .primary-button,.settings-dialog .primary-button { background:linear-gradient(110deg,#087d69,#096453); border-color:#62ddbc; color:#fff; }
+.game-app .text-button,.game-app .mission-archive summary { color:#9cf4df; }
+.game-app .mission-record.waiting_approval { border-left-color:#d7b267; }
+.game-app .manager-form,.game-app .workflow-builder,.game-app .mission-record { background:#173c42; border-color:#4e8589; }
+.game-app .manager-form :is(input,select,textarea),.game-app .workflow-builder :is(input,select,textarea) { background:#0d3034; border-color:#538b85; color:#edfaf5; }
+.game-app .agent-panel .chat-message.user,.game-app .command-console .chat-message.user { background:#20535a; border-color:#63a399; }
+.game-app .message-avatar.user { background:#246760; }
+.game-app .world-controls .collection-control.jobs-control { border-color:#4e8589; color:#baf5df; }
+.game-app .world-controls .collection-control.jobs-control:not(:disabled):hover { box-shadow:0 0 12px #27d9b355; }
+@media(max-width:700px) {
+  .network-window { width:calc(100vw - 12px); height:calc(100dvh - 16px); }
+  .settings-backdrop { padding:8px; }
+  .game-app .game-mission-control { top:50%; right:auto; left:50%; width:calc(100vw - 12px); height:calc(100dvh - 16px); }
+  .game-app .game-mission-control .game-popup-heading,.network-window-heading,.notification-heading,.settings-heading { min-height:78px; padding:14px 16px; }
+  .game-app .game-mission-control .manager-panel,.network-directory { padding:16px; }
+  .settings-dialog { height:calc(100dvh - 16px); padding:0 16px 20px; }
+  .settings-heading { margin:0 -16px 16px; }
+}

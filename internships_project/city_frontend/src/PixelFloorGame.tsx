@@ -36,8 +36,8 @@ const ROOT = "/city/pixel-assets";
 const ROSTER = ["market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout"];
 const MANAGER_ID = "desk_manager";
 const WORLD_ROSTER = [...ROSTER, MANAGER_ID];
-const MARKET_PANEL = { col: 0, width: 13, top: 1.8, height: 5.0 };
-const OFFERS_PANEL = { col: 35, width: 13, top: 1.8, height: 5.0 };
+const MARKET_PANEL = { col: 0, width: 14.5, top: 0.3, height: 5.3 };
+const OFFERS_PANEL = { col: 34.5, width: 14.5, top: 0.3, height: 5.3 };
 const agentIndex = (id: string) => id === MANAGER_ID ? ROSTER.length : ROSTER.indexOf(id);
 const agentSeatId = (id: string) => uid(id === MANAGER_ID ? "manager-chair" : `chair-${id}`);
 const FURNITURE_DIRS = ["BIN", "BOOKSHELF", "CACTUS", "CLOCK", "COFFEE", "COFFEE_TABLE", "CUSHIONED_BENCH", "CUSHIONED_CHAIR", "DESK", "DOUBLE_BOOKSHELF", "HANGING_PLANT", "LARGE_PAINTING", "LARGE_PLANT", "PC", "PLANT", "PLANT_2", "POT", "SMALL_PAINTING", "SMALL_PAINTING_2", "SMALL_TABLE", "SOFA", "TABLE_FRONT", "WHITEBOARD", "WOODEN_BENCH", "WOODEN_CHAIR"];
@@ -707,15 +707,15 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
     ctx.save();
     // A metal chassis, sill and short mounts physically anchor the LED panel.
     ctx.fillStyle='#020916b8';ctx.fillRect(x+cell*.18,y+cell*.2,w,h);
-    ctx.fillStyle='#24334a';ctx.fillRect(x-cell*.14,y-cell*.14,w+cell*.28,h+cell*.28);
+    ctx.fillStyle='#28545a';ctx.fillRect(x-cell*.14,y-cell*.14,w+cell*.28,h+cell*.28);
     const glass=ctx.createLinearGradient(x,y,x+w,y+h);
-    glass.addColorStop(0,'#0c162df5');glass.addColorStop(1,'#060e20f5');
+    glass.addColorStop(0,'#102e32f5');glass.addColorStop(1,'#091b24f5');
     ctx.fillStyle=glass;ctx.fillRect(x,y,w,h);
-    ctx.strokeStyle='#53677e';ctx.lineWidth=Math.max(1,zoom*.55);ctx.strokeRect(x,y,w,h);
-    ctx.fillStyle='#30445a';ctx.fillRect(x-cell*.14,y+h+cell*.09,w+cell*.28,cell*.1);
+    ctx.strokeStyle='#5d8985';ctx.lineWidth=Math.max(1,zoom*.55);ctx.strokeRect(x,y,w,h);
+    ctx.fillStyle='#35656a';ctx.fillRect(x-cell*.14,y+h+cell*.09,w+cell*.28,cell*.1);
     for(const bx of [x+cell*.8,x+w-cell*1.1]){
-      ctx.fillStyle='#101b2c';ctx.fillRect(bx,y+h+cell*.19,cell*.3,cell*.7);
-      ctx.fillStyle='#536477';ctx.fillRect(bx,y+h+cell*.19,cell*.07,cell*.7);
+      ctx.fillStyle='#17363a';ctx.fillRect(bx,y+h+cell*.19,cell*.3,cell*.7);
+      ctx.fillStyle='#608d87';ctx.fillRect(bx,y+h+cell*.19,cell*.07,cell*.7);
     }
     ctx.shadowColor=accent;ctx.shadowBlur=cell*.17;
     ctx.fillStyle=accent;ctx.fillRect(x,y+cell*.28,Math.max(1.5,cell*.065),h-cell*.56);
@@ -725,7 +725,7 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillStyle = color;
-    ctx.font = `${weight} ${Math.max(9.5, size * zoom)}px Inter, Arial, sans-serif`;
+    ctx.font = `${weight} ${Math.max(zoom < .7 ? 5.5 : 9.5, size * zoom)}px Inter, Arial, sans-serif`;
     // Truncate rather than horizontally distorting the type.
     let text = value;
     if (maxWidth && ctx.measureText(text).width > maxWidth) {
@@ -734,8 +734,8 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
     }
     ctx.fillText(text, x, y);
   };
-  const market = panel(MARKET_PANEL, "#6ee6ff");
-  const jobs = panel(OFFERS_PANEL, "#b18aff");
+  const market = panel(MARKET_PANEL, "#75f0df");
+  const jobs = panel(OFFERS_PANEL, "#27d9b3");
   const items = [
     {id:"SP500", label:"S&P 500", decimals:1},
     {id:"DGS10", label:"10Y UST", decimals:2},
@@ -744,9 +744,9 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
   ];
   const gap = cell * 0.34;
   const slot = (market.w - gap * 2) / items.length;
-  write("MARKET BRIEF", market.x + cell * .52, market.y + cell * .55, "#6ee6ff", 8.3, "700");
+  write("MARKET BRIEF", market.x + cell * .52, market.y + cell * .55, "#75f0df", 8.3, "700");
   const centered = (text: string, x: number, y: number, color: string, size: number, weight: string) => {
-    ctx.font = `${weight} ${Math.max(9.5, size * zoom)}px Inter, Arial, sans-serif`;
+    ctx.font = `${weight} ${Math.max(zoom < .7 ? 5.5 : 9.5, size * zoom)}px Inter, Arial, sans-serif`;
     write(text, x - ctx.measureText(text).width / 2, y, color, size, weight);
   };
   items.forEach((item, index) => {
@@ -785,14 +785,14 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
 
   const x = jobs.x + cell * 0.62;
   const max = jobs.w - cell * 1.25;
-  write("OPPORTUNITÉ DU JOUR", x, jobs.y + cell * 0.55, "#bb9dff", 7.8, "700", max);
+  write("OPPORTUNITÉ DU JOUR", x, jobs.y + cell * 0.55, "#75f0df", 7.8, "700", max);
   if (!featured) {
     write(internshipError ? "Offres temporairement indisponibles" : "Aucune offre à afficher",
       x, jobs.y + cell * 2.0, "#c1ccd7", 5, "500", max);
     return;
   }
   write(featured.company || "Entreprise non indiquée", x, jobs.y + cell * 1.3, "#f2f5fa", 12, "700", max);
-  ctx.font = `500 ${Math.max(9.5, 8.7 * zoom)}px Inter, Arial, sans-serif`;
+  ctx.font = `500 ${Math.max(zoom < .7 ? 5.5 : 9.5, 8.7 * zoom)}px Inter, Arial, sans-serif`;
   const words = featured.title.split(/\s+/);
   let line = "";
   while (words.length && ctx.measureText([line, words[0]].filter(Boolean).join(" ")).width <= max) line += (line ? " " : "") + words.shift();
@@ -800,7 +800,7 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
   write(line, x, jobs.y + cell * 2.05, "#e5eaf2", 8.7, "500", max);
   write(words.join(" "), x, jobs.y + cell * 2.78, "#e5eaf2", 8.7, "500", max);
   write(featured.location || "Lieu non indiqué", x, jobs.y + cell * 3.55, "#c5d1e4", 7.5, "500", max);
-  write("Voir l’offre ↗", x, jobs.y + cell * 4.35, "#c5a9ff", 7.5, "600", max * .5);
+  write("Voir l’offre ↗", x, jobs.y + cell * 4.35, "#75f0df", 7.5, "600", max * .5);
   if (offerCount > 1) {
     const navY = jobs.y + cell * 4.35;
     const buttonW = cell * 0.88, buttonH = cell * 0.58;
@@ -811,7 +811,7 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
     ctx.textAlign = "center";
     ctx.font = `700 ${Math.max(6, 5 * zoom)}px Inter, Arial, sans-serif`;
     for (const [label, bx] of [["‹", prevX], ["›", nextX]] as const) {
-      ctx.fillStyle = "#172337";
+      ctx.fillStyle = "#19494f";
       ctx.fillRect(bx, navY - buttonH / 2, buttonW, buttonH);
       ctx.strokeStyle = "#83cbd9a0";
       ctx.lineWidth = Math.max(1, zoom * 0.35);
