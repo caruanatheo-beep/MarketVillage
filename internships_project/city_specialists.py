@@ -1,6 +1,7 @@
 """Bounded specialist services. Legacy agent IDs remain stable for SQLite history.
 
-No arbitrary shell, generated code execution, external messages or paid APIs.
+Jules coding is delegated to the local sandboxed Codex runner after human approval.
+Other specialist operations expose bounded services, not arbitrary shell commands.
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ SPECIALISTS = {"job_hunter", "finance_tutor", "developer", "innovation_lab"}
 DEFAULT_OPERATIONS = {'job_hunter':'repository_audit','finance_tutor':'quant_report',
                       'developer':'daily_questions','innovation_lab':'innovation_review'}
 OPERATIONS = {
-    "job_hunter": {"repository_audit", "prepare_branch"},
+    "job_hunter": {"repository_audit", "codex_review", "code_change", "prepare_branch"},
     "finance_tutor": {"quant_report", "collect_markets"},
     "developer": {"daily_questions", "mock_interview", "evaluate_answer"},
     "innovation_lab": {"innovation_review"},
@@ -31,7 +32,7 @@ ROLE_NAMES = {"job_hunter": "Software Engineer", "finance_tutor": "Quant Researc
 
 
 def validate_mission(agent_id: str, parameters: dict, description: str = "") -> dict:
-    """Reject legacy payloads, not just their UI labels; never interpret prose as code."""
+    """Reject legacy payloads and shell commands; development prose goes to Codex only."""
     if agent_id == "internship_scout":
         if parameters.get("operation", "refresh_internships") != "refresh_internships" or set(parameters).intersection(
                 {"command", "shell", "code", "script", "discover_public"}):
@@ -52,7 +53,12 @@ def validate_mission(agent_id: str, parameters: dict, description: str = "") -> 
         'developer': r'\b(debug|deploy|déploiement|diagnostic|logs?|dépôt|repository)\b',
         'innovation_lab': r'\b(postuler|candidatures?|envoyer|déployer|merge)\b',
     }
-    if re.search(contradictions[agent_id], description, re.IGNORECASE):
+    if operation == 'code_change':
+        request = str(payload.get('request') or '').strip()
+        if agent_id != 'job_hunter' or not 10 <= len(request) <= 3000:
+            raise CityError('Décris la correction ou fonctionnalité souhaitée (10 à 3 000 caractères).')
+        payload['request'] = request
+    if operation != 'code_change' and re.search(contradictions[agent_id], description, re.IGNORECASE):
         raise CityError(f"Cette consigne contredit la mission exclusive {ROLE_NAMES[agent_id]}.")
     payload["role_version"] = VERSION
     return payload
@@ -150,6 +156,9 @@ def prepare_branch(task_id: str, audit: dict, approval: bool) -> dict:
     """
     if not approval or not audit.get("revision") or not re.fullmatch(r"[a-f0-9]{32}", task_id):
         raise CityError("Une revue Git datée et ta validation explicite sont requises.")
+    if audit.get('coding_request'):
+        from .city_coding import implement_change
+        return implement_change(task_id, audit)
     root = repo_root()
     if git(root, "rev-parse", "HEAD") != audit["revision"]:
         raise CityError("Le dépôt a changé : demande une nouvelle revue à Jules.")
@@ -316,6 +325,12 @@ def run_specialist(agent_id: str, username: str, parameters: dict) -> dict:
     operation = parameters["operation"]
     if operation == "repository_audit":
         return repository_audit()
+    if operation == 'codex_review':
+        from .city_coding import review_repository
+        return review_repository()
+    if operation == 'code_change':
+        from .city_coding import change_proposal
+        return change_proposal(parameters['request'])
     if operation == "prepare_branch":
         # Only the approval-specific store method may supply these server-owned values.
         raise CityError("Utilise la validation de proposition du Desk Manager pour préparer une branche.")

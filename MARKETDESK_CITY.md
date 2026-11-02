@@ -22,7 +22,7 @@ City can call their collectors directly without launching either interface.
 ## Agents and recurring work
 
 The Desk Manager is the user-facing coordinator. Mira handles markets, Jules
-code audits and isolated proposals, Lina networking and sourced education,
+code audits, Codex improvement proposals and development in isolated worktrees, Lina networking and sourced education,
 Iris drafts, Axel interviews, Noe quantitative research, Nova innovation, and
 Hugo internships. See [current role contracts](internships_project/CITY_AGENT_ROLES.md)
 for their precise operations, schedules, catch-up rules, approvals and limits.

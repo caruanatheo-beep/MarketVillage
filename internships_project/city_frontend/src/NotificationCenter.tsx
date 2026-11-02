@@ -3,13 +3,14 @@ import {ActivityTimeline} from './ActivityTimeline';
 import {isPendingProposal,needsDecision,notificationRows,type NotificationTask,type NotificationEvent} from './notifications';
 
 type Props={tasks:NotificationTask[];events:NotificationEvent[];agents:{id:string;name:string}[];readThrough:number;
-  onClose:()=>void;onOpen:(id:string)=>void;onRead:()=>Promise<unknown>;onRelaunch:()=>Promise<unknown>;
+  onClose:()=>void;onOpen:(id:string)=>void;onRead:()=>Promise<unknown>;onRelaunch:()=>Promise<unknown>;onCodeRequest:(request:string)=>Promise<unknown>;onCodexReview:()=>Promise<unknown>;
   onApprove:(id:string)=>Promise<unknown>;onCancel:(id:string)=>Promise<unknown>;onReview:(id:string,approved:boolean)=>Promise<unknown>;onRetry:(id:string)=>Promise<unknown>;onRefresh:()=>Promise<void>};
 const LABELS:Record<string,string>={completed:'Terminée',failed:'Erreur',queued:'En attente',running:'En cours',waiting_approval:'À valider',cancelled:'Annulée'};
 export function NotificationCenter(props:Props){
   const dialog=useRef<HTMLDialogElement>(null);
   const [filter,setFilter]=useState('all'),[query,setQuery]=useState(''),[agent,setAgent]=useState('');
   const [busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState('');
+  const [codeRequest,setCodeRequest]=useState('');
   useEffect(()=>{const el=dialog.current,previous=document.activeElement as HTMLElement|null;el?.showModal();el?.querySelector<HTMLInputElement>('input')?.focus();return()=>{el?.close();previous?.focus();};},[]);
   const rows=notificationRows(props.tasks,props.events,props.readThrough);
   const decisions=props.tasks.filter(needsDecision).length,failures=props.tasks.filter(t=>t.status==='failed').length,completed=props.tasks.filter(t=>t.status==='completed'&&!isPendingProposal(t)).length;
@@ -29,6 +30,12 @@ export function NotificationCenter(props:Props){
       <button className="failure" onClick={()=>setFilter('failed')}><span>À examiner</span><strong>{failures}</strong><small>Erreurs et relances</small></button>
     </div>
     <div className="notification-commands"><button disabled={!!busy||julesActive} onClick={()=>void action('jules',props.onRelaunch,'Nouvel audit Jules ajouté aux missions.')}>{busy==='jules'?'Lancement…':julesActive?'Jules a une mission active':'↻ Relancer l’audit de Jules'}</button><button disabled={!!busy} onClick={()=>void action('read',props.onRead,'Notifications marquées comme lues. Les décisions restent à traiter.')}>Tout marquer comme lu</button></div>
+    <form className="jules-coding-form" onSubmit={e=>{e.preventDefault();void action('code',async()=>{await props.onCodeRequest(codeRequest);setCodeRequest('');},'Demande transmise à Jules. Sa proposition sera à valider avant le lancement de Codex.');}}>
+      <div><strong>Jules · développeur Codex</strong><button type="button" disabled={!!busy||julesActive} onClick={()=>void action('codex-review',props.onCodexReview,'Analyse Codex demandée. Jules proposera une amélioration à valider.')}>Proposer une amélioration avec Codex</button></div>
+      <label htmlFor="jules-code-request">Confier une correction ou fonctionnalité à Jules</label>
+      <textarea id="jules-code-request" value={codeRequest} onChange={e=>setCodeRequest(e.target.value)} minLength={10} maxLength={3000} required rows={3} placeholder="Exemple : ajoute un filtre par agent dans le journal des missions…"/>
+      <div><small>Codex · connexion ChatGPT locale · modifications dans une branche séparée, diff et vérifications à examiner.</small><button type="submit" disabled={!!busy||julesActive||codeRequest.trim().length<10}>Préparer la mission</button></div>
+    </form>
     <div className="notification-tabs" role="group" aria-label="Filtrer les notifications">{[['all','Tout'],['decision','Décisions'],['unread','Non lues'],['completed','Terminées'],['active','En cours'],['failed','Erreurs']].map(([id,label])=><button key={id} aria-pressed={filter===id} className={filter===id?'selected':''} onClick={()=>setFilter(id)}>{label}</button>)}</div>
     <div className="notification-filters"><input aria-label="Rechercher une notification" placeholder="Mission, résultat ou identifiant…" value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="Agent des notifications" value={agent} onChange={e=>setAgent(e.target.value)}><option value="">Tous les agents</option>{props.agents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
     {error&&<p className="notification-feedback error" role="alert">{error}</p>}{notice&&<p className="notification-feedback" role="status">{notice}</p>}

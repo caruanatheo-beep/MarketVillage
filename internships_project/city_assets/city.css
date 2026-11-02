@@ -1239,3 +1239,5 @@ body { overflow:hidden; }
 }
 
 .game-app .pixel-agent-avatar.innovation_lab .agent-sprite {background-image:url("/city/pixel-assets/characters/char_4.png");filter:hue-rotate(120deg);}
+
+.jules-coding-form{display:grid;gap:10px;margin:16px 0;padding:16px;border:1px solid #475569;border-radius:14px;background:#1e293b}.jules-coding-form label{font-weight:700}.jules-coding-form textarea{box-sizing:border-box;width:100%;resize:vertical;min-height:84px;border:1px solid #64748b;border-radius:8px;padding:10px;background:#0f172a;color:#f1f5f9;font:inherit}.jules-coding-form>div{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}.jules-coding-form small{flex:1;min-width:180px;color:#cbd5e1}.jules-code-diff{max-height:420px;overflow:auto;white-space:pre;font-size:12px;background:#0f172a;padding:14px;border-radius:8px}

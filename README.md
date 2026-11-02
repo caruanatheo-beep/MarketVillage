@@ -23,7 +23,7 @@ le bouton de validation d’une proposition. Les fichiers préparés sont indiqu
 - Constituer un réseau de contacts Sales et métiers proches, avec des sources publiques et une déduplication.
 - Enrichir certaines fiches avec l’école ou l’université fréquentée, lorsqu’une source l’atteste.
 - Demander une analyse quantitative, préparer un entretien ou produire un brouillon de communication.
-- Examiner les audits de Jules et les propositions de Nova avant toute préparation de branche isolée.
+- Confier à Jules des corrections ou fonctionnalités avec Codex, puis examiner le diff et les vérifications en branche isolée.
 
 ## Les agents
 
@@ -31,7 +31,7 @@ le bouton de validation d’une proposition. Les fichiers préparés sont indiqu
 |---|---|---|
 | **Desk Manager** | Interlocuteur principal, coordination, suivi et validations | Coordination des missions |
 | **Mira** | Analyse des marchés et lecture des indicateurs | Sur demande |
-| **Jules** | Audit du code City et propositions sur branche isolée | Chaque jour |
+| **Jules** | Audit du code City ; corrections et fonctionnalités via Codex sur demande | Audit chaque jour |
 | **Lina** | Contacts Sales, puis métiers proches en finance de marché à Paris | Chaque jour |
 | **Iris** | Préparation de brouillons à partir des contacts et du profil | Sur demande |
 | **Axel** | Questions techniques, entretiens blancs et retours sur les réponses | Sur demande |

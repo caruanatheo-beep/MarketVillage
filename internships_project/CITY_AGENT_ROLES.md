@@ -7,7 +7,7 @@ donnent aucun accès aux anciens outils. Le Desk Manager est l'unique chat utili
 
 | Agent | Opérations serveur | Récurrence (Europe/Paris) | Livrable |
 |---|---|---|---|
-| Jules | `repository_audit`, préparation de branche après validation humaine | Quotidienne | Audit AST, risques à examiner, proposition, révision Git ; branche de test isolée |
+| Jules | `repository_audit`, `codex_review`, `code_change`, préparation de branche après validation humaine | Audit quotidien ; analyse Codex et développement sur demande | Audit AST ou mission Codex, diff, fichiers modifiés et vérifications dans un worktree isolé |
 | Noé | `quant_report`, `collect_markets` | Sur demande uniquement | Courbe de capital, rendement net, Sharpe à taux sans risque nul, volatilité, drawdown, hypothèses et limites |
 | Axel | `daily_questions`, `mock_interview`, `evaluate_answer` | Sur demande uniquement | Questions Sales/S&T/Global Markets, HireVue, grille de couverture indicative et historique des réponses |
 | Nova | `innovation_review` | Deux fois par semaine : lundi et jeudi | Deux projets publics GitHub non déjà proposés par revue, licence, spécification de prototype isolé, complexité et coûts à mesurer |
@@ -145,7 +145,38 @@ Mira et Iris n'ont pas de récurrence à rattraper. Les missions déjà en atten
 
 ## Périmètre réel et limites
 
-- Jules analyse les modules Python City locaux sans exécuter leur code. Ce dossier de
+- Pour proposer une amélioration via l'abonnement, le Manager délègue `codex_review`.
+  Le bouton « Proposer une amélioration avec Codex » lance la même opération.
+  Le serveur fournit jusqu'à 60 000 caractères d'extraits de fichiers City suivis par Git
+  (7 000 par fichier). Codex travaille en lecture seule, avec outils shell, apps, plugins
+  et recherche Web désactivés. Il explique le problème, cite les éléments observés,
+  rédige une consigne de développement et les vérifications attendues, et signale les limites
+  des extraits. La proposition exige ensuite une validation humaine avant toute réalisation.
+  Cette analyse est sur demande ; l'audit quotidien AST reste sans appel Codex.
+- Pour une correction ou fonctionnalité, le Manager délègue à Jules avec `code_change`
+  et conserve la consigne exacte du message. Le centre de notifications propose aussi
+  un formulaire « Confier une correction ou fonctionnalité à Jules ».
+  La proposition mentionne la consommation des limites Codex et attend la validation humaine.
+  Après validation, City lance le **Codex CLI local connecté avec ChatGPT**, dans un worktree
+  `.city-worktrees/<id>/`, avec les outils de lecture, modification et tests de Codex.
+  La clé API de City n'est pas transmise au processus ; aucune solution de repli API n'est utilisée.
+  Les appels du chat Manager restent indépendants et utilisent l'API existante.
+  Codex doit être installé sur la machine qui exécute City et connecté via `codex login`.
+  Le binaire est détecté dans PATH ou dans l'extension VS Code Windows ;
+  `MARKETDESK_CODEX_BIN` permet une surcharge locale facultative.
+  Le processus ignore la configuration utilisateur, désactive apps, plugins et recherche Web,
+  utilise le profil workspace avec réseau des commandes désactivé et revue automatique
+  des demandes d'approbation des outils Codex, et expire après 15 minutes.
+  Aucun `.env`, fichier de données ou secret n'est copié dans le worktree ; les clés du serveur
+  sont retirées de son environnement. Les consignes demandent de préserver l'authentification
+  et de ne pas consulter de données privées. Le rapport affiche les fichiers, le diff (extrait
+  au-delà de 120 000 caractères), les commandes capturées et le bilan de tests rapporté par Codex.
+  Un code de sortie indique l'exécution d'une commande, pas la qualité fonctionnelle du changement.
+  Un refus d'outils, une absence de modifications ou un rapport incomplet ne valent pas succès.
+  Pas de commit, push, merge ni intégration automatique par City. Les modifications sont locales
+  et non commitées dans le worktree. Un dépôt principal modifié ou une révision dépassée bloque
+  le démarrage ; il faut sauvegarder les changements puis soumettre une proposition à jour.
+- L'audit quotidien de Jules analyse les modules Python City locaux sans exécuter leur code. Ce dossier de
   travail possède désormais un dépôt Git local initialisé le 2 novembre 2026.
   Les anciens audits sans révision Git doivent être relancés avant validation.
   Le remote `origin` référence MarketVillage ; la synchronisation GitHub reste distincte.

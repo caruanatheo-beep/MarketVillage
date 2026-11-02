@@ -1,0 +1,164 @@
+import asyncio
+import json
+import os
+import subprocess
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from pydantic_ai.models.test import TestModel
+
+from internships_project import city_coding as coding, city_specialists as specialists, state_store
+from internships_project.city_agents import ChatDeps, build_agent
+from internships_project.city_routes import add_city_routes
+from internships_project.marketdesk_city import CityStore, CityWorker, CityError
+
+
+@pytest.fixture
+def store(tmp_path,monkeypatch):
+    monkeypatch.setattr(state_store,'USER_DB_PATH',tmp_path/'accounts.sqlite3')
+    return CityStore(state_store.USER_DB_PATH)
+
+
+@pytest.fixture
+def repo(tmp_path,monkeypatch):
+    root=tmp_path/'repo';root.mkdir()
+    def git(*args):
+        return subprocess.run(['git','-c','core.hooksPath=NUL' if os.name=='nt' else 'core.hooksPath=/dev/null',*args],cwd=root,check=True,capture_output=True,text=True).stdout.strip()
+    git('init');git('config','user.name','test');git('config','user.email','test@example.invalid')
+    (root/'sample.py').write_text('value = 1\n')
+    git('add','sample.py');git('-c','commit.gpgsign=false','commit','-m','fixture')
+    monkeypatch.setattr(coding,'repo_root',lambda:root)
+    monkeypatch.setattr(coding,'codex_binary',lambda:'fixture-codex')
+    monkeypatch.setattr(coding,'require_chatgpt',lambda *args:None)
+    return root,git
+
+
+def test_coding_validation_allows_internship_feature_but_not_shell():
+    assert specialists.validate_mission('job_hunter',{'operation':'code_change','request':'Corrige le filtre des stages'},'Corriger les stages')['request']
+    for request in ('short','x'*3001):
+        with pytest.raises(CityError):specialists.validate_mission('job_hunter',{'operation':'code_change','request':request})
+    with pytest.raises(CityError):specialists.validate_mission('job_hunter',{'operation':'code_change','request':'Corrige le filtre','shell':'whoami'})
+
+
+def test_codex_auth_rejects_api_and_environment_has_no_application_secrets(monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY','test-private')
+    monkeypatch.setenv('CODEX_API_KEY','test-private')
+    monkeypatch.setenv('MARKETDESK_SESSION_SECRET','test-private')
+    env=coding.codex_environment()
+    assert not any(k in env for k in ('OPENAI_API_KEY','CODEX_API_KEY','MARKETDESK_SESSION_SECRET'))
+    monkeypatch.setattr(subprocess,'run',lambda *args,**kwargs:SimpleNamespace(returncode=0,stdout='',stderr='Logged in using an API key'))
+    with pytest.raises(CityError,match='ChatGPT'):coding.require_chatgpt('codex',env)
+
+
+def test_coding_runs_only_after_human_approval_and_keeps_main_untouched(repo,store,monkeypatch):
+    root,git=repo
+    monkeypatch.setattr(specialists,'repo_root',lambda:root)
+    calls=[]
+    def execute(command,directory,prompt,env):
+        calls.append(command)
+        assert '--sandbox' in command and command[command.index('--sandbox')+1]=='workspace-write'
+        assert 'forced_login_method="chatgpt"' in command and '--ignore-user-config' in command
+        assert 'danger-full-access' not in command
+        assert 'Corrige sample' in prompt
+        (directory/'sample.py').write_text('value = 2\n')
+        (directory/'test_sample.py').write_text('def test_value():\n    assert 2 == 2\n')
+        Path(command[command.index('--output-last-message')+1]).write_text(json.dumps({'summary':'Valeur corrigée','tests':'1 test passé','limitations':'Test de fixture'}))
+        return [{'type':'item.completed','item':{'type':'command_execution','command':'python -m pytest test_sample.py','exit_code':0}}, {'type':'turn.completed','usage':{'input_tokens':10,'output_tokens':4}}]
+    monkeypatch.setattr(coding,'_execute',execute)
+    task=store.create_task('alice','job_hunter','Corrige sample',{'operation':'code_change','request':'Corrige sample pour renvoyer deux'})
+    assert CityWorker(store).run_once()
+    proposal=next(t for t in store.snapshot('alice')['tasks'] if t['id']==task['id'])
+    assert proposal['result']['approval_required'] and calls==[]
+    with pytest.raises(CityError):store.review_specialist_proposal('bob',task['id'],True)
+    approved=store.review_specialist_proposal('alice',task['id'],True)
+    assert store.review_specialist_proposal('alice',task['id'],True)['reused']
+    assert CityWorker(store).run_once()
+    done=next(t for t in store.snapshot('alice')['tasks'] if t['id']==approved['task_id'])
+    assert done['status']=='completed',done.get('error')
+    assert len(calls)==1 and (root/'sample.py').read_text()=='value = 1\n'
+    assert done['result']['files']==['sample.py','test_sample.py']
+    assert '+value = 2' in done['result']['diff'] and '+def test_value' in done['result']['diff']
+    assert done['result']['checks'][0]['exit_code']==0
+    assert not done['result']['approval_required']
+    assert git('status','--porcelain','--untracked-files=no')==''
+
+
+def test_changed_revision_and_dirty_worktree_block_before_codex(repo,monkeypatch):
+    root,git=repo
+    proposal=coding.change_proposal('Corrige sample pour renvoyer deux')
+    monkeypatch.setattr(coding,'_execute',lambda *args:pytest.fail('Must not execute'))
+    (root/'sample.py').write_text('dirty\n')
+    with pytest.raises(CityError,match='modifications locales'):coding.implement_change('a'*32,proposal)
+    git('add','sample.py');git('-c','commit.gpgsign=false','commit','-m','changed')
+    with pytest.raises(CityError,match='dépôt a changé'):coding.implement_change('b'*32,proposal)
+
+
+def test_codex_without_edits_is_a_blocked_mission(repo,monkeypatch):
+    root,_=repo
+    proposal=coding.change_proposal('Corrige sample pour renvoyer deux')
+    def no_edits(command,directory,*args):
+        Path(command[command.index('--output-last-message')+1]).write_text(json.dumps(
+            {'summary':'Aucun changement','tests':'Aucun test','limitations':'Outils indisponibles'}))
+        return [{'type':'turn.completed'}]
+    monkeypatch.setattr(coding,'_execute',no_edits)
+    with pytest.raises(CityError,match='aucun changement'):coding.implement_change('d'*32,proposal)
+
+
+def test_codex_review_proposes_from_source_without_writes_or_code_execution(repo,monkeypatch):
+    root,git=repo
+    source=root/'internships_project/city_example.py';source.parent.mkdir()
+    source.write_text('def display():\n    return []\n')
+    git('add',str(source.relative_to(root)));git('-c','commit.gpgsign=false','commit','-m','City source')
+    revision=git('rev-parse','HEAD')
+    def review(command,directory,prompt,env):
+        assert command[command.index('--sandbox')+1]=='read-only'
+        assert 'features.shell_tool=false' in command
+        assert 'city_example.py' in prompt and 'def display' in prompt
+        assert 'OPENAI_API_KEY' not in env
+        Path(command[command.index('--output-last-message')+1]).write_text(json.dumps({
+            'summary':'Améliorer le résultat vide','request':'Ajoute une explication au résultat vide et un test.',
+            'evidence':'internships_project/city_example.py retourne []','limitations':'Extraits seulement'}))
+        return [{'type':'turn.completed','usage':{'input_tokens':20}}]
+    monkeypatch.setattr(coding,'_execute',review)
+    result=coding.review_repository()
+    assert result['revision']==revision and result['coding_request'].startswith('Ajoute')
+    assert result['approval_required'] and 'branch' not in result
+    assert result['reviewed_files']==['internships_project/city_example.py']
+    assert git('status','--porcelain','--untracked-files=no')==''
+
+
+def test_coding_http_auth_payload_and_manager_preserve_user_request(store):
+    app=FastAPI();add_city_routes(app,lambda r:r.headers.get('x-user'),store,CityWorker(store))
+    headers={'x-user':'alice','X-MarketDesk-City':'1'}
+    request='Ajoute un filtre aux stages affichés'
+    with TestClient(app) as client:
+        assert client.post('/city/api/jules/change',json={'request':request}).status_code==401
+        assert client.post('/city/api/jules/change',headers={'x-user':'alice'},json={'request':request}).status_code==403
+        assert client.post('/city/api/jules/change',headers=headers,json={'request':request,'shell':'test'}).status_code==400
+        response=client.post('/city/api/jules/change',headers=headers,json={'request':request})
+        assert response.status_code==201
+        assert client.post('/city/api/jules/review',json={}).status_code==401
+        assert client.post('/city/api/jules/review',headers=headers,json={'operation':'prepare_branch'}).status_code==400
+        assert client.post('/city/api/jules/review',headers=headers,json={}).status_code==400
+        assert store.cancel_queued('alice',response.json()['task']['id'])
+        response=client.post('/city/api/jules/review',headers=headers,json={})
+        assert response.status_code==201,response.json()
+    tool=build_agent('desk_manager',TestModel())._function_toolset.tools['start_specialist_mission'].function
+    asyncio.run(tool(SimpleNamespace(deps=ChatDeps('bob',store,current_message=request)),'Jules','code_change'))
+    with store.db() as db:
+        params=json.loads(db.execute("SELECT parameters_json FROM city_tasks WHERE username='bob'").fetchone()[0])
+    assert params['request']==request
+
+
+def test_codex_failure_and_missing_completion_never_report_success(monkeypatch,tmp_path):
+    class Process:
+        returncode=1
+        def communicate(self,*args,**kwargs):return ('private output','private error')
+    monkeypatch.setattr(subprocess,'Popen',lambda *args,**kwargs:Process())
+    with pytest.raises(CityError,match='pas terminé') as exc:coding._execute(['codex'],tmp_path,'task',{})
+    assert 'private' not in str(exc.value)
+    Process.returncode=0
+    with pytest.raises(CityError,match='pas confirmé'):coding._execute(['codex'],tmp_path,'task',{})

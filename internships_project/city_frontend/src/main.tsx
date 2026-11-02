@@ -24,6 +24,7 @@ type Result = { title?: string; text?: string; question?: string; answer?: strin
   updated_at?: string; as_of?: string; market_data?: MarketReading[]; featured_offer?: (Offer & { detected_at?: string; selection_reason?: string }) | null;
   offers?: Offer[]; contacts?: {id:string;name:string;role:string;company:string;verification:string;linkedin_url:string}[];
   equity?: {date:string;value:number}[]; approval_required?:boolean; branch?:string; role_version?:number; review_decision?:string; revision?:string; blockage?:string; file?:string;
+  files?:string[];diff?:string;diff_truncated?:boolean;checks?:{command:string;exit_code:number|null}[];
   errors?: {source:string;status:string;error:string}[]; contact?: {name?:string;company?:string}; };
 type Task = {
   id: string; agent_id: string; task_type: string; description: string; status: AgentStatus;
@@ -759,7 +760,7 @@ function App(): React.ReactElement {
     {windowMode==="activity"&&<NotificationCenter tasks={snapshot?.tasks||[]} events={snapshot?.events||[]} agents={snapshot?.agents||[]} readThrough={notificationReadThrough}
       onClose={()=>setWindowMode("agent")} onOpen={id=>{const task=snapshot?.tasks.find(t=>t.id===id);if(task)showResult(task);else setError("Cette mission n'est plus dans les données chargées.");}}
       onRead={async()=>{const result=await api<{last_read_event_id:number}>("/city/api/notifications/read",{read_through:Math.max(0,...(snapshot?.events||[]).map(e=>e.id))});setNotificationReadThrough(result.last_read_event_id);}}
-      onRelaunch={()=>api("/city/api/agents/job_hunter/run",{})} onApprove={id=>api(`/city/api/tasks/${id}/approve`,{})}
+      onRelaunch={()=>api("/city/api/agents/job_hunter/run",{})} onCodeRequest={request=>api('/city/api/jules/change',{request})} onCodexReview={()=>api('/city/api/jules/review',{})} onApprove={id=>api(`/city/api/tasks/${id}/approve`,{})}
       onCancel={id=>api(`/city/api/tasks/${id}/cancel`,{})} onReview={(id,approved)=>api(`/city/api/proposals/${id}/review`,{approved})}
       onRetry={id=>api(`/city/api/tasks/${id}/retry`,{})} onRefresh={refresh}/>}
     {error&&<div className="city-toast" role="alert"><span>{error}</span><button type="button" onClick={()=>setError("")} aria-label="Fermer">&times;</button></div>}
@@ -771,6 +772,10 @@ function App(): React.ReactElement {
           {!["completed","failed","cancelled"].includes(task.status)&&<p className="muted">Contribution : {LABELS[task.status].toLocaleLowerCase()}.</p>}
           {task.result.title&&<h4>{task.result.title}</h4>}{task.result.text&&<MarkdownText text={task.result.text}/>}
           {task.result.equity&&<EquityChart points={task.result.equity}/>}
+          {task.result.branch&&<p>Branche locale : <code>{task.result.branch}</code></p>}
+          {task.result.files&&<details><summary>{task.result.files.length} fichier(s) modifié(s)</summary><ul>{task.result.files.map(file=><li key={file}><code>{file}</code></li>)}</ul></details>}
+          {task.result.checks&&<details><summary>Commandes exécutées par Codex</summary>{task.result.checks.map((check,i)=><p key={i}><code>{check.command}</code> · code de sortie : {check.exit_code??'inconnu'}</p>)}</details>}
+          {task.result.diff&&<details><summary>Voir les modifications{task.result.diff_truncated?' (extrait)':''}</summary><pre className="jules-code-diff"><code>{task.result.diff}</code></pre></details>}
           {task.result.file&&<p>Fichier préparé : <code>{task.result.file}</code></p>}{isPendingProposal(task)&&task.agent_id==="job_hunter"&&!task.result.revision&&<p className="notification-blockage">Cet audit ne contient pas de révision Git. Relance Jules depuis le centre de notifications avant de valider.</p>}
           {isPendingProposal(task)&&<div className="workflow-builder-actions"><button type="button" disabled={task.agent_id==="job_hunter"&&!task.result.revision} onClick={()=>void reviewProposal(task.id,true)}>Valider la proposition</button><button type="button" onClick={()=>void reviewProposal(task.id,false)}>Refuser</button><small>Validation explicite · branche isolée ou transfert à Jules · aucun merge ni service payant.</small></div>}
           {task.result.new_count!==undefined&&<p>{task.result.new_count} nouvelles offres{task.result.total_count!==undefined?` sur ${task.result.total_count} suivies`:""}.</p>}

@@ -140,6 +140,38 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
         except (ValueError,TypeError) as exc:
             return JSONResponse({'detail':str(exc)},status_code=400)
 
+    @server.post('/city/api/jules/review')
+    async def request_codex_review(request: Request):
+        username=owner(request)
+        if not username:
+            return denied()
+        if not safe_post(request):
+            return JSONResponse({'detail':'Requête refusée.'},status_code=403)
+        try:
+            if await bounded_json(request,200):
+                raise CityError('Cette action lance uniquement une analyse Codex du code City.')
+            task=store.create_task(username,'job_hunter','Proposer une amélioration avec Codex',{'operation':'codex_review'})
+            return JSONResponse({'task':task},status_code=201)
+        except (ValueError,TypeError) as exc:
+            return JSONResponse({'detail':str(exc)},status_code=400)
+
+    @server.post('/city/api/jules/change')
+    async def request_code_change(request: Request):
+        username=owner(request)
+        if not username:
+            return denied()
+        if not safe_post(request):
+            return JSONResponse({'detail':'Requête refusée.'},status_code=403)
+        try:
+            payload=await bounded_json(request,15000)
+            if set(payload) != {'request'} or not isinstance(payload['request'],str):
+                raise CityError('Fournis uniquement la consigne de développement.')
+            task=store.create_task(username,'job_hunter','Développement · '+payload['request'].strip()[:200],
+                                   {'operation':'code_change','request':payload['request']})
+            return JSONResponse({'task':task},status_code=201)
+        except (ValueError,TypeError) as exc:
+            return JSONResponse({'detail':str(exc)},status_code=400)
+
     @server.post('/city/api/agents/{agent_id}/run')
     async def run_specialist(agent_id: str, request: Request):
         username=owner(request)
