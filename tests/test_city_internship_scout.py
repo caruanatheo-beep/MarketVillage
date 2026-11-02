@@ -1,0 +1,52 @@
+"""Hugo calls the Python collector, with confirmed publication dates and no email."""
+import asyncio
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from zoneinfo import ZoneInfo
+
+import pytest
+
+from internships_project import internships, state_store
+from internships_project.marketdesk_city import CityStore, CityWorker, CityError
+
+
+def test_manager_hugo_refresh_and_same_day_repeat(tmp_path, monkeypatch):
+    from pydantic_ai.models.test import TestModel
+    from internships_project.city_agents import ChatDeps, build_agent
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
+    store = CityStore(state_store.USER_DB_PATH)
+    today = datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
+    now = datetime.now(timezone.utc)
+    def offer(name, date=today, kind='Stage', inferred=False):
+        return internships.Opportunity(name, 'Bank', 'Paris', kind, 'https://example.com/'+name,
+                                       date, 90, published_inferred=inferred)
+    current = [offer('cached-today')]
+    jobs = current + [offer('new-today'), offer('yesterday', (datetime.now(ZoneInfo('Europe/Paris')).date()-timedelta(days=1)).isoformat()),
+                      offer('unknown', ''), offer('estimated', inferred=True), offer('vie', kind='VIE')]
+    monkeypatch.setattr(internships, 'opportunities_loading', lambda:False)
+    monkeypatch.setattr(internships, 'load_opportunities', lambda **kwargs:(current, [], now-timedelta(seconds=1)))
+    calls=[]
+    def refresh(**kwargs):
+        calls.append(kwargs)
+        return jobs, ['Source unavailable'], now
+    monkeypatch.setattr(internships, 'refresh_opportunities', refresh)
+    manager = build_agent('desk_manager', TestModel())
+    ctx = SimpleNamespace(deps=ChatDeps('alice',store))
+    tool = manager._function_toolset.tools['collect_dashboard_data'].function
+    response = asyncio.run(tool(ctx, 'internships'))
+    assert response['status']=='completed'
+    assert store.snapshot('alice')['tasks'][0]['agent_id']=='internship_scout'
+    assert CityWorker(store).run_once()
+    result=store.snapshot('alice')['tasks'][0]['result']
+    assert {job['title'] for job in result['offers']}=={'cached-today','new-today'}
+    assert result['today_count']==2 and result['source_errors']==1
+    assert calls==[{'force':True,'notify_email':False,'fail_if_busy':True}]
+    assert store.snapshot('bob')['tasks']==[]
+    store.create_task('alice','internship_scout','Stages du jour')
+    assert CityWorker(store).run_once()
+    assert len(calls)==2
+    with pytest.raises(CityError):
+        store.create_task('alice','internship_scout','Shell',{'command':'anything'})
+    hugo=build_agent('internship_scout',TestModel())
+    assert 'collect_todays_internships' in hugo._function_toolset.tools
+    assert 'delegate_to_agent' not in hugo._function_toolset.tools

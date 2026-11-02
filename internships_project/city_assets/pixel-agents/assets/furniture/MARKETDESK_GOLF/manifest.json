@@ -1,0 +1,114 @@
+{
+  "pack": "MarketDesk Golf \u00b7 original art",
+  "tileSize": 16,
+  "assets": [
+    {
+      "id": "MD_GOLF_MAT",
+      "name": "Mat",
+      "file": "md_golf_mat.png",
+      "width": 80,
+      "height": 32,
+      "footprintW": 5,
+      "footprintH": 2,
+      "backgroundTiles": 2,
+      "category": "decor",
+      "isDesk": false
+    },
+    {
+      "id": "MD_GOLF_BAG",
+      "name": "Bag",
+      "file": "md_golf_bag.png",
+      "width": 16,
+      "height": 32,
+      "footprintW": 1,
+      "footprintH": 2,
+      "backgroundTiles": 0,
+      "category": "decor",
+      "isDesk": false
+    },
+    {
+      "id": "MD_GOLF_BASKET",
+      "name": "Basket",
+      "file": "md_golf_basket.png",
+      "width": 16,
+      "height": 16,
+      "footprintW": 1,
+      "footprintH": 1,
+      "backgroundTiles": 0,
+      "category": "decor",
+      "isDesk": false
+    },
+    {
+      "id": "MD_GOLF_GREEN",
+      "name": "Green",
+      "file": "md_golf_green.png",
+      "width": 80,
+      "height": 48,
+      "footprintW": 5,
+      "footprintH": 3,
+      "backgroundTiles": 0,
+      "category": "decor",
+      "isDesk": false
+    },
+    {
+      "id": "MD_GOLF_LANTERN",
+      "name": "Lantern",
+      "file": "md_golf_lantern.png",
+      "width": 16,
+      "height": 32,
+      "footprintW": 1,
+      "footprintH": 2,
+      "backgroundTiles": 0,
+      "category": "decor",
+      "isDesk": false
+    },
+    {
+      "id": "MD_GOLF_PLANTER",
+      "name": "Planter",
+      "file": "md_golf_planter.png",
+      "width": 48,
+      "height": 16,
+      "footprintW": 3,
+      "footprintH": 1,
+      "backgroundTiles": 0,
+      "category": "decor",
+      "isDesk": false
+    },
+    {
+      "id": "MD_GOLF_BENCH",
+      "name": "Bench",
+      "file": "md_golf_bench.png",
+      "width": 48,
+      "height": 24,
+      "footprintW": 3,
+      "footprintH": 1,
+      "backgroundTiles": 0,
+      "category": "decor",
+      "isDesk": false
+    },
+    {
+      "id": "MD_GOLF_SKYLINE",
+      "name": "Skyline",
+      "file": "md_golf_skyline.png",
+      "width": 96,
+      "height": 32,
+      "footprintW": 6,
+      "footprintH": 2,
+      "backgroundTiles": 2,
+      "category": "decor",
+      "isDesk": false
+    },
+    {
+      "id": "MD_GOLF_DECK",
+      "name": "Deck",
+      "file": "md_golf_deck.png",
+      "width": 128,
+      "height": 64,
+      "footprintW": 8,
+      "footprintH": 4,
+      "backgroundTiles": 4,
+      "category": "decor",
+      "isDesk": false
+    }
+  ]
+}

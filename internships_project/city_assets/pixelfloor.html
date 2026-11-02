@@ -1,0 +1,2846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PixelFloor — AI Agent Visualization</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: 'Courier New', monospace;
+    color: #ccc;
+    overflow: hidden;
+    height: 100vh;
+    cursor: default;
+  }
+  #header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 8px 20px;
+    background: #111;
+    width: 100%;
+    border-bottom: 2px solid #222;
+    z-index: 10;
+  }
+  #header h1 { font-size: 14px; color: #8b5cf6; letter-spacing: 2px; text-transform: uppercase; }
+  #metric-counter { font-size: 18px; font-weight: bold; margin-left: auto; }
+  .metric-positive { color: #22c55e; }
+  .metric-negative { color: #ef4444; }
+  .metric-neutral { color: #888; }
+  #status-bar { display: flex; gap: 15px; font-size: 11px; color: #666; }
+  #status-bar .active { color: #22c55e; }
+  #canvas-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+  }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  #tooltip {
+    position: fixed;
+    background: rgba(10,10,18,0.95);
+    border: 1px solid #444;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: #ddd;
+    pointer-events: none;
+    display: none;
+    z-index: 100;
+    max-width: 280px;
+    line-height: 1.5;
+    border-radius: 2px;
+  }
+  #tooltip .tt-name { color: #fff; font-weight: bold; font-size: 12px; }
+  #tooltip .tt-role { color: #888; font-size: 10px; }
+  #tooltip .tt-status { margin-top: 3px; }
+  #log-feed {
+    width: 100%;
+    height: 100%;
+    background: #0d0d0d;
+    overflow-y: auto;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  #log-feed .log-line { color: #555; }
+  #log-feed .log-highlight { color: #f59e0b; font-weight: bold; }
+  #log-feed .log-success { color: #22c55e; }
+  #log-feed .log-error { color: #ef4444; }
+  #log-feed .log-info { color: #8b5cf6; }
+  #log-feed .log-special { color: #06b6d4; }
+
+  /* === SIDE PANEL === */
+  #side-panel {
+    position: fixed;
+    right: -440px;
+    top: 0;
+    width: 440px;
+    height: 100vh;
+    background: #08080f;
+    border-left: 2px solid #222;
+    z-index: 200;
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    box-shadow: -8px 0 30px rgba(0,0,0,0.7);
+  }
+  #side-panel.open { right: 0; }
+  #side-panel::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .sp-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 2px solid #222;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+  }
+  .sp-header .sp-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    margin-right: 10px;
+    image-rendering: pixelated;
+  }
+  .sp-header .sp-name { font-size: 14px; font-weight: bold; letter-spacing: 1px; }
+  .sp-header .sp-role { font-size: 10px; color: #666; margin-left: 8px; }
+  .sp-close {
+    margin-left: auto;
+    background: none;
+    border: 1px solid #333;
+    color: #888;
+    font-size: 16px;
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Courier New', monospace;
+  }
+  .sp-close:hover { color: #fff; border-color: #666; }
+  .sp-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+    font-size: 12px;
+    line-height: 1.6;
+    position: relative;
+    z-index: 2;
+  }
+  .sp-body::-webkit-scrollbar { width: 4px; }
+  .sp-body::-webkit-scrollbar-track { background: #0a0a12; }
+  .sp-body::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  .sp-section { margin-bottom: 16px; }
+  .sp-section-title {
+    font-size: 10px;
+    font-weight: bold;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #1a1a2a;
+    padding-bottom: 4px;
+  }
+  .sp-stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid #111;
+  }
+  .sp-stat-label { color: #666; }
+  .sp-stat-value { color: #ccc; font-weight: bold; }
+  .sp-event-item {
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    background: #0d0d18;
+    border-left: 2px solid #333;
+    font-size: 11px;
+  }
+  .sp-event-item:hover { background: #12121e; }
+  .sp-empty { color: #444; text-align: center; padding: 20px; font-style: italic; }
+
+  /* === BOTTOM PANEL === */
+  #bottom-panel {
+    width: 100%;
+    height: 140px;
+    background: #0d0d0d;
+    border-top: 2px solid #222;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .bottom-tabs {
+    display: flex;
+    gap: 0;
+    background: #111;
+    border-bottom: 1px solid #1a1a2a;
+    flex-shrink: 0;
+  }
+  .btab {
+    padding: 4px 14px;
+    font-size: 10px;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    letter-spacing: 1px;
+    color: #555;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    text-transform: uppercase;
+  }
+  .btab:hover { color: #888; }
+  .btab.active { color: #8b5cf6; border-bottom-color: #8b5cf6; }
+  .tab-pane {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    padding: 5px 10px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .tab-pane.active { display: block; }
+
+  /* === TOAST === */
+  #toast-container {
+    position: fixed;
+    top: 50px;
+    right: 20px;
+    z-index: 300;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .toast {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    animation: toastIn 0.3s ease;
+    max-width: 320px;
+  }
+  .toast.success { background: #052e16; color: #22c55e; border: 1px solid #16a34a44; }
+  .toast.error { background: #2e0505; color: #ef4444; border: 1px solid #dc262644; }
+  .toast.info { background: #0a0a1e; color: #8b5cf6; border: 1px solid #6366f144; }
+  @keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+
+  /* Keyboard shortcut hints */
+  #shortcut-hint {
+    position: fixed;
+    bottom: 148px;
+    left: 10px;
+    font-size: 9px;
+    color: #333;
+    z-index: 50;
+  }
+  #shortcut-hint span { color: #555; }
+
+  /* Agent table in bottom panel */
+  .agent-row {
+    display: flex;
+    align-items: center;
+    padding: 2px 4px;
+    border-bottom: 1px solid #111;
+    gap: 10px;
+    cursor: pointer;
+  }
+  .agent-row:hover { background: #12121e; }
+  .agent-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .agent-name { font-weight: bold; min-width: 60px; }
+  .agent-role { color: #555; min-width: 120px; }
+  .agent-status { min-width: 60px; }
+
+  /* === TICKER BANNER === */
+  #ticker-banner {
+    width: 100%;
+    background: #0a0a12;
+    border-bottom: 1px solid #1a1a2a;
+    overflow: hidden;
+    white-space: nowrap;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  #ticker-inner {
+    display: inline-block;
+    animation: tickerScroll 30s linear infinite;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding-left: 100%;
+  }
+  #ticker-inner .ticker-agent {
+    margin-right: 24px;
+  }
+  #ticker-inner .ticker-name {
+    font-weight: bold;
+  }
+  #ticker-inner .ticker-idle { color: #555; }
+  #ticker-inner .ticker-working { color: #22c55e; }
+  #ticker-inner .ticker-celebrating { color: #f59e0b; }
+  #ticker-inner .ticker-error { color: #ef4444; }
+  @keyframes tickerScroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+  }
+</style>
+<style>
+  body { background: #211b30; }
+  #header, #ticker-banner, #bottom-panel, #side-panel, #shortcut-hint, #toast-container { display: none; }
+  #canvas-container { width: 100vw; height: 100vh; }
+</style>
+<script>
+window.PIXELFLOOR_CONFIG = {
+  title: 'MarketDesk City', externalEvents: true,
+  sections: { intake:'RESEARCH', processing:'CAREERS', analysis:'DESK MANAGER', execution:'NETWORKING', output:'OUTREACH' },
+  agents: [
+    {id:'market_analyst',name:'Mira',role:'Market Analyst',color:'#8b5cf6',sprite:'analyst',position:0},
+    {id:'finance_tutor',name:'Noé',role:'Finance Tutor',color:'#e8b830',sprite:'scientist',position:1},
+    {id:'job_hunter',name:'Jules',role:'Job Hunter',color:'#4a90d9',sprite:'detective',position:2},
+    {id:'desk_manager',name:'Desk Manager',role:'Desk Manager',color:'#dc2626',sprite:'manager',position:4},
+    {id:'networker',name:'Lina',role:'Networker',color:'#16a34a',sprite:'trader',position:5},
+    {id:'outreach_agent',name:'Iris',role:'Outreach Agent',color:'#22d3ee',sprite:'researcher',position:7},
+    {id:'developer',name:'Axel',role:'Developer',color:'#06b6d4',sprite:'engineer',position:8}
+  ],
+  flows: []
+};
+</script>
+</head>
+<body>
+
+<div id="header">
+  <h1 id="floor-title">PixelFloor</h1>
+  <div id="status-bar">
+    <span id="ws-status">Demo Mode</span>
+    <span id="event-count">Events: 0</span>
+    <span id="agent-count">Agents: 0</span>
+  </div>
+  <div id="metric-counter" class="metric-neutral">Events: 0</div>
+</div>
+
+<div id="ticker-banner">
+  <div id="ticker-inner"></div>
+</div>
+
+<div id="canvas-container">
+  <canvas id="office"></canvas>
+</div>
+<div id="tooltip"></div>
+
+<!-- Side Panel -->
+<div id="side-panel">
+  <div class="sp-header">
+    <canvas class="sp-icon" id="sp-icon" width="32" height="32"></canvas>
+    <span class="sp-name" id="sp-name">Agent</span>
+    <span class="sp-role" id="sp-role">Role</span>
+    <button class="sp-close" onclick="closeSidePanel()">&times;</button>
+  </div>
+  <div class="sp-body" id="sp-body"></div>
+</div>
+
+<!-- Bottom Panel -->
+<div id="bottom-panel">
+  <div class="bottom-tabs">
+    <button class="btab active" onclick="switchBottomTab(this,'tab-log')">Log</button>
+    <button class="btab" onclick="switchBottomTab(this,'tab-agents')">Agents</button>
+    <button class="btab" onclick="switchBottomTab(this,'tab-activity')">Activity</button>
+  </div>
+  <div class="tab-pane active" id="tab-log">
+    <div id="log-feed"></div>
+  </div>
+  <div class="tab-pane" id="tab-agents">
+    <div id="agents-content"></div>
+  </div>
+  <div class="tab-pane" id="tab-activity">
+    <div id="activity-content"></div>
+  </div>
+</div>
+
+<!-- Toast Notifications -->
+<div id="toast-container"></div>
+
+<!-- Keyboard Shortcuts Hint -->
+<div id="shortcut-hint">
+  <span>[A]</span>gents <span>[L]</span>og <span>[V]</span>activity <span>[1-9]</span> agent <span>[Esc]</span> close
+</div>
+
+<!-- JS parts will be concatenated here -->
+<script>
+// ============================================================
+// PIXELFLOOR ENGINE — Part 1: Config, Palette, Sprites
+// ============================================================
+
+// --- Global state that all parts share ---
+const TILE = 16;
+const SCALE = 3;
+const COLS = 40;
+const ROWS = 24;
+const S = SCALE;
+const CANVAS_W = COLS * TILE * S;
+const CANVAS_H = ROWS * TILE * S;
+
+const canvas = document.getElementById('office');
+const ctx = canvas.getContext('2d');
+canvas.width = CANVAS_W;
+canvas.height = CANVAS_H;
+ctx.imageSmoothingEnabled = false;
+
+const bgCanvas = document.createElement('canvas');
+bgCanvas.width = CANVAS_W;
+bgCanvas.height = CANVAS_H;
+const bgCtx = bgCanvas.getContext('2d');
+bgCtx.imageSmoothingEnabled = false;
+
+// Global mutable state
+let totalMetric = 0;
+let eventCount = 0;
+let agentActiveCount = 0;
+let flashActive = false;
+let flashTimer = 0;
+let tick = 0;
+let bgDirty = true;
+let hoveredAgent = null;
+let mouseX = 0, mouseY = 0;
+let dayNightPhase = 0;
+const CLICKABLES = [];
+const dataParticles = [];
+const ambientParticles = [];
+let sidePanelOpen = false;
+let sidePanelAgent = null;
+let ws = null;
+let demoMode = true;
+const activityLog = []; // Global activity log for all agents
+
+// Desk layout positions (9 desks in the office)
+const DESK_LAYOUT = [
+  { deskX:2, deskY:3, deskW:4, agentX:3, agentY:4 },
+  { deskX:8, deskY:3, deskW:4, agentX:9, agentY:4 },
+  { deskX:2, deskY:9, deskW:4, agentX:3, agentY:10 },
+  { deskX:9, deskY:8, deskW:3, agentX:10, agentY:9 },
+  { deskX:2, deskY:15, deskW:7, agentX:3, agentY:16 },
+  { deskX:24, deskY:9, deskW:4, agentX:25, agentY:10 },
+  { deskX:31, deskY:9, deskW:4, agentX:32, agentY:10 },
+  { deskX:24, deskY:15, deskW:4, agentX:25, agentY:16 },
+  { deskX:31, deskY:15, deskW:4, agentX:32, agentY:16 },
+];
+
+// Section labels for the office areas
+const DEFAULT_SECTIONS = {
+  intake: { text:'INTAKE', x:2, y:2.4 },
+  processing: { text:'PROCESSING', x:2, y:8.4 },
+  analysis: { text:'ANALYSIS', x:2, y:14.4 },
+  execution: { text:'EXECUTION', x:22, y:8.4 },
+  output: { text:'OUTPUT', x:22, y:14.4 },
+  lounge: { text:'LOUNGE', x:15.5, y:18.3 },
+};
+
+// ============================================================
+// COLOR PALETTE
+// ============================================================
+const P = {
+  floorA:'#2a2234', floorB:'#241e30', floorC:'#2e2638',
+  carpet:'#1e1a38', carpetB:'#1a1634', carpetEdge:'#2a2648', carpetPattern:'#22204a',
+  wallA:'#3a3650', wallB:'#2e2a44', wallMolding:'#4a466a', wallAccent:'#342e4a', baseboard:'#252240', ceilTrim:'#5a5680',
+  winFrame:'#4a4660', winGlass:'#1a2a4a', winGlassB:'#2a4a7a', winHighlight:'#4a6a9a', winSill:'#5a5670',
+  deskTop:'#8B6D4B', deskFront:'#6B4D2B', deskEdge:'#A07D5B', deskShadow:'#3a2a1a', deskLeg:'#5B3D1B', deskDrawer:'#7B5D3B', deskHandle:'#B8A080',
+  monFrame:'#222228', monBezel:'#1a1a20', monScreen:'#0a1810', monGlow:'#0f3a18', monGlowB:'#185a28', monLed:'#22c55e', monStand:'#333340', monBase:'#2a2a34',
+  chairBack:'#2a2838', chairSeat:'#333345', chairArm:'#3a384a', chairWheel:'#1a1a22',
+  kbBase:'#2a2a30', kbKey:'#3a3a44', mouseBody:'#333340',
+  plantA:'#2d8a1e', plantB:'#1d6a0e', plantC:'#3aaa2e', plantD:'#4aba3e',
+  potA:'#8a5a2e', potB:'#6a4020', potRim:'#9a6a3e',
+  mugBody:'#e8e0d0', mugHandle:'#d0c8b8', mugCoffee:'#4a2a10', mugSteam:'rgba(200,200,210,0.25)',
+  bookR:'#c44444', bookB:'#4488bb', bookG:'#44aa44', bookY:'#ccaa44', bookP:'#8866aa', bookO:'#cc7733',
+  paper:'#e8e4d8', paperLine:'#c0b8a8', paperB:'#d8d4c8',
+  boardBg:'#f0ece0', boardFrame:'#7a7068', boardMarkerR:'#cc4444', boardMarkerB:'#4488cc', boardMarkerG:'#44aa44',
+  clockFace:'#f0e8d8', clockFrame:'#8a7a6a', clockHand:'#333',
+  cabBody:'#5a5868', cabDark:'#3a3848', cabHandle:'#999', cabDrawer:'#4a4858',
+  coolerBody:'#d0d8e0', coolerDark:'#8898a8', coolerWater:'#4a8aba', coolerCup:'#f0f0f0',
+  tickerBg:'#0a0a12', tickerBorder:'#333340', tickerGreen:'#22c55e', tickerRed:'#ef4444', tickerYellow:'#f59e0b',
+  rugA:'#6a2828', rugB:'#802020', rugFringe:'#aa6644',
+  lampBase:'#888', lampShade:'#e8d888', lampGlow:'rgba(255,240,180,0.08)',
+  couchA:'#3a3040', couchB:'#2a2230', couchPillow:'#5a4060',
+  snackBag:'#cc8833', snackChip:'#ddaa44',
+  pizzaBox:'#cc9944', pizzaCheese:'#eebb44', pizzaSauce:'#cc4444',
+  sodaCan:'#cc3333', sodaCanB:'#2244cc', sodaLabel:'#ffffff',
+  neonPurple:'#8b5cf6', neonBlue:'#06b6d4', neonGreen:'#22c55e',
+  trash:'#4a4858', trashLiner:'#333340',
+  photoFrame:'#8a7a6a', photoImage:'#6688aa',
+};
+
+// ============================================================
+// CHARACTER SPRITES — 16x16 with outlines and shading
+// ============================================================
+const SHARED_PAL = {
+  '.': null, 's': '#e8c4a0', 'd': '#c8a080', 'e': '#1a1a2e',
+  'w': '#eeeef0', 'W': '#dddde0', 'm': '#c47860', 'p': '#2c2c48',
+  'q': '#1e1e38', 'k': '#111118', 'g': '#888888', 'h': '#f0d8b8',
+  'n': '#d0b090',
+};
+
+const SPRITE_LIBRARY = {
+  // detective — Fedora, trench coat, press badge — color '#B8860B'
+  detective: {
+    pal: {'1':'#A07040','2':'#806030','3':'#C08850','4':'#604020','5':'#504018','6':'#B09060','7':'#705030','f':'#5a3a1a','8':'#907050','9':'#FFD700','O':'#181010'},
+    idle: [
+      '................',
+      '...Okkkkkk......',
+      '..k33333333k....',
+      '...k1222221k....',
+      '....kssssk......',
+      '....kseesek.....',
+      '.....ssmss......',
+      '......ndn.......',
+      '...k1161161k....',
+      '...k11111111k...',
+      '...k11991111k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '.....pp.pp......',
+      '.....ff.ff......',
+    ],
+    walk: [
+      '................',
+      '...Okkkkkk......',
+      '..k33333333k....',
+      '...k1222221k....',
+      '....kssssk......',
+      '....kseesek.....',
+      '.....ssmss......',
+      '......ndn.......',
+      '...k1161161k....',
+      '...k11111111k...',
+      '...k11991111k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '....pp....pp....',
+      '....ff....ff....',
+    ],
+  },
+  // hacker — Blue hoodie, headphones — color '#4A90D9'
+  hacker: {
+    pal: {'1':'#3570B0','2':'#2a5590','3':'#60A8F0','4':'#4A90D9','5':'#1a3a70','6':'#555555','7':'#444444','f':'#2a2a38','8':'#666666','9':'#60A8F0','O':'#101018'},
+    idle: [
+      '................',
+      '....66444466....',
+      '...664444.466...',
+      '....44999944....',
+      '....9kssssk9....',
+      '...6kseesek6....',
+      '.....ssmss......',
+      '......ndn.......',
+      '...k11111111k...',
+      '...k12211221k...',
+      '...k11311311k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '.....pp.pp......',
+      '.....ff.ff......',
+    ],
+    walk: [
+      '................',
+      '....66444466....',
+      '...664444.466...',
+      '....44999944....',
+      '....9kssssk9....',
+      '...6kseesek6....',
+      '.....ssmss......',
+      '......ndn.......',
+      '...k11111111k...',
+      '...k12211221k...',
+      '...k11311311k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '....pp....pp....',
+      '....ff....ff....',
+    ],
+  },
+  // scientist — Glasses, bun, lab coat over yellow — color '#E8B830'
+  scientist: {
+    pal: {'1':'#E8B830','2':'#C89820','3':'#FFD860','4':'#8B5513','5':'#6B3a10','6':'#777799','7':'#555577','f':'#6B4520','8':'#aa7530','9':'#f0f0f0','O':'#101018'},
+    idle: [
+      '................',
+      '.....44k44......',
+      '....44488444....',
+      '....445ss544....',
+      '.....6s7s6s.....',
+      '.....6ses6s.....',
+      '.....ssmsss.....',
+      '......ndn.......',
+      '...k99199199k...',
+      '...k91111119k...',
+      '...k91131119k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '.....pp.pp......',
+      '.....ff.ff......',
+    ],
+    walk: [
+      '................',
+      '.....44k44......',
+      '....44488444....',
+      '....445ss544....',
+      '.....6s7s6s.....',
+      '.....6ses6s.....',
+      '.....ssmsss.....',
+      '......ndn.......',
+      '...k99199199k...',
+      '...k91111119k...',
+      '...k91131119k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '....pp....pp....',
+      '....ff....ff....',
+    ],
+  },
+  // analyst — Dark hair, purple hoodie — color '#8B5CF6'
+  analyst: {
+    pal: {'1':'#8B5CF6','2':'#6B3FD4','3':'#A87CFF','4':'#1E1E2E','5':'#141424','6':'#f0f0f0','7':'#d0d0d0','f':'#2a2a3a','8':'#2E2E3E','9':'#B89CFF','O':'#101018'},
+    idle: [
+      '................',
+      '.....4454454....',
+      '....44444444....',
+      '....445ss544....',
+      '.....kseessk....',
+      '.....ks.ssk.....',
+      '.....ssmss......',
+      '......ndn.......',
+      '...k111331111k..',
+      '...k11199111k...',
+      '...k11111111k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '.....pp.pp......',
+      '.....ff.ff......',
+    ],
+    walk: [
+      '................',
+      '.....4454454....',
+      '....44444444....',
+      '....445ss544....',
+      '.....kseessk....',
+      '.....ks.ssk.....',
+      '.....ssmss......',
+      '......ndn.......',
+      '...k111331111k..',
+      '...k11199111k...',
+      '...k11111111k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '....pp....pp....',
+      '....ff....ff....',
+    ],
+  },
+  // researcher — Teal hair, white lab coat, glasses — color '#22D3EE'
+  researcher: {
+    pal: {'1':'#22D3EE','2':'#06B6D4','3':'#67E8F9','4':'#0E7490','5':'#164E63','6':'#f5f5f5','7':'#e0e0e0','f':'#333344','8':'#0891B2','9':'#A5F3FC','O':'#101018'},
+    idle: [
+      '................',
+      '....444k4444....',
+      '....44344444....',
+      '....445ss544....',
+      '.....9e9e9s.....',
+      '.....ks.ssk.....',
+      '.....ssmss......',
+      '......ndn.......',
+      '...k667766671k..',
+      '...k66611666k...',
+      '...k66666666k...',
+      '..kk666666kk....',
+      '....k6666k......',
+      '.....pppp.......',
+      '.....pp.pp......',
+      '.....ff.ff......',
+    ],
+    walk: [
+      '................',
+      '....444k4444....',
+      '....44344444....',
+      '....445ss544....',
+      '.....9e9e9s.....',
+      '.....ks.ssk.....',
+      '.....ssmss......',
+      '......ndn.......',
+      '...k667766671k..',
+      '...k66611666k...',
+      '...k66666666k...',
+      '..kk666666kk....',
+      '....k6666k......',
+      '.....pppp.......',
+      '....pp....pp....',
+      '....ff....ff....',
+    ],
+  },
+  // manager — Red blazer, glasses, clipboard — color '#DC2626'
+  manager: {
+    pal: {'1':'#DC2626','2':'#A01C1C','3':'#FF4444','4':'#1a1a2e','5':'#101020','6':'#f0f0f0','7':'#d0d0d0','f':'#222233','8':'#2a2a3e','9':'#777799','O':'#101018'},
+    idle: [
+      '................',
+      '.....44k444.....',
+      '....44444444....',
+      '....445ss544....',
+      '.....9e9e9s.....',
+      '.....ssmsss.....',
+      '......ndn.......',
+      '......ndn.......',
+      '...k116116611k..',
+      '...k11111111k...',
+      '...k11111111k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '.....pp.pp......',
+      '.....ff.ff......',
+    ],
+    walk: [
+      '................',
+      '.....44k444.....',
+      '....44444444....',
+      '....445ss544....',
+      '.....9e9e9s.....',
+      '.....ssmsss.....',
+      '......ndn.......',
+      '......ndn.......',
+      '...k116116611k..',
+      '...k11111111k...',
+      '...k11111111k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '....pp....pp....',
+      '....ff....ff....',
+    ],
+  },
+  // trader — Green jacket, bob haircut — color '#16A34A'
+  trader: {
+    pal: {'1':'#16A34A','2':'#0F7A35','3':'#22C55E','4':'#2C1810','5':'#1C0800','6':'#f0f0f0','7':'#d0d0d0','f':'#3a2a1a','8':'#3C2820','9':'#44bb66','O':'#101018'},
+    idle: [
+      '................',
+      '....44444444....',
+      '...4444444444...',
+      '....445ss544....',
+      '...4kseessek4...',
+      '...4kssmssk4....',
+      '......ndn.......',
+      '......ndn.......',
+      '...k11111111k...',
+      '...k11911911k...',
+      '...k11111111k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '.....pp.pp......',
+      '.....ff.ff......',
+    ],
+    walk: [
+      '................',
+      '....44444444....',
+      '...4444444444...',
+      '....445ss544....',
+      '...4kseessek4...',
+      '...4kssmssk4....',
+      '......ndn.......',
+      '......ndn.......',
+      '...k11111111k...',
+      '...k11911911k...',
+      '...k11111111k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '....pp....pp....',
+      '....ff....ff....',
+    ],
+  },
+  // cowboy — Cowboy hat, orange vest — color '#EA580C'
+  cowboy: {
+    pal: {'1':'#EA580C','2':'#B84409','3':'#FF7A30','4':'#654321','5':'#4a3018','6':'#C8A878','7':'#A08858','f':'#5a4a3a','8':'#8B7355','9':'#f0f0f0','O':'#101018'},
+    idle: [
+      '..k6666666666k..',
+      '...k66866866k...',
+      '.....888888.....',
+      '.....877778.....',
+      '.....kssssk.....',
+      '.....seesse.....',
+      '.....ssmss......',
+      '......ndn.......',
+      '...k119119911k..',
+      '...k11111111k...',
+      '...k11111111k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '.....pp.pp......',
+      '.....ff.ff......',
+    ],
+    walk: [
+      '..k6666666666k..',
+      '...k66866866k...',
+      '.....888888.....',
+      '.....877778.....',
+      '.....kssssk.....',
+      '.....seesse.....',
+      '.....ssmss......',
+      '......ndn.......',
+      '...k119119911k..',
+      '...k11111111k...',
+      '...k11111111k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '....pp....pp....',
+      '....ff....ff....',
+    ],
+  },
+  // engineer — Cyan sweater, spiky blue hair — color '#06B6D4'
+  engineer: {
+    pal: {'1':'#06B6D4','2':'#058DA3','3':'#22D3EE','4':'#0891B2','5':'#065A73','6':'#0AA0C0','7':'#088BA0','f':'#333344','8':'#0BC0E0','9':'#f0f0f0','O':'#101018'},
+    idle: [
+      '................',
+      '....8k84k848....',
+      '....44434444....',
+      '....445ss544....',
+      '.....kseessk....',
+      '.....ssmss......',
+      '......ndn.......',
+      '......ndn.......',
+      '...k11111111k...',
+      '...k11311311k...',
+      '...k11111111k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '.....pp.pp......',
+      '.....ff.ff......',
+    ],
+    walk: [
+      '................',
+      '....8k84k848....',
+      '....44434444....',
+      '....445ss544....',
+      '.....kseessk....',
+      '.....ssmss......',
+      '......ndn.......',
+      '......ndn.......',
+      '...k11111111k...',
+      '...k11311311k...',
+      '...k11111111k...',
+      '..kk111111kk....',
+      '....k1111k......',
+      '.....pppp.......',
+      '....pp....pp....',
+      '....ff....ff....',
+    ],
+  },
+};
+
+// ============================================================
+// SPRITE RENDERING
+// ============================================================
+const spriteCache = {};
+
+function buildPalette(spriteType) {
+  return { ...SHARED_PAL, ...SPRITE_LIBRARY[spriteType].pal };
+}
+
+function renderSpriteToImage(data, palette) {
+  const off = document.createElement('canvas');
+  off.width = 16; off.height = 16;
+  const c = off.getContext('2d');
+  for (let r = 0; r < data.length; r++) {
+    for (let col = 0; col < data[r].length; col++) {
+      const color = palette[data[r][col]];
+      if (color) { c.fillStyle = color; c.fillRect(col, r, 1, 1); }
+    }
+  }
+  return off;
+}
+
+function makeWorkingSprite(baseData) {
+  const data = baseData.map(r => r.split(''));
+  if (data[10]) { data[10][3] = '.'; data[10][4] = '.'; data[10][11] = '.'; data[10][12] = '.'; }
+  if (data[11]) { data[11][4] = 'd'; data[11][5] = 'd'; data[11][10] = 'd'; data[11][11] = 'd'; }
+  return data.map(r => r.join(''));
+}
+
+function makeCelebratingSprite(baseData) {
+  const data = baseData.map(r => r.split(''));
+  if (data[10]) { data[10][3] = '.'; data[10][4] = '.'; data[10][11] = '.'; data[10][12] = '.'; }
+  if (data[11]) { data[11][4] = '.'; data[11][5] = '.'; data[11][10] = '.'; data[11][11] = '.'; }
+  if (data[7]) { data[7][2] = 'd'; data[7][3] = 'd'; data[7][12] = 'd'; data[7][13] = 'd'; }
+  if (data[8]) { data[8][2] = 's'; data[8][3] = 's'; data[8][12] = 's'; data[8][13] = 's'; }
+  return data.map(r => r.join(''));
+}
+
+function preRenderAllSprites() {
+  for (const [id, sprite] of Object.entries(SPRITE_LIBRARY)) {
+    const pal = buildPalette(id);
+    spriteCache[id + '_idle'] = renderSpriteToImage(sprite.idle, pal);
+    spriteCache[id + '_work'] = renderSpriteToImage(makeWorkingSprite(sprite.idle), pal);
+    spriteCache[id + '_celebrate'] = renderSpriteToImage(makeCelebratingSprite(sprite.idle), pal);
+    if (sprite.walk) {
+      spriteCache[id + '_walk'] = renderSpriteToImage(sprite.walk, pal);
+    }
+  }
+}
+
+function blitSprite(key, x, y) {
+  const img = spriteCache[key];
+  if (img) ctx.drawImage(img, x, y, 16 * S, 16 * S);
+}
+
+// ============================================================
+// CONFIGURATION SYSTEM
+// ============================================================
+
+// AGENTS object — populated by initFromConfig()
+const AGENTS = {};
+const FLOW_PATHS = {};
+const SPEECHES = {};
+let _pf_config = null;
+
+// Default speech lines for any agent
+const DEFAULT_SPEECHES = {
+  working: ['Working...', 'Processing...', 'On it!', 'Analyzing...', 'Running...'],
+  celebrating: ['Done!', 'Success!', 'Nailed it!', 'Complete!'],
+  idle: ['*thinking*', 'Waiting...', '*stretches*', 'Ready.', '*sips coffee*', 'Standing by...'],
+  error: ['Error!', 'Failed!', 'Issue!', 'Problem!'],
+};
+
+function initFromConfig(config) {
+  _pf_config = config;
+
+  // Set title
+  const titleText = config.title || 'PixelFloor';
+  document.getElementById('floor-title').textContent = titleText;
+  document.title = titleText + ' — PixelFloor';
+  window._pf_title = titleText;
+
+  // Set section labels
+  if (config.sections) {
+    for (const [key, text] of Object.entries(config.sections)) {
+      if (DEFAULT_SECTIONS[key]) DEFAULT_SECTIONS[key].text = text;
+    }
+  }
+
+  // Create agents from config
+  for (const agentConf of (config.agents || [])) {
+    const pos = DESK_LAYOUT[agentConf.position != null ? agentConf.position : Object.keys(AGENTS).length];
+    if (!pos) continue;
+    AGENTS[agentConf.id] = {
+      name: agentConf.name || agentConf.id,
+      role: agentConf.role || '',
+      color: agentConf.color || '#888',
+      sprite: agentConf.sprite || 'analyst',
+      x: pos.agentX,
+      y: pos.agentY,
+      deskX: pos.agentX,
+      deskY: pos.agentY,
+      state: 'idle',
+      stateTimer: 0,
+      frame: 0,
+      speech: '',
+      speechTimer: 0,
+      eventCount: 0,
+      workTime: 0,
+      lastActive: null,
+    };
+  }
+
+  // Create flow paths from config
+  for (const flow of (config.flows || [])) {
+    const key = flow.from + '_to_' + flow.to;
+    const fromAgent = AGENTS[flow.from];
+    const toAgent = AGENTS[flow.to];
+    if (fromAgent && toAgent) {
+      FLOW_PATHS[key] = {
+        from: flow.from,
+        to: flow.to,
+        color: fromAgent.color,
+        colorB: toAgent.color,
+      };
+    }
+  }
+
+  // Set up speeches
+  for (const agentConf of (config.agents || [])) {
+    SPEECHES[agentConf.id] = agentConf.speeches || DEFAULT_SPEECHES;
+  }
+
+  // Update status bar
+  document.getElementById('agent-count').textContent = 'Agents: ' + Object.keys(AGENTS).length;
+}
+
+</script>
+<script>
+// ============================================================
+// PixelFloor — Part 2: Background & Furniture Drawing
+// Depends on part1.js globals: bgCtx, S, TILE, COLS, ROWS,
+//   P, DESK_LAYOUT, AGENTS, DEFAULT_SECTIONS, window._pf_title
+// ============================================================
+
+// ============================================================
+// DRAW BACKGROUND — Rich office environment
+// ============================================================
+function drawBackground() {
+  const c = bgCtx;
+  c.imageSmoothingEnabled = false;
+
+  // === FLOOR ===
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const isCorridor = x >= 15 && x <= 18;
+      if (isCorridor) {
+        const isEdge = x === 15 || x === 18;
+        c.fillStyle = isEdge ? P.carpetEdge : ((x + y) % 2 === 0 ? P.carpet : P.carpetB);
+        c.fillRect(x * TILE * S, y * TILE * S, TILE * S, TILE * S);
+        if (!isEdge && (x + y) % 3 === 0) {
+          c.fillStyle = P.carpetPattern;
+          c.fillRect(x * TILE * S + 4*S, y * TILE * S + 4*S, 8*S, 8*S);
+        }
+      } else {
+        const plankOffset = (y % 2) * 8;
+        c.fillStyle = (x + y) % 2 === 0 ? P.floorA : P.floorB;
+        c.fillRect(x * TILE * S, y * TILE * S, TILE * S, TILE * S);
+        c.fillStyle = P.floorC;
+        c.fillRect(x * TILE * S, y * TILE * S + 15*S, TILE * S, S);
+        if ((x * 16 + plankOffset) % 32 < 2) {
+          c.fillStyle = P.floorC;
+          c.fillRect(x * TILE * S + plankOffset * S, y * TILE * S, S, TILE * S);
+        }
+      }
+    }
+  }
+
+  // === AREA RUG under analyst's desk ===
+  c.fillStyle = P.rugA;
+  c.fillRect(1.5 * TILE * S, 14 * TILE * S, 9 * TILE * S, 5 * TILE * S);
+  c.fillStyle = P.rugB;
+  c.fillRect(2 * TILE * S, 14.5 * TILE * S, 8 * TILE * S, 4 * TILE * S);
+  c.fillStyle = P.rugFringe;
+  for (let i = 0; i < 18; i++) {
+    c.fillRect((1.5 * TILE + i * 4 + 2) * S, (14 * TILE - 1) * S, 2*S, 2*S);
+    c.fillRect((1.5 * TILE + i * 4 + 2) * S, (19 * TILE + 1) * S, 2*S, 2*S);
+  }
+
+  // === WALLS ===
+  for (let x = 0; x < COLS; x++) {
+    c.fillStyle = P.wallA;
+    c.fillRect(x * TILE * S, 0, TILE * S, TILE * S);
+    c.fillStyle = P.wallB;
+    c.fillRect(x * TILE * S, TILE * S, TILE * S, TILE * S);
+    if (x % 4 < 3) {
+      c.fillStyle = P.wallAccent;
+      c.fillRect(x * TILE * S + 2*S, TILE * S + 3*S, TILE * S - 4*S, TILE * S - 6*S);
+    }
+    c.fillStyle = P.wallMolding;
+    c.fillRect(x * TILE * S, TILE * S - S, TILE * S, 2*S);
+    c.fillStyle = P.baseboard;
+    c.fillRect(x * TILE * S, 2 * TILE * S, TILE * S, 3 * S);
+    c.fillStyle = P.ceilTrim;
+    c.fillRect(x * TILE * S, 0, TILE * S, S);
+  }
+
+  // === WINDOWS ===
+  const windowPairs = [[5,6],[12,13],[26,27],[33,34]];
+  for (const [a, b] of windowPairs) {
+    for (const wx of [a, b]) {
+      const x = wx * TILE * S, y = 0;
+      c.fillStyle = P.winFrame;
+      c.fillRect(x + S, y + 2*S, TILE * S - 2*S, 2 * TILE * S - 4*S);
+      c.fillStyle = P.winGlass;
+      c.fillRect(x + 3*S, y + 4*S, TILE * S - 6*S, 2 * TILE * S - 8*S);
+      c.fillStyle = P.winFrame;
+      c.fillRect(x + 3*S, y + TILE * S - S, TILE * S - 6*S, 2*S);
+      c.fillRect(x + TILE * S/2 - S, y + 4*S, 2*S, 2 * TILE * S - 8*S);
+      c.fillStyle = P.winHighlight;
+      c.fillRect(x + 4*S, y + 5*S, 2*S, TILE * S - 8*S);
+      c.fillStyle = P.winSill;
+      c.fillRect(x, y + 2 * TILE * S - 2*S, TILE * S, 3*S);
+    }
+  }
+
+  // === ROOM DIVIDERS ===
+  for (let y = 2; y < ROWS; y++) {
+    for (const dx of [14, 19]) {
+      c.fillStyle = '#252540';
+      c.fillRect(dx * TILE * S, y * TILE * S, TILE * S, TILE * S);
+      if (y < 6) {
+        c.fillStyle = 'rgba(40,50,80,0.4)';
+        c.fillRect(dx * TILE * S + 2*S, y * TILE * S + 2*S, TILE * S - 4*S, TILE * S - 4*S);
+      }
+      c.fillStyle = '#303050';
+      c.fillRect(dx === 14 ? dx * TILE * S + TILE * S - S : dx * TILE * S, y * TILE * S, S, TILE * S);
+    }
+  }
+
+  // === DESKS ===
+  drawDesk(c, 2, 3, 4);
+  drawDesk(c, 8, 3, 4);
+  drawDesk(c, 2, 9, 4);
+  drawDesk(c, 9, 8, 3);
+  drawDesk(c, 2, 15, 7);
+  drawDesk(c, 24, 9, 4);
+  drawDesk(c, 31, 9, 4);
+  drawDesk(c, 24, 15, 4);
+  drawDesk(c, 31, 15, 4);
+
+  // === CHAIRS ===
+  const chairPositions = [[3,4],[9,4],[3,10],[10,9],[3,16],[25,16],[25,10],[32,10],[32,16]];
+  for (const [cx, cy] of chairPositions) drawChair(c, cx, cy);
+
+  // === DESK ITEMS ===
+  drawKeyboard(c, 3, 3); drawKeyboard(c, 9, 3); drawKeyboard(c, 3, 9);
+  drawKeyboard(c, 10, 8);
+  drawKeyboard(c, 3, 15); drawKeyboard(c, 5, 15);
+  drawKeyboard(c, 25, 9); drawKeyboard(c, 32, 9);
+  drawKeyboard(c, 25, 15); drawKeyboard(c, 32, 15);
+  drawPapers(c, 5.5, 3); drawMug(c, 11, 3.1);
+  drawPapers(c, 5.5, 9); drawMug(c, 7, 15); drawPapers(c, 27, 15);
+
+  // === PLANTS ===
+  drawPlantLarge(c, 12, 4); drawPlantSmall(c, 12, 10);
+  drawPlantLarge(c, 12, 16); drawPlantSmall(c, 37, 4);
+  drawPlantLarge(c, 37, 16); drawHangingPlant(c, 20, 2);
+
+  // === WALL ITEMS ===
+  drawWhiteboard(c, 8, 7); drawClock(c, 28, 1);
+  drawCabinet(c, 37, 8); drawCabinet(c, 37, 10);
+  drawWaterCooler(c, 20, 10); drawBookshelf(c, 22, 1);
+  drawPhotoFrame(c, 2, 1); drawPhotoFrame(c, 9, 1); drawPhotoFrame(c, 30, 1);
+  drawNeonSign(c, 15.5, 0.3);
+  drawTrashCan(c, 13, 13); drawTrashCan(c, 36, 14);
+  drawFloorLamp(c, 12, 7);
+
+  // === BREAK AREA ===
+  drawCouch(c, 15.5, 19); drawCoffeeTable(c, 16, 21);
+  drawPizzaBox(c, 16.5, 21); drawSodaCans(c, 17.5, 21);
+  drawSnackMachine(c, 20, 18);
+
+  // === SECTION LABELS ===
+  c.font = `bold ${5 * S}px 'Courier New', monospace`;
+  c.fillStyle = '#4a4660';
+  for (const sec of Object.values(DEFAULT_SECTIONS)) {
+    c.fillText(sec.text, sec.x * TILE * S, sec.y * TILE * S);
+  }
+}
+
+// --- Furniture drawing functions ---
+
+function drawDesk(c, tx, ty, width) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  const w = width * TILE * S, h = 1.4 * TILE * S;
+  c.fillStyle = P.deskEdge;
+  c.fillRect(x, y, w, 2*S);
+  c.fillStyle = P.deskTop;
+  c.fillRect(x, y + 2*S, w, h - 6*S);
+  c.fillStyle = P.deskFront;
+  for (let i = 0; i < width * 2; i++) {
+    c.fillRect(x + (i * 8 + 3) * S, y + 4*S, 4*S, S);
+  }
+  c.fillStyle = P.deskFront;
+  c.fillRect(x, y + h - 4*S, w, 4*S);
+  c.fillStyle = P.deskDrawer;
+  c.fillRect(x + 2*S, y + h - 3*S, w/3, 2*S);
+  c.fillStyle = P.deskHandle;
+  c.fillRect(x + 2*S + w/6 - 2*S, y + h - 2*S, 4*S, S);
+  c.fillStyle = P.deskShadow;
+  c.fillRect(x, y + h, w, S);
+  c.fillStyle = P.deskLeg;
+  c.fillRect(x + S, y + h, 2*S, 4*S);
+  c.fillRect(x + w - 3*S, y + h, 2*S, 4*S);
+}
+
+function drawChair(c, cx, cy) {
+  const x = cx * TILE * S, y = cy * TILE * S;
+  c.fillStyle = P.chairWheel;
+  c.fillRect(x + S, y + 15*S, 3*S, 2*S);
+  c.fillRect(x + 10*S, y + 15*S, 3*S, 2*S);
+  c.fillStyle = P.chairWheel;
+  c.fillRect(x + 6*S, y + 12*S, 2*S, 4*S);
+  c.fillStyle = P.chairSeat;
+  c.fillRect(x + 2*S, y + 9*S, 10*S, 4*S);
+  c.fillStyle = P.chairArm;
+  c.fillRect(x + S, y + 6*S, 2*S, 4*S);
+  c.fillRect(x + 11*S, y + 6*S, 2*S, 4*S);
+  c.fillStyle = P.chairBack;
+  c.fillRect(x + 3*S, y + 2*S, 8*S, 8*S);
+  c.fillStyle = P.chairArm;
+  c.fillRect(x + 4*S, y + 3*S, 6*S, 6*S);
+}
+
+function drawKeyboard(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.kbBase;
+  c.fillRect(x + 4*S, y + 8*S, 10*S, 4*S);
+  c.fillStyle = P.kbKey;
+  for (let i = 0; i < 4; i++) {
+    c.fillRect(x + (5 + i * 2) * S, y + 9*S, S, S);
+    c.fillRect(x + (6 + i * 2) * S, y + 11*S, S, S);
+  }
+  c.fillStyle = P.mouseBody;
+  c.fillRect(x + 15*S, y + 9*S, 3*S, 4*S);
+  c.fillStyle = '#444450';
+  c.fillRect(x + 16*S, y + 9*S, S, 2*S);
+}
+
+function drawPapers(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.paperB;
+  c.fillRect(x + S, y + 4*S, 8*S, 7*S);
+  c.fillStyle = P.paper;
+  c.fillRect(x, y + 3*S, 8*S, 7*S);
+  c.fillStyle = P.paperLine;
+  c.fillRect(x + S, y + 5*S, 6*S, S);
+  c.fillRect(x + S, y + 7*S, 4*S, S);
+}
+
+function drawMug(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.mugBody;
+  c.fillRect(x, y + 5*S, 6*S, 7*S);
+  c.fillStyle = P.mugCoffee;
+  c.fillRect(x + S, y + 6*S, 4*S, 2*S);
+  c.fillStyle = P.mugHandle;
+  c.fillRect(x + 6*S, y + 7*S, 2*S, 4*S);
+  c.fillRect(x + 7*S, y + 8*S, S, 2*S);
+  c.fillStyle = '#f0e8d8';
+  c.fillRect(x, y + 5*S, 6*S, S);
+}
+
+function drawPlantLarge(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.potB;
+  c.fillRect(x + 2*S, y + 10*S, 10*S, 6*S);
+  c.fillStyle = P.potA;
+  c.fillRect(x + 3*S, y + 11*S, 8*S, 4*S);
+  c.fillStyle = P.potRim;
+  c.fillRect(x + 2*S, y + 10*S, 10*S, 2*S);
+  c.fillStyle = P.plantB;
+  c.fillRect(x, y + 3*S, 14*S, 8*S);
+  c.fillStyle = P.plantA;
+  c.fillRect(x + S, y + S, 12*S, 8*S);
+  c.fillRect(x + 3*S, y, 8*S, 4*S);
+  c.fillStyle = P.plantC;
+  c.fillRect(x + 4*S, y + 2*S, 3*S, 3*S);
+  c.fillRect(x + 8*S, y + 4*S, 3*S, 2*S);
+  c.fillStyle = P.plantD;
+  c.fillRect(x + 5*S, y + S, 2*S, 2*S);
+  c.fillRect(x + 10*S, y + 3*S, 2*S, S);
+}
+
+function drawPlantSmall(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.potB;
+  c.fillRect(x + 3*S, y + 10*S, 6*S, 5*S);
+  c.fillStyle = P.potRim;
+  c.fillRect(x + 3*S, y + 10*S, 6*S, 2*S);
+  c.fillStyle = P.plantA;
+  c.fillRect(x + 2*S, y + 4*S, 8*S, 7*S);
+  c.fillStyle = P.plantC;
+  c.fillRect(x + 4*S, y + 3*S, 4*S, 3*S);
+}
+
+function drawHangingPlant(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = '#888';
+  c.fillRect(x + 5*S, y - 2*S, S, 4*S);
+  c.fillStyle = P.potA;
+  c.fillRect(x + 2*S, y + 2*S, 8*S, 4*S);
+  c.fillStyle = P.plantA;
+  c.fillRect(x, y + 5*S, 3*S, 6*S);
+  c.fillRect(x + 9*S, y + 5*S, 3*S, 5*S);
+  c.fillStyle = P.plantC;
+  c.fillRect(x + S, y + 6*S, 2*S, 3*S);
+  c.fillRect(x + 10*S, y + 6*S, 2*S, 3*S);
+  c.fillStyle = P.plantA;
+  c.fillRect(x + S, y + S, 10*S, 3*S);
+  c.fillStyle = P.plantD;
+  c.fillRect(x + 3*S, y, 6*S, 2*S);
+}
+
+function drawWhiteboard(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  const w = 5 * TILE * S, h = 1.2 * TILE * S;
+  c.fillStyle = P.boardFrame;
+  c.fillRect(x - S, y - S, w + 2*S, h + 2*S);
+  c.fillStyle = P.boardBg;
+  c.fillRect(x, y, w, h);
+  c.fillStyle = P.boardMarkerB;
+  c.fillRect(x + 4*S, y + 4*S, 20*S, S);
+  c.fillRect(x + 4*S, y + 8*S, 15*S, S);
+  c.fillRect(x + 4*S, y + 12*S, 25*S, S);
+  c.fillStyle = P.boardMarkerG;
+  const points = [10, 8, 6, 4, 5, 3, 2, 4, 3, 5, 7, 6];
+  for (let i = 0; i < points.length - 1; i++) {
+    c.fillRect(x + (30 + i * 4) * S, y + points[i] * S, 4*S, S);
+  }
+  c.fillStyle = P.boardMarkerR;
+  c.fillRect(x + 60*S, y + 4*S, 3*S, 3*S);
+  c.fillStyle = P.boardFrame;
+  c.fillRect(x + 10*S, y + h, 30*S, 2*S);
+  c.fillStyle = P.boardMarkerR;
+  c.fillRect(x + 14*S, y + h, 6*S, 2*S);
+  c.fillStyle = P.boardMarkerB;
+  c.fillRect(x + 22*S, y + h, 6*S, 2*S);
+}
+
+function drawClock(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.clockFrame;
+  c.fillRect(x + S, y + S, 12*S, 12*S);
+  c.fillStyle = P.clockFace;
+  c.fillRect(x + 2*S, y + 2*S, 10*S, 10*S);
+  c.fillStyle = '#999';
+  c.fillRect(x + 7*S, y + 2*S, S, 2*S);
+  c.fillRect(x + 11*S, y + 7*S, 2*S, S);
+  c.fillRect(x + 7*S, y + 10*S, S, 2*S);
+  c.fillRect(x + 2*S, y + 7*S, 2*S, S);
+  c.fillStyle = P.clockHand;
+  c.fillRect(x + 7*S, y + 4*S, S, 4*S);
+  c.fillRect(x + 7*S, y + 7*S, 4*S, S);
+  c.fillStyle = '#cc4444';
+  c.fillRect(x + 7*S, y + 7*S, S, S);
+}
+
+function drawCabinet(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.cabBody;
+  c.fillRect(x, y, 2 * TILE * S, TILE * S);
+  c.fillStyle = P.cabDark;
+  c.fillRect(x, y, 2 * TILE * S, 3*S);
+  c.fillStyle = P.cabDrawer;
+  c.fillRect(x + S, y + 4*S, 2 * TILE * S - 2*S, 5*S);
+  c.fillRect(x + S, y + 10*S, 2 * TILE * S - 2*S, 5*S);
+  c.fillStyle = P.cabHandle;
+  c.fillRect(x + 12*S, y + 5*S, 4*S, 2*S);
+  c.fillRect(x + 12*S, y + 11*S, 4*S, 2*S);
+}
+
+function drawWaterCooler(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.coolerBody;
+  c.fillRect(x + S, y + 2*S, 12*S, 13*S);
+  c.fillStyle = P.coolerDark;
+  c.fillRect(x + S, y + 2*S, 12*S, 3*S);
+  c.fillStyle = P.coolerWater;
+  c.fillRect(x + 3*S, y, 8*S, 4*S);
+  c.fillStyle = '#aaa';
+  c.fillRect(x + 5*S, y + 10*S, 4*S, 2*S);
+  c.fillStyle = '#888';
+  c.fillRect(x + 6*S, y + 12*S, 2*S, 2*S);
+  c.fillStyle = P.coolerCup;
+  c.fillRect(x + 9*S, y + 12*S, 3*S, 3*S);
+  c.fillStyle = '#888';
+  c.fillRect(x + 2*S, y + 15*S, 2*S, 2*S);
+  c.fillRect(x + 10*S, y + 15*S, 2*S, 2*S);
+}
+
+function drawBookshelf(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  const w = 4 * TILE * S;
+  c.fillStyle = '#5B3D1B';
+  c.fillRect(x, y, w, 2 * TILE * S);
+  c.fillStyle = '#6B4D2B';
+  c.fillRect(x + S, y + S, w - 2*S, 2 * TILE * S - 2*S);
+  c.fillStyle = '#5B3D1B';
+  c.fillRect(x + S, y + TILE * S, w - 2*S, 2*S);
+  const topBooks = [P.bookR, P.bookB, P.bookG, P.bookP, P.bookY, P.bookO, P.bookR, P.bookB];
+  for (let i = 0; i < topBooks.length; i++) {
+    const bh = (6 + (i % 3) * 2) * S;
+    c.fillStyle = topBooks[i];
+    c.fillRect(x + (3 + i * 7) * S, y + TILE * S - bh - S, 5*S, bh);
+    c.fillStyle = 'rgba(0,0,0,0.15)';
+    c.fillRect(x + (3 + i * 7) * S, y + TILE * S - bh - S, S, bh);
+  }
+  const botBooks = [P.bookG, P.bookO, P.bookP, P.bookB, P.bookY, P.bookR];
+  for (let i = 0; i < botBooks.length; i++) {
+    const bh = (5 + (i % 4) * 2) * S;
+    c.fillStyle = botBooks[i];
+    c.fillRect(x + (4 + i * 9) * S, y + 2 * TILE * S - bh - S, 6*S, bh);
+  }
+}
+
+function drawCouch(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  const w = 3 * TILE * S;
+  c.fillStyle = P.couchB;
+  c.fillRect(x, y, w, TILE * S);
+  c.fillStyle = P.couchA;
+  c.fillRect(x + S, y + S, w - 2*S, TILE * S - 3*S);
+  c.fillStyle = P.couchB;
+  c.fillRect(x + w/2 - S, y + 3*S, 2*S, TILE * S - 6*S);
+  c.fillStyle = P.couchB;
+  c.fillRect(x - 2*S, y + 2*S, 3*S, TILE * S - 4*S);
+  c.fillRect(x + w - S, y + 2*S, 3*S, TILE * S - 4*S);
+  c.fillStyle = P.couchPillow;
+  c.fillRect(x + 3*S, y + 3*S, 8*S, 6*S);
+  c.fillRect(x + w - 13*S, y + 4*S, 7*S, 5*S);
+}
+
+function drawCoffeeTable(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.deskEdge;
+  c.fillRect(x, y, 2.5 * TILE * S, 0.8 * TILE * S);
+  c.fillStyle = P.deskTop;
+  c.fillRect(x, y + S, 2.5 * TILE * S, 0.8 * TILE * S - 2*S);
+  c.fillStyle = P.deskLeg;
+  c.fillRect(x + 2*S, y + 0.8 * TILE * S, 2*S, 3*S);
+  c.fillRect(x + 2.5 * TILE * S - 4*S, y + 0.8 * TILE * S, 2*S, 3*S);
+}
+
+function drawPizzaBox(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.pizzaBox;
+  c.fillRect(x, y - 6*S, 10*S, 8*S);
+  c.fillStyle = '#b88833';
+  c.fillRect(x, y - 6*S, 10*S, 2*S);
+  c.fillStyle = P.pizzaCheese;
+  c.fillRect(x + S, y - 4*S, 8*S, 5*S);
+  c.fillStyle = P.pizzaSauce;
+  c.fillRect(x + 3*S, y - 3*S, 2*S, 2*S);
+  c.fillRect(x + 6*S, y - 2*S, 2*S, 2*S);
+}
+
+function drawSodaCans(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.sodaCan;
+  c.fillRect(x, y - 4*S, 4*S, 6*S);
+  c.fillStyle = '#eee';
+  c.fillRect(x, y - 4*S, 4*S, 2*S);
+  c.fillStyle = P.sodaCanB;
+  c.fillRect(x + 5*S, y - 4*S, 4*S, 6*S);
+  c.fillStyle = '#eee';
+  c.fillRect(x + 5*S, y - 4*S, 4*S, 2*S);
+}
+
+function drawSnackMachine(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = '#3a3848';
+  c.fillRect(x, y, 2 * TILE * S, 3 * TILE * S);
+  c.fillStyle = '#2a2838';
+  c.fillRect(x + S, y + S, 2 * TILE * S - 2*S, 2 * TILE * S);
+  c.fillStyle = 'rgba(40,50,80,0.5)';
+  c.fillRect(x + 2*S, y + 2*S, 2 * TILE * S - 4*S, 1.5 * TILE * S);
+  const snackColors = ['#cc8833', '#44aa44', '#cc4444', '#4488cc', '#ddaa44', '#aa44aa'];
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 3; col++) {
+      c.fillStyle = snackColors[(row * 3 + col) % snackColors.length];
+      c.fillRect(x + (3 + col * 8) * S, y + (3 + row * 7) * S, 6*S, 5*S);
+    }
+  }
+  c.fillStyle = '#888';
+  c.fillRect(x + 24*S, y + 10*S, 4*S, 6*S);
+  c.fillStyle = '#1a1a22';
+  c.fillRect(x + 2*S, y + 2 * TILE * S + 2*S, 2 * TILE * S - 4*S, 8*S);
+}
+
+function drawPhotoFrame(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.photoFrame;
+  c.fillRect(x, y, 10*S, 10*S);
+  c.fillStyle = P.photoImage;
+  c.fillRect(x + S, y + S, 8*S, 8*S);
+  c.fillStyle = 'rgba(255,255,255,0.1)';
+  c.fillRect(x + 2*S, y + 2*S, 3*S, 3*S);
+}
+
+function drawNeonSign(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = 'rgba(139,92,246,0.06)';
+  c.fillRect(x - 4*S, y - 2*S, 3.5 * TILE * S + 8*S, TILE * S + 4*S);
+  c.font = `bold ${7 * S}px 'Courier New', monospace`;
+  c.fillStyle = P.neonPurple;
+  c.fillText(window._pf_title || 'PIXELFLOOR', x, y + 10*S);
+}
+
+function drawTrashCan(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.trash;
+  c.fillRect(x + S, y + 4*S, 8*S, 10*S);
+  c.fillStyle = P.trashLiner;
+  c.fillRect(x + 2*S, y + 3*S, 6*S, 3*S);
+  c.fillStyle = '#555';
+  c.fillRect(x, y + 3*S, 10*S, 2*S);
+}
+
+function drawFloorLamp(c, tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  c.fillStyle = P.lampBase;
+  c.fillRect(x + 4*S, y + 14*S, 6*S, 2*S);
+  c.fillStyle = P.lampBase;
+  c.fillRect(x + 6*S, y + 4*S, 2*S, 10*S);
+  c.fillStyle = P.lampShade;
+  c.fillRect(x + 2*S, y, 10*S, 5*S);
+  c.fillStyle = '#d0c078';
+  c.fillRect(x + 3*S, y + S, 8*S, 3*S);
+}
+
+</script>
+<script>
+// ============================================================
+// PART 3 — Animation, Particles, Agents, State Machine, Game Loop
+// ============================================================
+// Depends on globals from part1.js:
+//   ctx, canvas, bgCanvas, S, TILE, COLS, ROWS, CANVAS_W, CANVAS_H,
+//   P, AGENTS, FLOW_PATHS, SPEECHES, DEFAULT_SPEECHES, DESK_LAYOUT,
+//   dataParticles, ambientParticles, CLICKABLES,
+//   tick, flashActive, flashTimer, hoveredAgent, mouseX, mouseY,
+//   dayNightPhase, bgDirty, totalMetric, eventCount,
+//   spriteCache, blitSprite, sidePanelOpen, sidePanelAgent, activityLog
+// Depends on part2.js: drawBackground()
+
+// ============================================================
+// PARTICLE SYSTEM — Data flow + ambient dust
+// ============================================================
+
+function spawnDataParticle(pathKey) {
+  const path = FLOW_PATHS[pathKey];
+  if (!path) return;
+  const fromA = AGENTS[path.from];
+  const toA = AGENTS[path.to];
+  if (!fromA || !toA) return;
+  // Calculate pixel positions (center of agent)
+  const sx = (fromA.x + 0.5) * TILE * S;
+  const sy = (fromA.y + 0.5) * TILE * S;
+  const ex = (toA.x + 0.5) * TILE * S;
+  const ey = (toA.y + 0.5) * TILE * S;
+  // Add control point for curved path through corridor
+  const mx = (sx + ex) / 2 + (Math.random() - 0.5) * TILE * S * 3;
+  const my = (sy + ey) / 2 + (Math.random() - 0.5) * TILE * S * 2;
+  dataParticles.push({
+    sx, sy, ex, ey, mx, my,
+    t: 0, speed: 0.008 + Math.random() * 0.006,
+    colorA: path.color, colorB: path.colorB,
+    size: 2 + Math.random() * 2,
+    trail: [],
+  });
+}
+
+function spawnAmbientParticle() {
+  if (ambientParticles.length > 40) return;
+  ambientParticles.push({
+    x: Math.random() * CANVAS_W,
+    y: Math.random() * CANVAS_H,
+    vx: (Math.random() - 0.5) * 0.3,
+    vy: -0.1 - Math.random() * 0.2,
+    life: 200 + Math.random() * 400,
+    maxLife: 200 + Math.random() * 400,
+    size: 0.5 + Math.random() * 1.5,
+    color: Math.random() > 0.5 ? 'rgba(255,240,200,' : 'rgba(180,180,220,',
+  });
+}
+
+function updateParticles() {
+  // Data flow particles
+  for (let i = dataParticles.length - 1; i >= 0; i--) {
+    const p = dataParticles[i];
+    p.t += p.speed;
+    // Quadratic bezier interpolation
+    const t = p.t;
+    const it = 1 - t;
+    p.x = it*it*p.sx + 2*it*t*p.mx + t*t*p.ex;
+    p.y = it*it*p.sy + 2*it*t*p.my + t*t*p.ey;
+    // Store trail
+    p.trail.push({x: p.x, y: p.y});
+    if (p.trail.length > 12) p.trail.shift();
+    if (p.t >= 1) dataParticles.splice(i, 1);
+  }
+  // Ambient particles
+  for (let i = ambientParticles.length - 1; i >= 0; i--) {
+    const p = ambientParticles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+    if (p.life <= 0 || p.y < 0 || p.x < 0 || p.x > CANVAS_W) {
+      ambientParticles.splice(i, 1);
+    }
+  }
+  // Spawn ambient
+  if (tick % 8 === 0) spawnAmbientParticle();
+}
+
+function drawParticles() {
+  // Data flow particles with trails
+  for (const p of dataParticles) {
+    // Trail
+    for (let i = 0; i < p.trail.length; i++) {
+      const alpha = (i / p.trail.length) * 0.5;
+      const size = p.size * (i / p.trail.length);
+      // Interpolate color
+      ctx.fillStyle = p.t < 0.5 ? p.colorA : p.colorB;
+      ctx.globalAlpha = alpha;
+      ctx.fillRect(p.trail[i].x - size*S/2, p.trail[i].y - size*S/2, size*S, size*S);
+    }
+    // Head
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = p.t < 0.5 ? p.colorA : p.colorB;
+    ctx.fillRect(p.x - p.size*S/2, p.y - p.size*S/2, p.size*S, p.size*S);
+    // Glow
+    ctx.globalAlpha = 0.15;
+    ctx.fillRect(p.x - p.size*S, p.y - p.size*S, p.size*S*2, p.size*S*2);
+  }
+  // Ambient dust particles
+  for (const p of ambientParticles) {
+    const alpha = Math.min(p.life / p.maxLife, (p.maxLife - p.life) / 60) * 0.3;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color + '1)';
+    ctx.fillRect(p.x, p.y, p.size * S, p.size * S);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ============================================================
+// ANIMATED ENVIRONMENT
+// ============================================================
+
+function drawAnimatedEnvironment() {
+  // --- Monitors with animated content (built dynamically from AGENTS + DESK_LAYOUT) ---
+  const agentIds = Object.keys(AGENTS);
+  for (let i = 0; i < agentIds.length; i++) {
+    const a = AGENTS[agentIds[i]];
+    const desk = DESK_LAYOUT[i];
+    if (!desk) continue;
+    const isOn = a.state === 'working' || a.state === 'celebrating';
+    drawMonitor(desk.deskX + 1, desk.deskY - 0.5, isOn);
+    // Second monitor for position 4 (the big analysis desk)
+    if (i === 4) drawMonitor(desk.deskX + 3, desk.deskY - 0.5, isOn);
+  }
+
+  // --- Coffee steam ---
+  const steamPhase = tick % 80;
+  if (steamPhase < 50) {
+    const mx = 11 * TILE * S, my = 3.1 * TILE * S;
+    ctx.fillStyle = P.mugSteam;
+    ctx.fillRect(mx + 2*S, my + (2 - Math.sin(tick * 0.1))*S, S, 3*S);
+    ctx.fillRect(mx + 4*S, my + (1 - Math.cos(tick * 0.08))*S, S, 2*S);
+  }
+  if (steamPhase < 60) {
+    const mx = 7 * TILE * S, my = 15 * TILE * S;
+    ctx.fillStyle = P.mugSteam;
+    ctx.fillRect(mx + 2*S, my + (2 - Math.sin(tick * 0.12))*S, S, 3*S);
+    ctx.fillRect(mx + 4*S, my + (1 - Math.cos(tick * 0.1))*S, S, 2*S);
+  }
+
+  // --- Window glow (day/night cycle) ---
+  const hour = new Date().getHours();
+  dayNightPhase = hour >= 6 && hour < 20 ? 0.7 + Math.sin((hour - 6) / 14 * Math.PI) * 0.3 : 0.15;
+  const windowPairs = [[5,6],[12,13],[26,27],[33,34]];
+  for (const [a,b] of windowPairs) {
+    for (const wx of [a,b]) {
+      const brightness = dayNightPhase;
+      ctx.fillStyle = `rgba(100,140,200,${brightness * 0.25})`;
+      ctx.fillRect(wx * TILE * S + 3*S, 4*S, TILE * S - 6*S, 2 * TILE * S - 8*S);
+      if (brightness > 0.5) {
+        ctx.fillStyle = `rgba(255,240,200,${(brightness - 0.5) * 0.15})`;
+        ctx.fillRect(wx * TILE * S + 4*S, 5*S, 2*S, 4*S);
+      }
+    }
+  }
+
+  // --- Window LIGHT BEAMS on floor ---
+  if (dayNightPhase > 0.3) {
+    const beamAlpha = (dayNightPhase - 0.3) * 0.04;
+    for (const [a,b] of windowPairs) {
+      for (const wx of [a,b]) {
+        // Diagonal light beam from window to floor
+        ctx.fillStyle = `rgba(255,240,200,${beamAlpha})`;
+        const bx = wx * TILE * S;
+        // Light patch on floor below window
+        for (let i = 0; i < 5; i++) {
+          const fy = (3 + i) * TILE * S;
+          const fx = bx - i * 3 * S;
+          const fw = TILE * S + i * 2 * S;
+          ctx.fillRect(fx, fy, fw, TILE * S);
+        }
+      }
+    }
+  }
+
+  // --- Floor lamp glow ---
+  const lampGlow = 0.5 + Math.sin(tick * 0.03) * 0.15;
+  ctx.fillStyle = `rgba(255,240,180,${lampGlow * 0.06})`;
+  ctx.fillRect(11 * TILE * S, 6 * TILE * S, 3 * TILE * S, 4 * TILE * S);
+
+  // --- Monitor glow halos ---
+  drawMonitorGlow();
+
+  // --- Ticker board ---
+  drawTickerBoard(33, 2);
+
+  // --- Flash alarm ---
+  if (flashActive) drawFlashAlarm(16, 3);
+
+  // --- Neon sign glow pulse ---
+  const neonPulse = 0.5 + Math.sin(tick * 0.04) * 0.2;
+  ctx.fillStyle = `rgba(139,92,246,${neonPulse * 0.04})`;
+  ctx.fillRect(15 * TILE * S, 0, 4 * TILE * S, 2 * TILE * S);
+}
+
+function drawMonitorGlow() {
+  // Screen glow illuminates nearby area when monitors are on
+  // Build monitor positions dynamically from AGENTS + DESK_LAYOUT
+  const monitorPositions = [];
+  const agentIds = Object.keys(AGENTS);
+  for (let i = 0; i < agentIds.length; i++) {
+    const desk = DESK_LAYOUT[i];
+    if (!desk) continue;
+    monitorPositions.push({ tx: desk.deskX + 1, ty: desk.deskY - 0.5, agent: agentIds[i] });
+    // Second monitor for position 4 (big analysis desk)
+    if (i === 4) {
+      monitorPositions.push({ tx: desk.deskX + 3, ty: desk.deskY - 0.5, agent: agentIds[i] });
+    }
+  }
+  for (const m of monitorPositions) {
+    const a = AGENTS[m.agent];
+    if (a.state === 'working' || a.state === 'celebrating') {
+      const x = m.tx * TILE * S;
+      const y = m.ty * TILE * S;
+      const pulse = 0.8 + Math.sin(tick * 0.05 + m.tx) * 0.2;
+      ctx.fillStyle = `rgba(34,197,94,${0.03 * pulse})`;
+      ctx.fillRect(x - 8*S, y - 4*S, 32*S, 28*S);
+    }
+  }
+}
+
+function drawMonitor(tx, ty, isOn) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  ctx.fillStyle = P.monBezel;
+  ctx.fillRect(x - 2*S, y - S, 16*S, 14*S);
+  ctx.fillStyle = P.monFrame;
+  ctx.fillRect(x - S, y, 14*S, 12*S);
+  if (isOn) {
+    ctx.fillStyle = P.monScreen;
+    ctx.fillRect(x, y + S, 12*S, 9*S);
+    // Animated candlestick mini-chart
+    const seed = (tx * 7 + ty * 13) | 0;
+    const barW = S;
+    for (let i = 0; i < 10; i++) {
+      const bh = (2 + Math.sin(seed + i * 0.8 + tick * 0.03) * 2) * S;
+      const by = y + 8*S - bh;
+      const green = Math.sin(seed + i + tick * 0.02) > 0;
+      ctx.fillStyle = green ? '#22c55e' : '#ef4444';
+      ctx.fillRect(x + (S + i * S), by, barW, bh);
+      // Wick
+      ctx.fillRect(x + (S + i * S), by - S, 1, S);
+    }
+    // Scan line effect
+    const scanY = y + ((tick * 2) % (9 * S));
+    ctx.fillStyle = 'rgba(34,197,94,0.08)';
+    ctx.fillRect(x, scanY, 12*S, 2*S);
+    // Power LED
+    ctx.fillStyle = P.monLed;
+    ctx.fillRect(x + 5*S, y + 11*S, 2*S, S);
+  } else {
+    ctx.fillStyle = '#111118';
+    ctx.fillRect(x, y + S, 12*S, 9*S);
+    ctx.fillStyle = tick % 120 < 60 ? '#444' : '#333';
+    ctx.fillRect(x + 5*S, y + 11*S, 2*S, S);
+  }
+  // Stand
+  ctx.fillStyle = P.monStand;
+  ctx.fillRect(x + 4*S, y + 12*S, 4*S, 2*S);
+  ctx.fillStyle = P.monBase;
+  ctx.fillRect(x + 2*S, y + 14*S, 8*S, S);
+}
+
+function drawTickerBoard(tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  const w = 6 * TILE * S, h = 3 * TILE * S;
+  ctx.fillStyle = P.tickerBg;
+  ctx.fillRect(x - 4*S, y, w, h);
+  // Border color based on event activity
+  const borderColor = eventCount > 0 ? P.tickerGreen : '#555';
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x - 4*S, y, w, h);
+  ctx.fillStyle = eventCount > 0 ? 'rgba(34,197,94,0.04)' : 'rgba(100,100,100,0.04)';
+  ctx.fillRect(x - 2*S, y + 2, w - 4*S, h - 4);
+  // Event count text
+  ctx.font = `bold ${14 * S}px 'Courier New', monospace`;
+  ctx.fillStyle = eventCount > 0 ? P.tickerGreen : '#888';
+  ctx.textAlign = 'center';
+  const countText = `Events: ${totalMetric}`;
+  ctx.fillText(countText, x - 4*S + w/2, y + 22*S);
+  ctx.font = `${6 * S}px 'Courier New', monospace`;
+  ctx.fillStyle = '#555';
+  ctx.fillText('EVENTS', x - 4*S + w/2, y + 34*S);
+  ctx.textAlign = 'left';
+}
+
+function drawFlashAlarm(tx, ty) {
+  const x = tx * TILE * S, y = ty * TILE * S;
+  const blink = tick % 12 < 6;
+  ctx.fillStyle = blink ? '#cc0000' : '#660000';
+  ctx.fillRect(x, y, 3 * TILE * S, TILE * S);
+  ctx.strokeStyle = blink ? '#ff4444' : '#882222';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, 3 * TILE * S, TILE * S);
+  ctx.font = `bold ${7 * S}px 'Courier New', monospace`;
+  ctx.fillStyle = blink ? '#fff' : '#ccc';
+  ctx.textAlign = 'center';
+  ctx.fillText('FLASH', x + 1.5 * TILE * S, y + 11*S);
+  ctx.textAlign = 'left';
+  // Red glow
+  ctx.fillStyle = `rgba(200,0,0,${blink ? 0.06 : 0.02})`;
+  ctx.fillRect(x - TILE * S, y - TILE * S, 5 * TILE * S, 3 * TILE * S);
+  // Screen shake effect during flash (subtle)
+  if (blink && flashTimer > 500) {
+    ctx.fillStyle = 'rgba(200,0,0,0.02)';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  }
+}
+
+// ============================================================
+// AGENT DRAWING
+// ============================================================
+
+function drawAgent(agent, id) {
+  const px = agent.x * TILE * S;
+  const py = agent.y * TILE * S;
+
+  // Floor shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.fillRect(px + 2*S, py + 15*S, 12*S, 2*S);
+
+  // Sprite variant — use agent.sprite type, not agent id
+  let spriteKey;
+  if (agent.route?.length) spriteKey = agent.sprite + '_walk';
+  else if (agent.state === 'working') spriteKey = agent.sprite + '_work';
+  else if (agent.state === 'celebrating') spriteKey = agent.sprite + '_celebrate';
+  else spriteKey = agent.sprite + '_idle';
+
+  // Bobbing animation
+  let yOff = 0;
+  if (agent.state === 'working') yOff = Math.sin(tick * 0.15) * S * 0.7;
+  if (agent.state === 'celebrating') yOff = -Math.abs(Math.sin(tick * 0.2)) * S * 1.5;
+
+  // Agent glow when active
+  if (agent.state === 'working' || agent.state === 'celebrating') {
+    const glowPulse = 0.5 + Math.sin(tick * 0.1) * 0.3;
+    ctx.fillStyle = agent.color + Math.floor(glowPulse * 20).toString(16).padStart(2,'0');
+    ctx.fillRect(px - 2*S, py - 2*S + yOff, 20*S, 20*S);
+  }
+
+  blitSprite(spriteKey, px, py + yOff);
+
+  // Status indicator dot
+  const dotColors = { idle:'#555', working:'#22c55e', celebrating:'#f59e0b', error:'#ef4444' };
+  const dotColor = dotColors[agent.state] || '#555';
+  ctx.fillStyle = dotColor;
+  ctx.fillRect(px + 6*S, py - 4*S + yOff, 4*S, 2*S);
+  if (agent.state === 'working' || agent.state === 'celebrating') {
+    ctx.fillStyle = dotColor.replace(')', ',0.15)').replace('rgb', 'rgba');
+    if (!ctx.fillStyle.includes('rgba')) ctx.fillStyle = dotColor + '22';
+    ctx.fillRect(px + 3*S, py - 6*S + yOff, 10*S, 6*S);
+  }
+
+  // Name label below agent
+  ctx.font = `${3.5 * S}px 'Courier New', monospace`;
+  ctx.fillStyle = agent.state !== 'idle' ? agent.color : '#555';
+  ctx.textAlign = 'center';
+  ctx.fillText(agent.name, px + 8*S, py + 19*S);
+  ctx.textAlign = 'left';
+
+  // Speech bubble
+  if (agent.speechTimer > 0) {
+    drawSpeechBubble(px, py + yOff, agent.speech, agent.color);
+  }
+
+  // Error particles
+  if (agent.state === 'error') {
+    const phase = tick % 20;
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(px + 2*S + phase * S * 0.3, py - 5*S, 2*S, 2*S);
+    ctx.fillRect(px + 12*S - phase * S * 0.3, py - 3*S, 2*S, 2*S);
+  }
+
+  // Celebrating sparkles
+  if (agent.state === 'celebrating') {
+    const sparkles = ['#FFD700','#FFA500','#FF6347','#22c55e','#4A90D9','#8B5CF6'];
+    for (let i = 0; i < 6; i++) {
+      const sx = px + (3 + Math.sin(tick * 0.12 + i * 1.8) * 7) * S;
+      const sy = py + (-6 + Math.cos(tick * 0.15 + i * 2.5) * 5) * S;
+      ctx.fillStyle = sparkles[(tick + i * 7) % sparkles.length];
+      const sparkleSize = (tick + i * 3) % 10 < 5 ? S : S * 0.5;
+      ctx.fillRect(sx, sy, sparkleSize, sparkleSize);
+    }
+  }
+}
+
+function drawSpeechBubble(px, py, text, accentColor) {
+  ctx.font = `${4.5 * S}px 'Courier New', monospace`;
+  const metrics = ctx.measureText(text);
+  const bw = metrics.width + 10 * S;
+  const bh = 12 * S;
+  const bx = px + 8*S - bw/2;
+  const by = py - 18 * S;
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(bx + S, by + S, bw, bh);
+  // Background
+  ctx.fillStyle = '#12121e';
+  ctx.fillRect(bx, by, bw, bh);
+  // Accent border
+  ctx.fillStyle = accentColor || '#444';
+  ctx.fillRect(bx, by, bw, 2*S);
+  // Pointer
+  ctx.fillStyle = '#12121e';
+  ctx.fillRect(px + 6*S, by + bh, 3*S, 3*S);
+  // Text
+  ctx.fillStyle = '#ddd';
+  ctx.fillText(text, bx + 5*S, by + 9*S);
+}
+
+// ============================================================
+// AGENT STATE MACHINE
+// ============================================================
+
+function setAgentState(id, state, speech, duration) {
+  const a = AGENTS[id];
+  if (!a) return;
+  a.state = state;
+  a.stateTimer = duration || 300;
+  if (speech) {
+    a.speech = speech;
+    a.speechTimer = Math.min(duration || 300, 240);
+  }
+  // Track activity
+  a.eventCount = (a.eventCount || 0) + 1;
+  a.lastActive = new Date();
+  // Push to activity log
+  if (typeof activityLog !== 'undefined') {
+    activityLog.push({
+      time: new Date(),
+      agentId: id,
+      agentName: a.name,
+      state: state,
+      speech: speech || '',
+    });
+    // Keep log bounded
+    if (activityLog.length > 200) activityLog.splice(0, activityLog.length - 200);
+  }
+}
+
+function updateAgents() {
+  for (const [id, a] of Object.entries(AGENTS)) {
+    if (a.route?.length) {
+      const goal = a.route[0];
+      const dx = goal.x - a.x, dy = goal.y - a.y;
+      const step = 0.07, distance = Math.hypot(dx, dy);
+      if (distance <= step) {
+        a.x = goal.x; a.y = goal.y; a.route.shift();
+        if (!a.route.length && a.returnRoute) {
+          const back = a.returnRoute;
+          a.returnRoute = null;
+          setTimeout(() => { a.route = back; }, 900);
+        }
+      } else { a.x += dx / distance * step; a.y += dy / distance * step; }
+    }
+    if (a.stateTimer > 0) {
+      a.stateTimer--;
+      if (a.stateTimer <= 0 && a.state !== 'idle') {
+        a.state = 'idle';
+        if (!a.route?.length && !a.returnRoute) { a.x = a.deskX; a.y = a.deskY; }
+      }
+    }
+    if (a.speechTimer > 0) {
+      a.speechTimer--;
+      if (a.speechTimer <= 0) a.speech = '';
+    }
+    if (tick % 8 === 0) a.frame = (a.frame + 1) % 4;
+  }
+  if (flashTimer > 0) { flashTimer--; if (flashTimer <= 0) flashActive = false; }
+}
+
+function randomSpeech(agentId, category) {
+  // Try agent-specific speeches first, then fall back to defaults
+  if (SPEECHES[agentId] && SPEECHES[agentId][category]) {
+    const arr = SPEECHES[agentId][category];
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+  if (DEFAULT_SPEECHES[category]) {
+    const arr = DEFAULT_SPEECHES[category];
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+  return '';
+}
+
+// ============================================================
+// IDLE BEHAVIORS — Generic for any agent configuration
+// ============================================================
+
+function idleBehaviors() {
+  // Iterate all agents and randomly trigger idle speech/work
+  const agentEntries = Object.entries(AGENTS);
+  for (let i = 0; i < agentEntries.length; i++) {
+    const [id, agent] = agentEntries[i];
+    // Each agent gets a slightly different tick interval (600-960 range, staggered)
+    const interval = 600 + (i * 40);
+    if (tick % interval === 0 && agent.state === 'idle') {
+      const chance = 0.3 + Math.random() * 0.1; // 30-40% chance
+      if (Math.random() < chance) {
+        // Pick between idle speech or brief work
+        if (Math.random() < 0.4) {
+          // Brief work animation
+          const speech = randomSpeech(id, 'working');
+          setAgentState(id, 'working', speech || 'Working...', 200 + Math.floor(Math.random() * 60));
+        } else {
+          // Just show idle speech bubble
+          const speech = randomSpeech(id, 'idle');
+          if (speech) {
+            agent.speech = speech;
+            agent.speechTimer = 180;
+          }
+        }
+      }
+    }
+  }
+
+  // Spawn idle data flow particles occasionally to show the system is alive
+  if (tick % 300 === 0 && Math.random() < 0.3) {
+    const paths = Object.keys(FLOW_PATHS);
+    if (paths.length > 0) {
+      spawnDataParticle(paths[Math.floor(Math.random() * paths.length)]);
+    }
+  }
+}
+
+// ============================================================
+// MOUSE INTERACTION
+// ============================================================
+
+canvas.addEventListener('mousemove', function(e) {
+  var rect = canvas.getBoundingClientRect();
+  var scaleX = canvas.width / rect.width;
+  var scaleY = canvas.height / rect.height;
+  mouseX = (e.clientX - rect.left) * scaleX;
+  mouseY = (e.clientY - rect.top) * scaleY;
+
+  hoveredAgent = null;
+  for (var _e of Object.entries(AGENTS)) {
+    var _id = _e[0], _a = _e[1];
+    var ax = _a.x * TILE * S, ay = _a.y * TILE * S;
+    if (mouseX >= ax && mouseX <= ax + 16*S && mouseY >= ay && mouseY <= ay + 16*S) {
+      hoveredAgent = _id;
+      break;
+    }
+  }
+
+  var tooltip = document.getElementById('tooltip');
+  if (hoveredAgent) {
+    var a = AGENTS[hoveredAgent];
+    var stateLabel = {idle:'Idle',working:'Working',celebrating:'Active!',error:'Error'}[a.state]||a.state;
+    var stateColor = {idle:'#888',working:'#22c55e',celebrating:'#f59e0b',error:'#ef4444'}[a.state]||'#888';
+    var ttContent = '<span class="tt-name" style="color:' + a.color + '">' + a.name + '</span> ' +
+      '<span class="tt-role">' + a.role + '</span>' +
+      '<div class="tt-status" style="color:' + stateColor + '">' + stateLabel +
+      (a.speech ? ': "' + a.speech + '"' : '') + '</div>';
+    tooltip.innerHTML = ttContent;  // Safe: only internal agent data, no user input
+    tooltip.style.display = 'block';
+    tooltip.style.left = e.clientX + 12 + 'px';
+    tooltip.style.top = e.clientY - 10 + 'px';
+    canvas.style.cursor = 'pointer';
+  } else {
+    var overItem = false;
+    for (var item of CLICKABLES) {
+      if (mouseX >= item.x && mouseX <= item.x + item.w && mouseY >= item.y && mouseY <= item.y + item.h) {
+        var itemContent = '<span class="tt-name">' + item.name + '</span>' +
+          '<div class="tt-status" style="color:#888">' + item.hint + '</div>';
+        tooltip.innerHTML = itemContent;  // Safe: only internal config data
+        tooltip.style.display = 'block';
+        tooltip.style.left = e.clientX + 12 + 'px';
+        tooltip.style.top = e.clientY - 10 + 'px';
+        canvas.style.cursor = 'pointer';
+        overItem = true;
+        break;
+      }
+    }
+    if (!overItem) {
+      tooltip.style.display = 'none';
+      canvas.style.cursor = 'default';
+    }
+  }
+});
+
+canvas.addEventListener('mouseleave', function() {
+  document.getElementById('tooltip').style.display = 'none';
+  hoveredAgent = null;
+  canvas.style.cursor = 'default';
+});
+
+canvas.addEventListener('click', function(e) {
+  var rect = canvas.getBoundingClientRect();
+  var scaleX = canvas.width / rect.width;
+  var scaleY = canvas.height / rect.height;
+  var cx = (e.clientX - rect.left) * scaleX;
+  var cy = (e.clientY - rect.top) * scaleY;
+
+  if (hoveredAgent) {
+    if (_pf_config?.externalEvents && window.parent !== window)
+      window.parent.postMessage({type:'pixelfloor-agent',agentId:hoveredAgent}, window.location.origin);
+    else openSidePanel(hoveredAgent);
+    return;
+  }
+
+  for (var item of CLICKABLES) {
+    if (cx >= item.x && cx <= item.x + item.w && cy >= item.y && cy <= item.y + item.h) {
+      if (item.action && !_pf_config?.externalEvents) item.action();
+      return;
+    }
+  }
+});
+
+// ============================================================
+// CLICKABLE OBJECTS
+// ============================================================
+
+function registerClickables() {
+  CLICKABLES.length = 0;
+
+  // Water cooler
+  CLICKABLES.push({
+    x: 20 * TILE * S, y: 10 * TILE * S, w: 2 * TILE * S, h: 2 * TILE * S,
+    name: 'Water Cooler', hint: 'Click for a drink!',
+    action: function() {
+      var idle = Object.entries(AGENTS).filter(function(e) { return e[1].state === 'idle'; });
+      if (idle.length > 0) {
+        var picked = idle[Math.floor(Math.random() * idle.length)];
+        setAgentState(picked[0], 'celebrating', '*glug glug*', 240);
+      }
+    }
+  });
+
+  // Pizza
+  CLICKABLES.push({
+    x: 16.5 * TILE * S, y: 21 * TILE * S - 6*S, w: 10*S, h: 10*S,
+    name: 'Pizza', hint: 'Click to share!',
+    action: function() {
+      for (var _e of Object.entries(AGENTS)) {
+        var a = _e[1];
+        if (a.state === 'idle' && Math.random() < 0.5) {
+          a.speech = 'Pizza!'; a.speechTimer = 180;
+        }
+      }
+    }
+  });
+
+  // Snack machine
+  CLICKABLES.push({
+    x: 20 * TILE * S, y: 18 * TILE * S, w: 2 * TILE * S, h: 3 * TILE * S,
+    name: 'Snack Machine', hint: 'Click for a snack!',
+    action: function() {
+      var idle = Object.entries(AGENTS).filter(function(e) { return e[1].state === 'idle'; });
+      if (idle.length > 0) {
+        var picked = idle[Math.floor(Math.random() * idle.length)];
+        var snacks = ['Got chips!', 'Candy bar!', 'Granola!', 'Energy drink!', 'Trail mix!'];
+        setAgentState(picked[0], 'celebrating', snacks[Math.floor(Math.random() * snacks.length)], 240);
+      }
+    }
+  });
+
+  // Break room couch
+  CLICKABLES.push({
+    x: 15.5 * TILE * S, y: 19 * TILE * S, w: 3 * TILE * S, h: TILE * S,
+    name: 'Break Room Couch', hint: 'Click to take a break!',
+    action: function() {
+      var idle = Object.entries(AGENTS).filter(function(e) { return e[1].state === 'idle'; });
+      if (idle.length > 0) {
+        var picked = idle[Math.floor(Math.random() * idle.length)];
+        setAgentState(picked[0], 'celebrating', 'Break time!', 300);
+      }
+    }
+  });
+
+  // Whiteboard — shows a toast and sets a random agent to working
+  CLICKABLES.push({
+    x: 8 * TILE * S, y: 7 * TILE * S, w: 5 * TILE * S, h: 1.2 * TILE * S,
+    name: 'Whiteboard', hint: 'Click to view the research board!',
+    action: function() {
+      toast('Research board!', 'info');
+      var idle = Object.entries(AGENTS).filter(function(e) { return e[1].state === 'idle'; });
+      if (idle.length > 0) {
+        var picked = idle[Math.floor(Math.random() * idle.length)];
+        setAgentState(picked[0], 'working', 'Checking the board...', 300);
+      }
+    }
+  });
+
+  // Alarm panel — triggers flash + pipeline particles
+  CLICKABLES.push({
+    x: 16 * TILE * S, y: 3 * TILE * S, w: 3 * TILE * S, h: TILE * S,
+    name: 'Alert Panel', hint: 'Click to test alarm!',
+    action: function() {
+      flashActive = true; flashTimer = 180;
+      // Pick two random agents to activate
+      var agentIds = Object.keys(AGENTS);
+      if (agentIds.length >= 2) {
+        var shuffled = agentIds.slice().sort(function() { return Math.random() - 0.5; });
+        setAgentState(shuffled[0], 'working', 'Test alert!', 180);
+        setAgentState(shuffled[1], 'celebrating', 'FLASH test!', 180);
+      }
+      // Spawn particles through the pipeline
+      var paths = Object.keys(FLOW_PATHS);
+      if (paths.length > 0) {
+        spawnDataParticle(paths[0]);
+        if (paths.length > 1) spawnDataParticle(paths[1]);
+        setTimeout(function() {
+          if (paths.length > 2) spawnDataParticle(paths[2]);
+        }, 500);
+        setTimeout(function() {
+          if (paths.length > 3) spawnDataParticle(paths[3]);
+          if (paths.length > 4) spawnDataParticle(paths[4]);
+        }, 1000);
+      }
+    }
+  });
+}
+
+// ============================================================
+// GAME LOOP
+// ============================================================
+
+function gameLoop() {
+  tick++;
+  updateAgents();
+  updateParticles();
+  if (!_pf_config?.externalEvents) idleBehaviors();
+
+  if (bgDirty) { drawBackground(); bgDirty = false; }
+  ctx.drawImage(bgCanvas, 0, 0);
+
+  drawAnimatedEnvironment();
+
+  // Draw data flow particles (behind agents)
+  drawParticles();
+
+  // Draw agents sorted by Y
+  const sorted = Object.entries(AGENTS).sort((a, b) => a[1].y - b[1].y);
+  for (const [id, agent] of sorted) {
+    drawAgent(agent, id);
+  }
+
+  // Hover highlight
+  if (hoveredAgent) {
+    const a = AGENTS[hoveredAgent];
+    const px = a.x * TILE * S, py = a.y * TILE * S;
+    ctx.strokeStyle = a.color;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px - S, py - S, 16*S + 2*S, 16*S + 2*S);
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+</script>
+<script>
+// ============================================================
+// PixelFloor — Part 4
+// Side Panel, Bottom Panel, Toasts, WebSocket, Demo Mode,
+// Public API, Keyboard Shortcuts, and Boot Sequence
+// ============================================================
+
+// ────────────────────────────────────────────────────────────
+// 1. Side Panel Functions
+// ────────────────────────────────────────────────────────────
+
+function openSidePanel(agentId) {
+  const a = AGENTS[agentId];
+  if (!a) return;
+  sidePanelAgent = agentId;
+  sidePanelOpen = true;
+  document.getElementById('sp-name').textContent = a.name;
+  document.getElementById('sp-name').style.color = a.color;
+  document.getElementById('sp-role').textContent = a.role;
+  // Draw sprite into header icon
+  const iconCanvas = document.getElementById('sp-icon');
+  const ic = iconCanvas.getContext('2d');
+  ic.imageSmoothingEnabled = false;
+  ic.clearRect(0, 0, 32, 32);
+  const spr = spriteCache[a.sprite + '_idle'];
+  if (spr) ic.drawImage(spr, 0, 0, 32, 32);
+  // Reaction
+  if (a.state === 'idle') setAgentState(agentId, 'working', 'Showing data!', 300);
+  loadPanelContent(agentId);
+  document.getElementById('side-panel').classList.add('open');
+}
+
+function closeSidePanel() {
+  sidePanelOpen = false;
+  sidePanelAgent = null;
+  document.getElementById('side-panel').classList.remove('open');
+}
+
+function loadPanelContent(agentId) {
+  const body = document.getElementById('sp-body');
+  const a = AGENTS[agentId];
+  // Clear previous content safely
+  while (body.firstChild) body.removeChild(body.firstChild);
+
+  // Status section
+  const statusSec = buildSection('Status', '');
+  const stats = document.createElement('div');
+  stats.appendChild(buildStatRow('State', a.state.toUpperCase(),
+    {idle:'#888', working:'#22c55e', celebrating:'#f59e0b', error:'#ef4444'}[a.state]));
+  stats.appendChild(buildStatRow('Events Processed', String(a.eventCount)));
+  stats.appendChild(buildStatRow('Sprite Type', a.sprite));
+  stats.appendChild(buildStatRow('Desk Position', a.deskX + ', ' + a.deskY));
+  if (a.lastActive) stats.appendChild(buildStatRow('Last Active', timeAgo(a.lastActive)));
+  statusSec.querySelector('.sp-section-title').after(stats);
+  body.appendChild(statusSec);
+
+  // Connections section
+  const connections = [];
+  for (const [key, flow] of Object.entries(FLOW_PATHS)) {
+    if (flow.from === agentId) connections.push('\u2192 ' + (AGENTS[flow.to]?.name || flow.to));
+    if (flow.to === agentId) connections.push('\u2190 ' + (AGENTS[flow.from]?.name || flow.from));
+  }
+  if (connections.length) {
+    const connDiv = document.createElement('div');
+    connections.forEach(c => {
+      const d = document.createElement('div');
+      d.style.cssText = 'padding:2px 0;color:#888';
+      d.textContent = c;
+      connDiv.appendChild(d);
+    });
+    body.appendChild(buildSection('Data Flows', connDiv));
+  }
+
+  // Activity log for this agent
+  const agentActivity = activityLog.filter(e => e.agentId === agentId).slice(-20);
+  if (agentActivity.length) {
+    const actDiv = document.createElement('div');
+    agentActivity.reverse().forEach(ev => {
+      const item = document.createElement('div');
+      item.className = 'sp-event-item';
+      item.style.borderLeftColor = a.color;
+      const time = document.createElement('span');
+      time.style.cssText = 'color:#555;font-size:10px;margin-right:6px';
+      time.textContent = timeAgo(ev.time);
+      item.appendChild(time);
+      item.appendChild(document.createTextNode(ev.state + (ev.speech ? ': ' + ev.speech : '')));
+      actDiv.appendChild(item);
+    });
+    body.appendChild(buildSection('Recent Activity', actDiv));
+  } else {
+    body.appendChild(buildSection('Recent Activity', buildEmpty('No activity yet')));
+  }
+}
+
+function buildSection(title, content) {
+  const sec = document.createElement('div');
+  sec.className = 'sp-section';
+  const h = document.createElement('div');
+  h.className = 'sp-section-title';
+  h.textContent = title;
+  sec.appendChild(h);
+  if (typeof content === 'string') {
+    const d = document.createElement('div');
+    d.textContent = content;
+    sec.appendChild(d);
+  } else if (content) {
+    sec.appendChild(content);
+  }
+  return sec;
+}
+
+function buildStatRow(label, value, color) {
+  const row = document.createElement('div');
+  row.className = 'sp-stat-row';
+  const l = document.createElement('span');
+  l.className = 'sp-stat-label';
+  l.textContent = label;
+  const v = document.createElement('span');
+  v.className = 'sp-stat-value';
+  v.textContent = value;
+  if (color) v.style.color = color;
+  row.appendChild(l);
+  row.appendChild(v);
+  return row;
+}
+
+function buildEmpty(msg) {
+  const d = document.createElement('div');
+  d.className = 'sp-empty';
+  d.textContent = msg;
+  return d;
+}
+
+function timeAgo(ts) {
+  if (!ts) return '--';
+  const d = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (d < 60) return d + 's ago';
+  if (d < 3600) return Math.floor(d / 60) + 'm ago';
+  if (d < 86400) return Math.floor(d / 3600) + 'h ago';
+  return Math.floor(d / 86400) + 'd ago';
+}
+
+// ────────────────────────────────────────────────────────────
+// 2. Bottom Panel Functions
+// ────────────────────────────────────────────────────────────
+
+function switchBottomTab(btn, tabId) {
+  document.querySelectorAll('.btab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(tabId).classList.add('active');
+  if (tabId === 'tab-agents') loadAgentsTab();
+  if (tabId === 'tab-activity') loadActivityTab();
+}
+
+function loadAgentsTab() {
+  const el = document.getElementById('agents-content');
+  // Clear previous content safely
+  while (el.firstChild) el.removeChild(el.firstChild);
+  for (const [id, a] of Object.entries(AGENTS)) {
+    const row = document.createElement('div');
+    row.className = 'agent-row';
+    row.onclick = () => openSidePanel(id);
+    const dot = document.createElement('div');
+    dot.className = 'agent-dot';
+    dot.style.background = {idle:'#555', working:'#22c55e', celebrating:'#f59e0b', error:'#ef4444'}[a.state] || '#555';
+    const name = document.createElement('span');
+    name.className = 'agent-name';
+    name.style.color = a.color;
+    name.textContent = a.name;
+    const role = document.createElement('span');
+    role.className = 'agent-role';
+    role.textContent = a.role;
+    const status = document.createElement('span');
+    status.className = 'agent-status';
+    status.style.color = {idle:'#555', working:'#22c55e', celebrating:'#f59e0b', error:'#ef4444'}[a.state] || '#555';
+    status.textContent = a.state;
+    const evts = document.createElement('span');
+    evts.style.color = '#444';
+    evts.textContent = a.eventCount + ' events';
+    row.appendChild(dot);
+    row.appendChild(name);
+    row.appendChild(role);
+    row.appendChild(status);
+    row.appendChild(evts);
+    el.appendChild(row);
+  }
+}
+
+function loadActivityTab() {
+  const el = document.getElementById('activity-content');
+  // Clear previous content safely
+  while (el.firstChild) el.removeChild(el.firstChild);
+  const recent = activityLog.slice(-30).reverse();
+  if (!recent.length) { el.appendChild(buildEmpty('No activity yet')); return; }
+  recent.forEach(ev => {
+    const item = document.createElement('div');
+    item.style.cssText = 'padding:2px 0;border-bottom:1px solid #111';
+    const time = document.createElement('span');
+    time.style.cssText = 'color:#444;margin-right:6px;font-size:10px';
+    time.textContent = timeAgo(ev.time);
+    const agent = document.createElement('span');
+    agent.style.cssText = 'font-weight:bold;margin-right:6px;color:' + (AGENTS[ev.agentId]?.color || '#888');
+    agent.textContent = AGENTS[ev.agentId]?.name || ev.agentId;
+    const state = document.createElement('span');
+    const stateColors = {working:'#22c55e', celebrating:'#f59e0b', error:'#ef4444', idle:'#555'};
+    state.style.color = stateColors[ev.state] || '#888';
+    state.textContent = ev.state + (ev.speech ? ': ' + ev.speech : '');
+    item.appendChild(time);
+    item.appendChild(agent);
+    item.appendChild(state);
+    el.appendChild(item);
+  });
+}
+
+// ────────────────────────────────────────────────────────────
+// 3. Toast Notifications
+// ────────────────────────────────────────────────────────────
+
+function toast(msg, type) {
+  const c = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast ' + (type || 'info');
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 4000);
+}
+
+// ────────────────────────────────────────────────────────────
+// 4. Log Feed
+// ────────────────────────────────────────────────────────────
+
+function addLogLine(text, type) {
+  const feed = document.getElementById('log-feed');
+  const div = document.createElement('div');
+  const classMap = { highlight:'log-highlight', success:'log-success', error:'log-error', info:'log-info', special:'log-special' };
+  div.className = classMap[type] || 'log-line';
+  div.textContent = text.substring(0, 140);
+  feed.appendChild(div);
+  while (feed.children.length > 50) feed.removeChild(feed.firstChild);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function updateStatusBar() {
+  document.getElementById('event-count').textContent = 'Events: ' + eventCount;
+  const activeCount = Object.values(AGENTS).filter(a => a.state !== 'idle').length;
+  document.getElementById('agent-count').textContent = 'Active: ' + activeCount + '/' + Object.keys(AGENTS).length;
+}
+
+function updateMetricCounter() {
+  const el = document.getElementById('metric-counter');
+  el.textContent = 'Events: ' + eventCount;
+  el.className = eventCount > 0 ? 'metric-positive' : 'metric-neutral';
+}
+
+function updateTickerBanner() {
+  const inner = document.getElementById('ticker-inner');
+  if (!inner) return;
+  while (inner.firstChild) inner.removeChild(inner.firstChild);
+  // Build agent status spans twice (so scroll loops seamlessly)
+  for (let pass = 0; pass < 2; pass++) {
+    for (const [id, ag] of Object.entries(AGENTS)) {
+      const stateLabel = ag.state === 'idle' ? 'idle' : ag.state === 'working' ? 'ACTIVE' : ag.state === 'celebrating' ? 'OK!' : ag.state;
+      const span = document.createElement('span');
+      span.className = 'ticker-agent';
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'ticker-name';
+      nameSpan.style.color = ag.color;
+      nameSpan.textContent = ag.name;
+      span.appendChild(nameSpan);
+      const statusSpan = document.createElement('span');
+      statusSpan.className = 'ticker-' + ag.state;
+      statusSpan.textContent = ' ' + stateLabel + (ag.speech ? ' \u2014 ' + ag.speech : '');
+      span.appendChild(statusSpan);
+      inner.appendChild(span);
+    }
+  }
+}
+
+// Update ticker every second
+setInterval(updateTickerBanner, 1000);
+
+// ────────────────────────────────────────────────────────────
+// 5. WebSocket Connection
+// ────────────────────────────────────────────────────────────
+
+function connectWS(url) {
+  if (!url) return;
+  try {
+    ws = new WebSocket(url);
+    ws.onopen = () => {
+      demoMode = false;
+      document.getElementById('ws-status').textContent = 'Connected';
+      document.getElementById('ws-status').className = 'active';
+      addLogLine('Connected to server', 'success');
+    };
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        // Standard event protocol
+        if (msg.type === 'agent_state') {
+          setAgentState(msg.agent, msg.state, msg.speech, msg.duration);
+        } else if (msg.type === 'particle') {
+          spawnDataParticle(msg.from + '_to_' + msg.to);
+        } else if (msg.type === 'log') {
+          addLogLine(msg.text, msg.level);
+          // Check log patterns
+          if (_pf_config && _pf_config.logPatterns) {
+            for (const pat of _pf_config.logPatterns) {
+              if (pat.match && pat.match.test(msg.text)) {
+                setAgentState(pat.agent, pat.state || 'working', pat.speech || '', pat.duration || 300);
+                if (pat.particle) spawnDataParticle(pat.particle);
+              }
+            }
+          }
+        } else if (msg.type === 'log_line') {
+          // Backward compat: raw log line
+          addLogLine(msg.data || msg.text, 'info');
+          if (_pf_config && _pf_config.logPatterns) {
+            const text = msg.data || msg.text || '';
+            for (const pat of _pf_config.logPatterns) {
+              if (pat.match && pat.match.test(text)) {
+                setAgentState(pat.agent, pat.state || 'working', pat.speech || '', pat.duration || 300);
+                if (pat.particle) spawnDataParticle(pat.particle);
+              }
+            }
+          }
+        } else if (msg.type === 'metric') {
+          totalMetric = msg.value || 0;
+          updateMetricCounter();
+        } else if (msg.type === 'flash') {
+          flashActive = true;
+          flashTimer = msg.duration || 600;
+        }
+      } catch (err) {}
+    };
+    ws.onclose = () => {
+      document.getElementById('ws-status').textContent = 'Disconnected';
+      document.getElementById('ws-status').className = '';
+      addLogLine('Disconnected \u2014 reconnecting...', 'error');
+      setTimeout(() => connectWS(url), 3000);
+    };
+    ws.onerror = () => ws.close();
+  } catch(e) {
+    addLogLine('WebSocket not available \u2014 running in demo mode', 'info');
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// 6. Demo Mode
+// ────────────────────────────────────────────────────────────
+
+function runDemoMode() {
+  if (!demoMode) return;
+  const agentIds = Object.keys(AGENTS);
+  if (!agentIds.length) return;
+  const flowKeys = Object.keys(FLOW_PATHS);
+
+  // Simulate random agent activity
+  setInterval(() => {
+    if (!demoMode) return;
+    const id = agentIds[Math.floor(Math.random() * agentIds.length)];
+    const a = AGENTS[id];
+    if (!a || a.state !== 'idle') return;
+
+    const actions = ['working', 'working', 'working', 'celebrating'];
+    const action = actions[Math.floor(Math.random() * actions.length)];
+    const speechCat = action === 'celebrating' ? 'celebrating' : 'working';
+    const speeches = SPEECHES[id]?.[speechCat] || DEFAULT_SPEECHES[speechCat];
+    const speech = speeches[Math.floor(Math.random() * speeches.length)];
+
+    setAgentState(id, action, speech, 200 + Math.random() * 400);
+    eventCount++;
+    updateStatusBar();
+    updateMetricCounter();
+
+    // Maybe spawn a particle
+    if (flowKeys.length && Math.random() < 0.6) {
+      const flow = flowKeys[Math.floor(Math.random() * flowKeys.length)];
+      spawnDataParticle(flow);
+    }
+
+    // Log it
+    const logMsgs = [
+      a.name + ' is ' + action + ': ' + speech,
+      '[' + a.role + '] ' + speech,
+      a.name + ': ' + speech,
+    ];
+    addLogLine(logMsgs[Math.floor(Math.random() * logMsgs.length)],
+      action === 'celebrating' ? 'success' : 'info');
+  }, 2000 + Math.random() * 3000);
+
+  // Occasional flash events
+  setInterval(() => {
+    if (!demoMode) return;
+    if (Math.random() < 0.15) {
+      flashActive = true;
+      flashTimer = 300;
+      addLogLine('FLASH: Priority event detected!', 'highlight');
+      // Light up the pipeline
+      if (flowKeys.length >= 3) {
+        spawnDataParticle(flowKeys[0]);
+        setTimeout(() => spawnDataParticle(flowKeys[Math.min(2, flowKeys.length-1)]), 500);
+        setTimeout(() => {
+          if (flowKeys.length > 4) spawnDataParticle(flowKeys[4]);
+        }, 1000);
+      }
+    }
+  }, 15000);
+
+  addLogLine('Running in demo mode \u2014 connect a WebSocket for live data', 'info');
+  addLogLine('Configure with: new PixelFloor(config)', 'info');
+}
+
+// ────────────────────────────────────────────────────────────
+// 7. Keyboard Shortcuts
+// ────────────────────────────────────────────────────────────
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key === 'Escape') { closeSidePanel(); return; }
+  const btabs = document.querySelectorAll('.btab');
+  if (e.key === 'l' || e.key === 'L') { btabs[0].click(); return; }
+  if (e.key === 'a' || e.key === 'A') { btabs[1].click(); return; }
+  if (e.key === 'v' || e.key === 'V') { btabs[2].click(); return; }
+  const agentIds = Object.keys(AGENTS);
+  const num = parseInt(e.key);
+  if (num >= 1 && num <= 9 && num <= agentIds.length) {
+    openSidePanel(agentIds[num - 1]);
+  }
+});
+
+// ────────────────────────────────────────────────────────────
+// 8. PixelFloor Public API
+// ────────────────────────────────────────────────────────────
+
+class PixelFloor {
+  constructor(config) {
+    initFromConfig(config);
+    preRenderAllSprites();
+    registerClickables();
+    if (config.websocket) {
+      connectWS(config.websocket);
+    } else {
+      demoMode = true;
+    }
+    updateStatusBar();
+    gameLoop();
+    if (demoMode && !config.externalEvents) runDemoMode();
+  }
+
+  agentWorking(agentId, speech, duration) {
+    setAgentState(agentId, 'working', speech || '', duration || 300);
+    eventCount++;
+    updateStatusBar();
+    updateMetricCounter();
+  }
+
+  agentCelebrating(agentId, speech, duration) {
+    setAgentState(agentId, 'celebrating', speech || '', duration || 300);
+    eventCount++;
+    updateStatusBar();
+    updateMetricCounter();
+  }
+
+  agentError(agentId, speech, duration) {
+    setAgentState(agentId, 'error', speech || 'Error!', duration || 480);
+  }
+
+  agentIdle(agentId) {
+    const a = AGENTS[agentId];
+    if (a) { a.state = 'idle'; a.stateTimer = 0; a.speech = ''; a.speechTimer = 0; }
+  }
+
+  sendParticle(fromId, toId) {
+    const key = fromId + '_to_' + toId;
+    if (FLOW_PATHS[key]) {
+      spawnDataParticle(key);
+    } else {
+      // Create ad-hoc particle even if no predefined flow
+      const fromA = AGENTS[fromId];
+      const toA = AGENTS[toId];
+      if (fromA && toA) {
+        FLOW_PATHS[key] = { from: fromId, to: toId, color: fromA.color, colorB: toA.color };
+        spawnDataParticle(key);
+      }
+    }
+  }
+
+  visitAgent(fromId, toId) {
+    const source = AGENTS[fromId], target = AGENTS[toId];
+    if (!source || !target || source.route?.length) return false;
+    const aisle = y => y <= 4 ? 6 : y <= 10 ? 12 : 19;
+    const start = {x:source.x,y:source.y};
+    const dest = {x:target.deskX,y:target.deskY};
+    source.route = [
+      {x:start.x,y:aisle(start.y)}, {x:19,y:aisle(start.y)},
+      {x:19,y:aisle(dest.y)}, {x:dest.x,y:aisle(dest.y)}, dest
+    ];
+    source.returnRoute = [
+      {x:dest.x,y:aisle(dest.y)}, {x:19,y:aisle(dest.y)},
+      {x:19,y:aisle(start.y)}, {x:start.x,y:aisle(start.y)}, start
+    ];
+    return true;
+  }
+
+  flash(duration) {
+    flashActive = true;
+    flashTimer = duration || 600;
+  }
+
+  pushLog(text, type) {
+    addLogLine(text, type);
+  }
+
+  setMetric(value) {
+    totalMetric = value;
+    updateMetricCounter();
+  }
+
+  getAgent(agentId) {
+    return AGENTS[agentId] || null;
+  }
+
+  getAgents() {
+    return { ...AGENTS };
+  }
+}
+
+// Expose globally
+window.PixelFloor = PixelFloor;
+
+// ────────────────────────────────────────────────────────────
+// 9. Default Demo Config and Boot
+// ────────────────────────────────────────────────────────────
+
+const DEMO_CONFIG = {
+  title: 'AI Agent Pipeline',
+  sections: {
+    intake: 'INTAKE',
+    processing: 'PROCESSING',
+    analysis: 'ANALYSIS',
+    execution: 'EXECUTION',
+    output: 'OUTPUT',
+  },
+  agents: [
+    { id:'collector', name:'Scout', role:'Data Collector', color:'#B8860B', sprite:'detective', position:0 },
+    { id:'monitor', name:'Iris', role:'Stream Monitor', color:'#4A90D9', sprite:'hacker', position:1 },
+    { id:'screener', name:'Sieve', role:'Filter & Screen', color:'#E8B830', sprite:'scientist', position:2 },
+    { id:'researcher', name:'Atlas', role:'Deep Research', color:'#22D3EE', sprite:'researcher', position:3 },
+    { id:'analyzer', name:'Nova', role:'Lead Analyst', color:'#8B5CF6', sprite:'analyst', position:4 },
+    { id:'executor1', name:'Dash', role:'Task Executor A', color:'#16A34A', sprite:'trader', position:5 },
+    { id:'executor2', name:'Bolt', role:'Task Executor B', color:'#EA580C', sprite:'cowboy', position:6 },
+    { id:'validator', name:'Judge', role:'Quality Check', color:'#DC2626', sprite:'manager', position:7 },
+    { id:'notifier', name:'Echo', role:'Notifications', color:'#06B6D4', sprite:'engineer', position:8 },
+  ],
+  flows: [
+    { from:'collector', to:'screener' },
+    { from:'monitor', to:'screener' },
+    { from:'screener', to:'analyzer' },
+    { from:'researcher', to:'analyzer' },
+    { from:'analyzer', to:'validator' },
+    { from:'validator', to:'executor1' },
+    { from:'validator', to:'executor2' },
+    { from:'validator', to:'notifier' },
+  ],
+};
+
+// Auto-boot: check if user provided config, otherwise use demo
+if (!window._pixelFloorInstance) {
+  window._pixelFloorInstance = new PixelFloor(window.PIXELFLOOR_CONFIG || DEMO_CONFIG);
+}
+
+</script>
+</body>
+</html>

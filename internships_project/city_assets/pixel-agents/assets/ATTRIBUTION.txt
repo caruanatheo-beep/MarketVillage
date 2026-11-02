@@ -1,0 +1,7 @@
+﻿Pixel Agents components and assets
+
+- Office rendering, tilemap movement, layout engine, furniture sprites and floor/wall assets are adapted from Pixel Agents (MIT), copyright 2026 Pablo De Lucca. See LICENSE.
+  https://github.com/pixel-agents-hq/pixel-agents
+- The six character sprite sheets are from MetroCity Free Top Down Character Pack by JIK-A-4, licensed CC0 1.0 Universal. Attribution is not required; credited here for clarity.
+  https://jik-a-4.itch.io/metrocity-free-topdown-character-pack
+- MarketDesk City composition and agent mapping are local adaptations.
