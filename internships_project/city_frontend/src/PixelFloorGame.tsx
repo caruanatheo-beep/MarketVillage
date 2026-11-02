@@ -461,14 +461,14 @@ export function buildOfficeLayout(): OfficeLayout {
   put("research-lounge-table", "MD_LOUNGE_COFFEE_TABLE", 40, 16);
   put("technology-server-rack", "MD_SERVER_RACK", 1, 23); put("technology-server-rack-east", "MD_SERVER_RACK", 13, 23);
   put("technology-server-cluster", "MD_SERVER_RACK_CLUSTER", 1, 27);
-  put("technology-board", "MD_RESEARCH_BOARD", 9, 22);
+  put("technology-board", "MD_CAREER_BOARD", 9, 22);
   put("desk-internship_scout", "MD_CAREER_DESK", 8, 24);
   put("technology-books", "BOOKSHELF", 11, 28);
   put("career-board", "MD_CAREER_BOARD", 16, 22); 
   put("career-cabinet", "MD_CAREER_CABINET", 16, 28);
   put("career-books", "BOOKSHELF", 29, 28);
   put("network-table", "MD_NETWORK_CONFERENCE", 40, 23);
-  put("network-world-map", "MD_NETWORK_WORLD_MAP", 40, 21);
+  put("network-world-map", "MD_NETWORK_WORLD_MAP", 40, 20);
   
   
   put("network-library", "BOOKSHELF", 44, 22); put("network-plant", "PLANT_2", 45, 24);
@@ -610,7 +610,7 @@ function renderFloorFinishes(ctx: CanvasRenderingContext2D, offsetX: number, off
   const cell = TILE_SIZE * zoom;
   for (const [name, x, y, w, h] of [
     ['slate',20,2,8,6], ['ivory',19,10,9,8],
-    ['slate',1,23,11,6], ['ivory',19,23,10,6], ['slate',39,22,6,4],
+    ['slate',1,23,11,6], ['ivory',17,23,6,6], ['slate',25,23,6,6], ['slate',39,22,6,4],
   ] as const) {
     if (textiles[name]) ctx.drawImage(textiles[name],offsetX+x*cell,offsetY+worldY(y)*cell,w*cell,(worldY(y+h)-worldY(y))*cell);
   }
@@ -668,11 +668,11 @@ function renderEveningLight(ctx:CanvasRenderingContext2D,ox:number,oy:number,zoo
 
 function renderZoneLabels(ctx: CanvasRenderingContext2D, zoom: number, offsetX: number, offsetY: number): void {
   const labels = [
-    { text: "HEAD OF DESK", color: "#b89bff", col: 24, row: 7.35 },
+    { text: "HEAD OF DESK", color: "#75f0df", col: 24, row: 8.15 },
     { text: "GLOBAL MARKETS", color: "#77d8e7", col: 5.5, row: 16.45 },
-    { text: "QUANT RESEARCH", color: "#9b8bea", col: 39.5, row: 15.45 },
+    { text: "QUANT RESEARCH", color: "#8cc4b7", col: 39.5, row: 15.45 },
     { text: "ENGINEERING", color: "#70cbb7", col: 6.5, row: 29.1 },
-    { text: "INTERVIEWS", color: "#a995e5", col: 20, row: 29.1 },
+    { text: "INTERVIEWS", color: "#9ad6c8", col: 20, row: 29.1 },
     { text: "INNOVATION", color: "#70cbb7", col: 28, row: 29.1 },
     { text: "NETWORK", color: "#70cbb7", col: 40, row: 25.45 },
     { text: "OUTREACH", color: "#77d8e7", col: 40, row: 29.1 },
