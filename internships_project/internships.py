@@ -155,7 +155,7 @@ PARIS_AREA = ("paris", "la defense", "la défense", "puteaux", "courbevoie",
 _MARKET_ROLE = re.compile(
     r"\b(?:trading|trader|sales|structur\w*|derivat\w*|derive\w*|"
     r"fixed income|rates|forex|fx|quant\w*|equity|equities|bond\w*|"
-    r"commodit\w*|markets?|finance de marches?|marches? (?:financiers?|de capitaux|actions?|"
+    r"commodit\w*|markets?|finance de marches?|analyste des marches|marches? (?:financiers?|de capitaux|actions?|"
     r"obligataires?|monetaires?|des changes)|asset management|equity research|"
     r"credit desk|credit trading|credit derivatives|market risk|risque de marche|"
     r"salle des marches|dcm|ecm|alm|broker|broking|pricing|valuation|valorisation|negociat\w*|"
@@ -200,6 +200,7 @@ JOBTEASER_CACHE_SECONDS = 24 * 3600
 SOURCE_CONNECTOR_VERSIONS = {"Société Générale Careers": 3}
 JOBTEASER_INDEX = "https://assets-cf.jobteaser.com/sitemaps/sitemap.xml"
 JOBTEASER_EMPLOYERS = {
+    "bpifrance": "Bpifrance",
     "bnp-paribas-asset-management": "BNP Paribas Asset Management",
     "bnp-paribas-france": "BNP Paribas",
     "bnp-paribas": "BNP Paribas",
@@ -647,7 +648,7 @@ def is_trusted_offer_url(url: str) -> bool:
         "www.labanquepostale.com", "icbpjb.fa.ocs.oraclecloud.com",
         "jpmc.fa.oraclecloud.com", "hdpc.fa.us2.oraclecloud.com", "ekbq.fa.em2.oraclecloud.com",
         "ofiinvestassetmanagement.flatchr.io", "recrutement.altays-progiciels.com",
-        "www.groupama-gan-recrute.com",
+        "www.groupama-gan-recrute.com", "bdf.wd103.myworkdayjobs.com",
         *(board[0] for board in WORKDAY.values()),
     }
     try:
@@ -1794,7 +1795,7 @@ def _jobteaser_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
     cached: list[Opportunity] = []
     try:
         payload = json.loads(JOBTEASER_CACHE_PATH.read_text(encoding="utf-8"))
-        if payload.get("version") == 1:
+        if payload.get("version") == 2:
             cached = [Opportunity(**row) for row in payload.get("jobs", [])]
             if (now - datetime.fromisoformat(payload["updated"])).total_seconds() < JOBTEASER_CACHE_SECONDS:
                 return [replace(job, family=_family(job.title)) for job in cached]
@@ -1831,7 +1832,7 @@ def _jobteaser_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
         jobs = list({job.url: job for group in groups for job in group}.values())
         JOBTEASER_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
         temporary = JOBTEASER_CACHE_PATH.with_suffix(".tmp")
-        temporary.write_text(json.dumps({"version": 1, "updated": now.isoformat(),
+        temporary.write_text(json.dumps({"version": 2, "updated": now.isoformat(),
                                          "jobs": [asdict(job) for job in jobs]}, ensure_ascii=False), encoding="utf-8")
         temporary.replace(JOBTEASER_CACHE_PATH)
         return jobs
@@ -1927,6 +1928,54 @@ def _workday_jobs(company: str, board: tuple[str, str, str]) -> list[Opportunity
     with ThreadPoolExecutor(max_workers=6) as pool:
         enriched = dict(zip((path for path, _ in selected), pool.map(enrich, selected)))
     return [enriched.get(path, job) for path, job in candidates.items()]
+
+
+def _banque_de_france_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
+    """The Banque de France lists contract type only on Workday detail pages."""
+    host, tenant, site = "bdf.wd103.myworkdayjobs.com", "bdf", "recrutement-banque-de-France"
+    base = f"https://{host}/wday/cxs/{tenant}/{site}"
+    candidates: dict[str, tuple[str, str, str]] = {}
+    detail_errors: list[Exception] = []
+    for term in ("march", "quant", "trading", "ALM"):
+        for offset in range(0, 200, 20):
+            response = requests.post(base + "/jobs", json={
+                "appliedFacets": {}, "limit": 20, "offset": offset, "searchText": term,
+            }, timeout=(4, 12))
+            response.raise_for_status()
+            payload = response.json()
+            rows = payload.get("jobPostings") or []
+            for item in rows:
+                path = str(item.get("externalPath") or "")
+                title = str(item.get("title") or "")
+                if path.startswith("/job/") and (_market_relevant(title) or "analyste des marchés" in title.casefold()):
+                    candidates[path] = (title, str(item.get("locationsText") or ""),
+                                        str(item.get("postedOn") or ""))
+            if len(rows) < 20 or offset + 20 >= int(payload.get("total") or 0):
+                break
+
+    def load(pair: tuple[str, tuple[str, str, str]]) -> Opportunity | None:
+        path, (title, location, posted_on) = pair
+        try:
+            response = requests.get(base + path, timeout=(4, 12))
+            response.raise_for_status()
+            info = response.json().get("jobPostingInfo") or {}
+            description = _plain_text(str(info.get("jobDescription") or ""))
+            if not re.search(r"Type de recrutement\s*:[\s\u200e\u200f]*Stage\b", description, re.IGNORECASE):
+                return None
+            job = _opportunity(title, "Banque de France", str(info.get("location") or location),
+                               "Stage", f"https://{host}/fr-FR/{site}{path}",
+                               _workday_publication_date(info.get("startDate"), info.get("postedOn") or posted_on),
+                               _start_period(description), description)
+            return replace(job, description=description[:12_000], source="Site carrière · Banque de France") if job else None
+        except (requests.RequestException, ValueError, TypeError) as exc:
+            detail_errors.append(exc)
+            return None
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        jobs = [job for job in pool.map(load, candidates.items()) if job]
+    if not jobs and detail_errors:
+        raise detail_errors[0]
+    return jobs
 
 
 def _oracle_jobs(board_name: str, board: tuple[str, str, str]) -> list[Opportunity]:
@@ -2285,6 +2334,7 @@ def _fetch_opportunities_progressive() -> tuple[list[Opportunity], list[str]]:
         ("BNP Paribas Asset Management", lambda *_: _bnp_group_jobs(
             "BNP Paribas Asset Management",
             "https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/bnp-paribas-asset-management"), ()),
+        ("Banque de France", _banque_de_france_jobs, ("", "")),
         ("Amundi", _amundi_jobs, ("", "")),
         ("Cr\u00e9dit Mutuel Ark\u00e9a", _arkea_jobs, ("", "")),
         ("Cov\u00e9a Finance", _covea_finance_jobs, ("", "")),

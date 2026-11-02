@@ -27,7 +27,9 @@ def test_requested_source_inventory_has_no_palatine_and_distinguishes_portals():
     assert "Banque Palatine" not in SOURCE_COVERAGE
     assert "Palatine AM" not in SOURCE_COVERAGE
     assert SOURCE_COVERAGE["CACEIS"].status == "connected"
-    assert SOURCE_COVERAGE["Tikehau Capital"].status == "portal"
+    assert SOURCE_COVERAGE["Banque de France"].status == "connected"
+    assert SOURCE_COVERAGE["Bpifrance"].status == "indirect"
+    assert SOURCE_COVERAGE["Tikehau Capital"].status == "connected"
     assert SOURCE_COVERAGE["CFM"].status == "connected"
     assert SOURCE_COVERAGE["BGC"].status == "blocked"
     assert SOURCE_COVERAGE["CPR AM"].via == "Amundi"
@@ -46,6 +48,9 @@ def test_jobteaser_url_extracts_only_explicit_role_and_location():
     assert vie is not None and (vie.kind, vie.location) == ("VIE", "Frankfurt")
     assert _jobteaser_from_sitemap_url(base + "amundi-stage-marketing-etf-paris") is None
     assert _jobteaser_from_sitemap_url(base + "aew-stage-analyste-marches-immobiliers-paris") is None
+    bpi = _jobteaser_from_sitemap_url(
+        base + "bpifrance-stage-assistant-operateur-de-marche-funding-et-fixed-income-derivatives-f-h")
+    assert bpi is not None and (bpi.company, bpi.kind, bpi.published) == ("Bpifrance", "Stage", "")
 
 
 def test_jobteaser_public_sitemap_is_cached_without_opening_offer_pages(tmp_path, monkeypatch):
@@ -93,6 +98,7 @@ def test_jobteaser_duplicate_yields_to_direct_employer_offer(monkeypatch):
     monkeypatch.setattr(internships, "_smart_jobs", lambda *args: [direct])
     monkeypatch.setattr(internships, "_jobteaser_jobs", lambda *args: [teaser])
     for name in ("_socgen_jobs", "_vie_jobs", "_ca_cib_jobs", "_bnp_cib_jobs", "_bnp_tal_jobs",
+                 "_banque_de_france_jobs",
                  "_amundi_jobs", "_arkea_jobs", "_bpce_open_data_jobs"):
         monkeypatch.setattr(internships, name, lambda *args: [])
     jobs, errors = internships._fetch_opportunities()
@@ -121,6 +127,7 @@ def test_source_checks_distinguish_results_empty_and_error_and_survive_cache(tmp
 
     monkeypatch.setattr(internships, "_smart_jobs", smart)
     for name in ("_socgen_jobs", "_vie_jobs", "_ca_cib_jobs", "_bnp_cib_jobs", "_bnp_tal_jobs",
+                 "_banque_de_france_jobs",
                  "_amundi_jobs", "_arkea_jobs", "_bpce_open_data_jobs", "_jobteaser_jobs"):
         monkeypatch.setattr(internships, name, lambda *args: [])
 
@@ -1121,6 +1128,43 @@ def test_workday_posted_on_fallback_uses_only_exact_day_labels():
     assert _workday_publication_date(posted_on="Posted Today", today=today) == "2026-10-25"
     assert _workday_publication_date(posted_on="Posted 2 Weeks Ago", today=today) == ""
     assert _workday_publication_date("2027-01-01", "", today=today) == ""
+
+
+def test_banque_de_france_reads_contract_from_detail_and_official_date(monkeypatch):
+    from internships_project import internships
+
+    stage_path = "/job/PARIS/Analyste-des-marches_JR101617"
+    cdi_path = "/job/PARIS/Trader_JR000001"
+    rows = [
+        {"title": "Analyste des marchés - H/F", "externalPath": stage_path,
+         "locationsText": "PARIS", "postedOn": "Posted Today"},
+        {"title": "Trader - H/F", "externalPath": cdi_path,
+         "locationsText": "PARIS", "postedOn": "Posted Today"},
+    ]
+
+    class Response:
+        def __init__(self, payload):
+            self.payload = payload
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return self.payload
+
+    monkeypatch.setattr(internships.requests, "post",
+                        lambda *args, **kwargs: Response({"jobPostings": rows, "total": 2}))
+    def detail(url, **kwargs):
+        contract = "CDI" if url.endswith(cdi_path) else "Stage"
+        return Response({"jobPostingInfo": {
+            "jobDescription": f"<p>Type de recrutement : \u200e</p>{contract}<p>Finance de marché</p>",
+            "location": "PARIS", "startDate": "2026-10-23", "postedOn": "Posted Today",
+        }})
+    monkeypatch.setattr(internships.requests, "get", detail)
+
+    jobs = internships._banque_de_france_jobs()
+    assert len(jobs) == 1
+    assert (jobs[0].title, jobs[0].published, jobs[0].kind) == (
+        "Analyste des marchés - H/F", "2026-10-23", "Stage")
+    assert jobs[0].url.endswith(stage_path)
 
 
 def test_official_jobposting_jsonld_uses_posted_date_only():

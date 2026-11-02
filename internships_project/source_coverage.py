@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SourceCoverage:
-    status: str  # connected, shared, portal, blocked, unverified
+    status: str  # connected, shared, indirect, portal, blocked, unverified
     url: str = ""
     via: str = ""
 
@@ -32,6 +32,8 @@ SOURCE_COVERAGE: dict[str, SourceCoverage] = {
     "Crédit Mutuel Arkéa": SourceCoverage("connected", "https://recrutement.arkea.com/accueil.aspx"),
     "ODDO BHF": SourceCoverage("connected", "https://www.oddo-bhf.com/fr/decouvrez-nos-offres-demplois/", "Official embedded Altays listing with static and JavaScript-rendered PDF discovery; currently reports an Altays loading error when no PDFs are exposed"),
     "CACEIS": SourceCoverage("connected", "https://jobs.caceis.com/pages/offre/listeoffre.aspx?lcid=1036"),
+    "Banque de France": SourceCoverage("connected", "https://bdf.wd103.myworkdayjobs.com/fr-FR/recrutement-banque-de-France", "Public Workday CXS board; contract verified on each detail page"),
+    "Bpifrance": SourceCoverage("indirect", "https://talents.bpifrance.fr/opportunites/", "JobTeaser public sitemap only; official career site returned HTTP 403 during local checks"),
     # Brokers
     "Aurel BGC": SourceCoverage("blocked", "https://www.bgcg.com/careers/", "BGC Group"),
     "BGC": SourceCoverage("blocked", "https://www.bgcg.com/careers/"),

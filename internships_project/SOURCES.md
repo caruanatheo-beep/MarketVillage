@@ -4,11 +4,14 @@ L'inventaire exhaustif des établissements demandés est dans [`source_coverage.
 
 - **`connected`** : un connecteur interroge effectivement un flux, une API publique ou une liste de liens d'annonces officielles, puis vérifie les annonces. Cela ne garantit pas qu'une annonce pertinente existe actuellement.
 - **`shared`** : un connecteur de groupe peut porter les annonces d'une filiale. Une filiale n'est attribuée comme employeur que lorsque l'annonce permet de la reconnaître ; elle peut sinon apparaître sous le nom du groupe.
+- **`indirect`** : offres issues d’un flux tiers public, sans lecture des fiches sur le site employeur.
 - **`portal`** : page carrière officielle disponible, mais sans extraction fiable d'annonces branchée. Ces pages ne créent aucune offre dans l'application.
 - **`blocked`** : l'accès public au portail a été refusé (HTTP 403 lors de la vérification). Aucun contournement n'est tenté.
 - **`unverified`** : aucun endpoint d'offres officiel et publiquement exploitable n'a été confirmé. Aucune URL ni offre n'est inventée.
 
 ## Connecteurs actifs
+
+Depuis le 3 novembre 2026, la [Banque de France](https://bdf.wd103.myworkdayjobs.com/fr-FR/recrutement-banque-de-France) est interrogée par son flux Workday public. Le collecteur lit chaque fiche candidate pour confirmer « Stage » et garde la date de publication fournie par Workday ; un essai réel a remonté six stages de marché. Bpifrance est suivi **indirectement** dans le [sitemap JobTeaser](https://assets-cf.jobteaser.com/sitemaps/sitemap.xml) : cinq URL de stages de marché admissibles y ont été observées, sans date de publication ni lieu vérifiés. Son [site carrière officiel](https://talents.bpifrance.fr/opportunites/) renvoie HTTP 403 au client HTTP et à Chromium dans cet environnement.
 
 | Source | Mécanisme | Établissements concernés |
 | --- | --- | --- |
@@ -53,7 +56,7 @@ Le portail public Tikehau charge ses annonces en JavaScript. Son connecteur util
 
 Le [portail BGC Group](https://www.bgcg.com/careers/), également utilisé comme point d'entrée d'Aurel BGC, a répondu HTTP 403 pendant la vérification. Il est classé `blocked` ; aucune offre n'en est extraite.
 
-Le connecteur BNP Paribas groupe utilisait auparavant `requests` et recevait HTTP 403, ce qui ralentissait chaque actualisation sans trouver d'offres. Cette voie a été retirée. Les listes BNP France et BNP Paribas AM passent maintenant par Playwright/Chromium, lisent les liens publics et le bouton normal « Voir plus d'offres », puis ouvrent les fiches directes. Aucun accès authentifié ni mécanisme anti-bot n'est contourné. Ce connecteur doit encore être exécuté dans l'environnement local avec Chromium installé pour confirmer le résultat réel. Le connecteur CIB reste distinct et consulte aussi la [page officielle Global Markets](https://careers.cib.bnpparibas/who-we-are/global-markets/) et la [catégorie Temporary Status](https://careers.cib.bnpparibas/job-domain/temporary-status/). Les diagnostics BNP ne génèrent pas de notifications récurrentes dans l'interface.
+Le connecteur BNP Paribas groupe utilisait auparavant `requests` et recevait HTTP 403, ce qui ralentissait chaque actualisation sans trouver d'offres. Cette voie a été retirée. Les listes BNP France et BNP Paribas AM passent maintenant par Playwright/Chromium, lisent les liens publics et le bouton normal « Voir plus d'offres », puis ouvrent les fiches directes. Aucun accès authentifié ni mécanisme anti-bot n'est contourné. Le 3 novembre 2026, une nouvelle vérification locale a obtenu HTTP 403 sur le portail groupe avec le client HTTP et Chromium ; aucune offre n’a pu être lue par cette voie. Le portail CIB distinct a expiré côté HTTP et renvoye une erreur de protocole HTTP/2 dans Chromium. Le connecteur CIB reste distinct et consulte aussi la [page officielle Global Markets](https://careers.cib.bnpparibas/who-we-are/global-markets/) et la [catégorie Temporary Status](https://careers.cib.bnpparibas/job-domain/temporary-status/). Les diagnostics BNP ne génèrent pas de notifications récurrentes dans l'interface.
 
 Le portail de candidatures [BNP Paribas APAC](https://bnppapply.tal.net/candidate/jobboard/vacancy/3/adv/) fournit une autre voie officielle. Son tableau affiche des intitulés parfois trop vagues (« Trainee ») ; le connecteur n'admet ces annonces que si la fiche détaille explicitement un stage de marché et sa localisation. Cette source peut apporter des postes internationaux, mais ne remplace pas le portail France pour les stages à Paris. Les annonces parisiennes déjà pourvues sur le site du groupe sont exclues, même si un moteur de recherche les indexe encore.
 
