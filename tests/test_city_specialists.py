@@ -226,6 +226,26 @@ def test_prepare_branch_is_isolated_and_never_merges(tmp_path, monkeypatch):
     assert specialists.git(repo,'rev-parse','HEAD') == audit['revision']
 
 
+def test_ast_branch_remains_on_approved_snapshot_after_repository_updates(tmp_path,monkeypatch):
+    repo=tmp_path/'repository';repo.mkdir()
+    def git(*args):return specialists.git(repo,*args)
+    git('init');git('config','user.name','Test');git('config','user.email','test@example.invalid')
+    (repo/'internships_project').mkdir()
+    module=repo/'internships_project/city_sample.py';module.write_text('x=1\n')
+    git('add','.');git('-c','commit.gpgsign=false','commit','-m','Audit base')
+    revision=git('rev-parse','HEAD')
+    module.write_text('x=2\n');git('add','.');git('-c','commit.gpgsign=false','commit','-m','City updated')
+    current=git('rev-parse','HEAD')
+    module.write_text('x=3\n')
+    monkeypatch.setattr(specialists,'repo_root',lambda:repo)
+    result=specialists.prepare_branch('c'*32,{'revision':revision},True)
+    branch=repo/'.city-worktrees'/('c'*32)
+    assert (branch/'internships_project/city_sample.py').read_text()=='x=1\n'
+    assert result['base_revision']==revision and result['current_revision']==current
+    assert not result['base_is_current'] and result['working_tree_dirty']
+    assert module.read_text()=='x=3\n' and git('rev-parse','HEAD')==current
+
+
 @pytest.mark.parametrize('origin',[
     'https://github.com/example/MarketVillage.git',
     'git@github.com:example/MarketVillage.git',

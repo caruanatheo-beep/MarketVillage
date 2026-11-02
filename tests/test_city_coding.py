@@ -86,14 +86,73 @@ def test_coding_runs_only_after_human_approval_and_keeps_main_untouched(repo,sto
     assert git('status','--porcelain','--untracked-files=no')==''
 
 
-def test_changed_revision_and_dirty_worktree_block_before_codex(repo,monkeypatch):
+def test_coding_uses_approved_revision_despite_new_commits_and_dirty_main(repo,monkeypatch):
     root,git=repo
     proposal=coding.change_proposal('Corrige sample pour renvoyer deux')
-    monkeypatch.setattr(coding,'_execute',lambda *args:pytest.fail('Must not execute'))
-    (root/'sample.py').write_text('dirty\n')
-    with pytest.raises(CityError,match='modifications locales'):coding.implement_change('a'*32,proposal)
+    (root/'sample.py').write_text('value = 9\n')
     git('add','sample.py');git('-c','commit.gpgsign=false','commit','-m','changed')
-    with pytest.raises(CityError,match='dépôt a changé'):coding.implement_change('b'*32,proposal)
+    current=git('rev-parse','HEAD')
+    revisions=[current]
+    (root/'sample.py').write_text('uncommitted = True\n')
+    def execute(command,directory,*args):
+        assert (directory/'sample.py').read_text()=='value = 1\n'
+        (root/'parallel.py').write_text('other_change = True\n')
+        git('add','parallel.py');git('-c','commit.gpgsign=false','commit','-m','Concurrent City update')
+        revisions.append(git('rev-parse','HEAD'))
+        (directory/'sample.py').write_text('value = 2\n')
+        Path(command[command.index('--output-last-message')+1]).write_text(json.dumps(
+            {'summary':'Valeur corrigée','tests':'Analyse fixture','limitations':'Revue nécessaire'}))
+        return [{'type':'turn.completed'}]
+    monkeypatch.setattr(coding,'_execute',execute)
+    result=coding.implement_change('b'*32,proposal)
+    assert result['base_revision']==proposal['revision']
+    assert result['current_revision']==revisions[-1] and revisions[-1]!=current and not result['base_is_current']
+    assert result['working_tree_dirty']
+    assert (root/'sample.py').read_text()=='uncommitted = True\n'
+    assert git('rev-parse','HEAD')==revisions[-1]
+    assert 'avant intégration' in result['text']
+
+
+def test_missing_approved_commit_blocks_without_codex(repo,monkeypatch):
+    monkeypatch.setattr(coding,'_execute',lambda *args:pytest.fail('Must not execute'))
+    with pytest.raises(CityError,match='plus disponible'):
+        coding.implement_change('a'*32,{'coding_request':'Corrige sample pour renvoyer deux','revision':'f'*40})
+
+
+def test_failed_approved_branch_retries_with_same_identity(repo,store,monkeypatch):
+    root,git=repo
+    monkeypatch.setattr(specialists,'repo_root',lambda:root)
+    audit={'revision':git('rev-parse','HEAD'),'role_version':2,'approval_required':True}
+    monkeypatch.setattr(specialists,'repository_audit',lambda:audit)
+    source=store.create_task('alice','job_hunter','Audit',{'operation':'repository_audit'})
+    worker=CityWorker(store);assert worker.run_once()
+    prepared=store.review_specialist_proposal('alice',source['id'],True)['task_id']
+    original=specialists.prepare_branch
+    def stale(*args):raise CityError('Le dépôt a changé : demande une nouvelle revue à Jules.')
+    monkeypatch.setattr(specialists,'prepare_branch',stale)
+    assert worker.run_once()
+    with pytest.raises(CityError):store.retry_task('bob',prepared)
+    monkeypatch.setattr(specialists,'prepare_branch',original)
+    (root/'sample.py').write_text('value = 9\n')
+    git('add','sample.py');git('-c','commit.gpgsign=false','commit','-m','new version')
+    retried=store.retry_task('alice',prepared)
+    assert retried['id']==prepared and retried['reused_approval']
+    assert worker.run_once()
+    done=next(t for t in store.snapshot('alice')['tasks'] if t['id']==prepared)
+    assert done['status']=='completed',done.get('error')
+    assert done['result']['base_revision']==audit['revision']
+    assert not done['result']['base_is_current']
+    assert (root/'sample.py').read_text()=='value = 9\n'
+    with store.db() as db:
+        assert db.execute("SELECT COUNT(*) FROM city_tasks WHERE username='alice'").fetchone()[0]==2
+
+
+def test_branch_retry_does_not_create_human_approval(store):
+    task=store.create_task('alice','job_hunter','Préparer une branche',{'operation':'prepare_branch','source_task_id':'missing'})
+    assert store.claim_next()['id']==task['id']
+    store.finish(task['id'],error='No approval')
+    with pytest.raises(CityError,match='explicitement validée'):store.retry_task('alice',task['id'])
+    assert store.snapshot('alice')['tasks'][0]['status']=='failed'
 
 
 def test_codex_without_edits_is_a_blocked_mission(repo,monkeypatch):

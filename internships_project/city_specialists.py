@@ -148,6 +148,30 @@ def repository_audit() -> dict:
             "as_of": datetime.now(timezone.utc).isoformat(), "role_version": VERSION}
 
 
+def approved_base(root: Path, audit: dict) -> str:
+    """Keep the approved snapshot stable even when the working application advances."""
+    revision = str(audit.get('revision') or '')
+    if not re.fullmatch(r'(?:[a-f0-9]{40}|[a-f0-9]{64})',revision):
+        raise CityError('Révision de proposition invalide. Demande une nouvelle revue à Jules.')
+    try:
+        git(root,'cat-file','-e',revision+'^{commit}')
+    except CityError as exc:
+        raise CityError('La révision validée n’est plus disponible dans ce clone. Demande une nouvelle revue à Jules.') from exc
+    return revision
+
+
+def branch_context(root: Path, revision: str) -> dict:
+    current = git(root,'rev-parse','HEAD')
+    dirty = bool(git(root,'status','--porcelain','--untracked-files=no'))
+    note = f'Branche fondée sur la version validée {revision[:12]}.'
+    if current != revision:
+        note += ' Le dépôt courant a évolué depuis la proposition : revoir le diff et relancer les tests sur la version courante avant intégration.'
+    if dirty:
+        note += ' Les modifications locales non commitées du dépôt principal ne sont pas copiées dans cette branche.'
+    return {'base_revision':revision,'current_revision':current,'base_is_current':current==revision,
+            'working_tree_dirty':dirty,'base_note':note}
+
+
 def prepare_branch(task_id: str, audit: dict, approval: bool) -> dict:
     """Prepare a reviewable, isolated branch. Never checkout or edit the working app.
 
@@ -160,14 +184,13 @@ def prepare_branch(task_id: str, audit: dict, approval: bool) -> dict:
         from .city_coding import implement_change
         return implement_change(task_id, audit)
     root = repo_root()
-    if git(root, "rev-parse", "HEAD") != audit["revision"]:
-        raise CityError("Le dépôt a changé : demande une nouvelle revue à Jules.")
+    revision = approved_base(root,audit)
     branch = "marketdesk/jules-" + task_id[:12]
     directory = root / ".city-worktrees" / task_id
     if directory.exists():
         raise CityError("Cette branche a déjà été préparée. Consulte son résultat existant.")
     directory.parent.mkdir(exist_ok=True)
-    git(root, "worktree", "add", "-b", branch, directory.relative_to(root).as_posix(), audit["revision"])
+    git(root, "worktree", "add", "-b", branch, directory.relative_to(root).as_posix(), revision)
     target = directory / "tests" / "test_city_syntax_audit.py"
     target.parent.mkdir(exist_ok=True)
     if target.exists():
@@ -180,9 +203,10 @@ def prepare_branch(task_id: str, audit: dict, approval: bool) -> dict:
     tested = list((directory / "internships_project").glob("city_*.py"))
     for source in [target, *tested]:
         ast.parse(source.read_text(encoding="utf-8-sig"), filename=source.name)
-    return {"title": "Jules · branche prête à examiner", "branch": branch, "file": str(target.relative_to(root)),
+    context = branch_context(root,revision)
+    return {"title": "Jules · branche prête à examiner", "branch": branch, "file": str(target.relative_to(root)),**context,
             "tests": {"method": "AST syntax regression", "passed": len(tested) + 1}, "approval_required": True,
-            "text": f"Branche locale {branch} : test de compilation ajouté, {len(tested)+1} fichiers validés. Aucun commit, push ou merge automatique.",
+            "text": f"Branche locale {branch} : test de compilation ajouté, {len(tested)+1} fichiers validés. Aucun commit, push ou merge automatique.\n\n"+context['base_note'],
             "role_version": VERSION}
 
 

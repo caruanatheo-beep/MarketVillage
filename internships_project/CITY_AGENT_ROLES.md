@@ -182,8 +182,13 @@ Mira et Iris n'ont pas de récurrence à rattraper. Les missions déjà en atten
   Un code de sortie indique l'exécution d'une commande, pas la qualité fonctionnelle du changement.
   Un refus d'outils, une absence de modifications ou un rapport incomplet ne valent pas succès.
   Pas de commit, push, merge ni intégration automatique par City. Les modifications sont locales
-  et non commitées dans le worktree. Un dépôt principal modifié ou une révision dépassée bloque
-  le démarrage ; il faut sauvegarder les changements puis soumettre une proposition à jour.
+  et non commitées dans le worktree. La branche part du commit de la proposition validée,
+  même si le dépôt principal a évolué depuis ou contient des changements non commités.
+  Le résultat indique la révision de base, la révision courante et la nécessité de revoir le
+  diff et les tests avant intégration si elles diffèrent. Les changements non commités du
+  dépôt principal ne sont pas copiés. Une révision validée introuvable reste bloquante.
+  « Réessayer » sur une préparation échouée conserve l'identifiant de mission lié à la
+  validation humaine, sans créer une nouvelle approbation ni écraser un worktree existant.
 - L'audit quotidien de Jules analyse les modules Python City locaux sans exécuter leur code. Ce dossier de
   travail possède désormais un dépôt Git local initialisé le 2 novembre 2026.
   Les anciens audits sans révision Git doivent être relancés avant validation.

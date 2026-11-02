@@ -1296,6 +1296,28 @@ class CityStore:
                              (task_id, username)).fetchone()
         if row is None:
             raise CityError("This mission is not available for retry.")
+        parameters = json.loads(row['parameters_json'] or '{}')
+        if row['agent_id']=='job_hunter' and parameters.get('operation')=='prepare_branch':
+            # The human approval is bound to this task ID. Creating another ID loses it.
+            settings = self.get_settings(username)
+            with self.db() as db:
+                db.execute('BEGIN IMMEDIATE')
+                if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='city_proposal_reviews'").fetchone():
+                    raise CityError('La préparation de branche nécessite une proposition explicitement validée sur ton compte.')
+                approval = db.execute('SELECT 1 FROM city_proposal_reviews WHERE task_id=? AND username=? AND next_task_id=? AND approved=1',
+                                      (parameters.get('source_task_id'),username,task_id)).fetchone()
+                if not approval:
+                    raise CityError('La préparation de branche nécessite une proposition explicitement validée sur ton compte.')
+                if db.execute("SELECT 1 FROM city_tasks WHERE username=? AND agent_id='job_hunter' AND status IN ('queued','running','waiting_approval')",(username,)).fetchone():
+                    raise CityError('Jules a déjà une mission active.')
+                if db.execute("SELECT COUNT(*) FROM city_tasks WHERE username=? AND status IN ('queued','running','waiting_approval')",(username,)).fetchone()[0]>=settings['max_concurrent_tasks']:
+                    raise CityError('Termine ou annule une mission avant de relancer Jules.')
+                changed = db.execute("UPDATE city_tasks SET status='queued',error=NULL,started_at=NULL,finished_at=NULL,heartbeat_at=NULL,retry_count=retry_count+1 WHERE id=? AND username=? AND status='failed'",
+                                     (task_id,username)).rowcount
+                if not changed:
+                    raise CityError('Cette mission a déjà été relancée.')
+                self._event(db,row,'queued','Nouvelle tentative sur la version validée ; validation humaine conservée.')
+            return {'id':task_id,'status':'queued','reused_approval':True}
         if row["workflow_id"]:
             with self.db() as db:
                 workflow = db.execute("SELECT status FROM city_workflows WHERE id=? AND username=?",

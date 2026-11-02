@@ -12,7 +12,7 @@ import sys
 import tempfile
 
 from .marketdesk_city import CityError
-from .city_specialists import VERSION, git, repo_root
+from .city_specialists import VERSION, git, repo_root, approved_base, branch_context
 
 
 def codex_binary() -> str:
@@ -171,10 +171,7 @@ def implement_change(task_id: str, proposal: dict) -> dict:
     request = str(proposal.get('coding_request') or '').strip()
     if not re.fullmatch(r'[a-f0-9]{32}', task_id) or not 10 <= len(request) <= 3000:
         raise CityError('Demande de développement invalide.')
-    if git(root,'rev-parse','HEAD') != proposal.get('revision'):
-        raise CityError('Le dépôt a changé : soumets à nouveau la demande de développement à Jules.')
-    if git(root,'status','--porcelain','--untracked-files=no'):
-        raise CityError('Des modifications locales suivies attendent une sauvegarde Git. Termine-les avant de lancer Jules.')
+    revision = approved_base(root,proposal)
     binary, env = codex_binary(), codex_environment()
     env['PATH'] = str(Path(sys.executable).parent)+os.pathsep+env.get('PATH','')
     require_chatgpt(binary, env)
@@ -183,7 +180,7 @@ def implement_change(task_id: str, proposal: dict) -> dict:
     if directory.exists():
         raise CityError('Un espace existe déjà pour cette mission. Consulte-le ou soumets une nouvelle demande.')
     directory.parent.mkdir(exist_ok=True)
-    git(root,'worktree','add','-b',branch,directory.relative_to(root).as_posix(),proposal['revision'])
+    git(root,'worktree','add','-b',branch,directory.relative_to(root).as_posix(),revision)
     report = directory/'.jules-result.json'
     schema = directory/'.jules-schema.json'
     schema.write_text(json.dumps({'type':'object','additionalProperties':False,
@@ -218,8 +215,8 @@ def implement_change(task_id: str, proposal: dict) -> dict:
         raise CityError('Rapport Codex incomplet. La branche reste disponible pour examen manuel.') from exc
     for artifact in (schema, report):
         artifact.unlink(missing_ok=True)
-    if git(root,'rev-parse','HEAD') != proposal['revision'] or git(directory,'rev-parse','HEAD') != proposal['revision']:
-        raise CityError('La révision Git a changé pendant la mission. Examine la branche avant toute intégration.')
+    if git(directory,'rev-parse','HEAD') != revision:
+        raise CityError('La révision de la branche de travail a changé pendant la mission. Examine-la avant toute intégration.')
     tracked = git(directory,'diff','--name-only','--no-renames','HEAD').splitlines()
     added = git(directory,'ls-files','--others','--exclude-standard').splitlines()
     files = sorted(set(tracked+added))
@@ -240,11 +237,12 @@ def implement_change(task_id: str, proposal: dict) -> dict:
     checks = [{'command':str(item.get('command',''))[:500], 'exit_code':item.get('exit_code')}
               for item in commands][-25:]
     usage = next((event.get('usage',{}) for event in reversed(events) if event.get('type')=='turn.completed'),{})
-    return {'title':'Jules · développement prêt à examiner','branch':branch,
+    context = branch_context(root,revision)
+    return {'title':'Jules · développement prêt à examiner','branch':branch,**context,
             'file':str(directory.relative_to(root)), 'files':files, 'diff':diff[:120_000],
             'diff_truncated':len(diff)>120_000, 'checks':checks,'codex_usage':usage,
             'provider':'Codex · connexion ChatGPT locale','role_version':VERSION,'approval_required':False,
             'text':result['summary']+'\n\nVérifications rapportées par Codex :\n'+result['tests']+
                    '\n\nLimites :\n'+result['limitations']+
                    f'\n\n{len(files)} fichier(s) modifié(s) dans {branch}. '
-                   'Modifications locales à examiner ; aucun commit, push ou merge effectué par City.'}
+                   'Modifications locales à examiner ; aucun commit, push ou merge effectué par City.\n\n'+context['base_note']}
