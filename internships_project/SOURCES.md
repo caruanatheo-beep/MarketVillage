@@ -15,7 +15,7 @@ Depuis le 3 novembre 2026, la [Banque de France](https://bdf.wd103.myworkdayjobs
 
 | Source | Mécanisme | Établissements concernés |
 | --- | --- | --- |
-| [BNP Paribas](https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/stage/france) et [BNP Paribas AM](https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/bnp-paribas-asset-management) | Pages officielles d'annonces, dont une liste dédiée à la marque AM | BNP Paribas, BNP Paribas AM, Portzamparc si l'annonce du groupe l'identifie |
+| [Stages BNP Paribas](https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/stage), [VIE BNP Paribas](https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/vie) et [BNP Paribas AM](https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/bnp-paribas-asset-management) | Listes officielles mondiales de stages et VIE, et liste dédiée à la marque AM ; chaque fiche est vérifiée pour le métier, le contrat et le lieu | BNP Paribas, BNP Paribas AM, Portzamparc si l'annonce du groupe l'identifie |
 | [BNP Paribas CIB](https://careers.cib.bnpparibas/job-contract-type/internship/) | Archive de stages officielle et fiches d'annonces | BNP Paribas CIB |
 | [BNP Paribas APAC](https://bnppapply.tal.net/candidate/jobboard/vacancy/3/adv/) | Portail de candidature public sur un autre domaine ; chaque fiche « Trainee » est lue pour confirmer stage, métier et lieu | BNP Paribas, notamment Hong Kong ; aucune offre parisienne déduite de ce portail |
 | [Société Générale](https://careers.societegenerale.com/) | Connecteur carrière existant | Société Générale |

@@ -197,7 +197,7 @@ JOBTEASER_CACHE_PATH = CACHE_PATH.with_name("jobteaser_sitemap_cache.json")
 CACHE_SECONDS = CACHE_REFRESH_SECONDS
 PUBLIC_UPDATE_DELAY_SECONDS = 3 * 3600
 JOBTEASER_CACHE_SECONDS = 24 * 3600
-SOURCE_CONNECTOR_VERSIONS = {"Société Générale Careers": 3}
+SOURCE_CONNECTOR_VERSIONS = {"Société Générale Careers": 3, "BNP Paribas": 2}
 JOBTEASER_INDEX = "https://assets-cf.jobteaser.com/sitemaps/sitemap.xml"
 JOBTEASER_EMPLOYERS = {
     "bpifrance": "Bpifrance",
@@ -503,7 +503,8 @@ def _is_paris(location: str) -> bool:
 
 
 def _is_international_location(location: str) -> bool:
-    text = location.casefold()
+    text = "".join(char for char in unicodedata.normalize("NFKD", location.casefold())
+                   if not unicodedata.combining(char))
     french_regions = (
         "auvergne-rhone-alpes", "bourgogne-franche-comte", "bretagne", "centre-val de loire",
         "corse", "grand est", "hauts-de-france", "normandie", "nouvelle-aquitaine",
@@ -1073,6 +1074,8 @@ def _career_detail(url: str, company: str, fallback_title: str = "",
     if company == "BNP Paribas" and not location:
         location_match = re.search(rf"{re.escape(title)}\s+Stage\s+Temps plein\s+(.+?)\s+Postuler", text)
         location = location_match.group(1) if location_match else ""
+    if portal_company == "BNP Paribas" and urlparse(url).hostname == "group.bnpparibas":
+        location = re.sub(r"\s*\(Ce lien s'ouvre dans un nouvel onglet\)\s*$", "", location).strip()
     if company == "BNP Paribas" and urlparse(url).hostname == "careers.cib.bnpparibas":
         location_match = re.search(r"\bLocation:\s*(.+?)(?=\s+(?:Job/mission:|Reference:|About the job))", text)
         location = location_match.group(1).strip() if location_match else ""
@@ -1195,7 +1198,7 @@ def _bnp_group_jobs(company: str, listing_url: str) -> list[Opportunity]:
                     pass
 
                 # Use the site's ordinary public "show more" control, with a strict cap.
-                for _ in range(6):
+                for _ in range(40):
                     hrefs = page.locator("a").evaluate_all("els => els.map(a => a.href)")
                     before = len({href for href in hrefs if urlparse(href).hostname == host
                                   and urlparse(href).path.startswith(path_prefix)})
@@ -2192,7 +2195,7 @@ def _source_refresh_seconds(name: str, loader: object) -> int:
     """Give dynamic feeds hourly checks and expensive or low-change pages longer intervals."""
     if name == "JobTeaser · sitemap":
         return JOBTEASER_CACHE_SECONDS
-    if name in {"BNP Paribas", "BNP Paribas Asset Management", "ODDO BHF", "Tikehau Capital"}:
+    if name in {"BNP Paribas", "BNP Paribas VIE", "BNP Paribas Asset Management", "ODDO BHF", "Tikehau Capital"}:
         return 4 * 3600
     if name in {"Comgest", "Groupama AM", "Cov\u00e9a Finance", "BPCE Open Data",
                 "Cr\u00e9dit Mutuel Ark\u00e9a", "Amundi", "Cr\u00e9dit Agricole CIB"} or loader in {
@@ -2331,7 +2334,9 @@ def _fetch_opportunities_progressive() -> tuple[list[Opportunity], list[str]]:
         ("BNP Paribas CIB", _bnp_cib_jobs, ("", "")),
         ("BNP Paribas APAC", _bnp_tal_jobs, ("", "")),
         ("BNP Paribas", lambda *_: _bnp_group_jobs(
-            "BNP Paribas", "https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/stage/france"), ()),
+            "BNP Paribas", "https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/stage"), ()),
+        ("BNP Paribas VIE", lambda *_: _bnp_group_jobs(
+            "BNP Paribas", "https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/vie"), ()),
         ("BNP Paribas Asset Management", lambda *_: _bnp_group_jobs(
             "BNP Paribas Asset Management",
             "https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/bnp-paribas-asset-management"), ()),
@@ -2662,7 +2667,8 @@ def render_opportunities(jobs: list[Opportunity], errors: list[str], updated: da
     # BNP endpoints often reject server-side requests; keep those diagnostics
     # in the cache, without presenting them as recurring user notifications.
     visible_errors = [error for error in errors if not error.startswith((
-        "BNP Paribas:", "BNP Paribas CIB:", "BNP Paribas APAC:", "BNP Paribas Asset Management:",
+        "BNP Paribas:", "BNP Paribas VIE:", "BNP Paribas CIB:", "BNP Paribas APAC:",
+        "BNP Paribas Asset Management:",
     ))]
     today = today or datetime.now(timezone.utc).date()
     ordered = matching_opportunities(
@@ -2797,7 +2803,7 @@ def render_opportunities(jobs: list[Opportunity], errors: list[str], updated: da
     )
     bnp_link = (
         '<a class="internship-source-link" '
-        'href="https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/stage/france" '
+        'href="https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/stage" '
         'target="_blank" rel="noopener noreferrer">Voir les stages BNP Paribas sur le site officiel ↗</a>'
         if not any(job.company.startswith("BNP Paribas") and job.source.startswith("Site carrière") for job in jobs)
         else ''

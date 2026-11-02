@@ -6,7 +6,7 @@ from internships_project.internships import (
     Opportunity,
     _canonical_title, _opportunity, _smart_jobs, _socgen_jobs, _start_period, _title_period,
     _vie_jobs, _workday_jobs, _workday_publication_date, mark_opened_offer_applied,
-    render_opportunities, render_tracking,
+    render_opportunities, render_tracking, matching_opportunities,
     export_tracking, import_tracking, normalize_status, save_offer_feedback, save_tracking, start_month,
 )
 from internships_project.internships import _amundi_jobs, _arkea_jobs, _bnp_cib_jobs, _ca_cib_jobs, _career_detail, _career_page_jobs
@@ -567,6 +567,23 @@ def test_filled_bnp_offer_is_removed(monkeypatch):
     monkeypatch.setattr("internships_project.internships.requests.get", lambda *args, **kwargs: Response())
     assert _career_detail("https://group.bnpparibas/emploi-carriere/offre-emploi/stage-sales-trading",
                           "BNP Paribas") is None
+
+
+@pytest.mark.parametrize("title,contract,city,category", [
+    ("Stage Sales Trading", "Stage", "Lyon, France", "Toutes"),
+    ("Stage Global Markets", "Stage", "London, United Kingdom", "Stages International"),
+    ("Stage Global Markets Sales", "Stage", "Miami, Floride, États-Unis", "Stages International"),
+    ("VIE Sales Global Markets", "VIE", "Hong Kong", "VIE"),
+])
+def test_bnp_global_market_offers_keep_contract_and_city(title, contract, city, category):
+    page = (f"<h1>{title}</h1><h2>Détail de l'offre</h2>"
+            f"<p>Localisation {city} (Ce lien s'ouvre dans un nouvel onglet) "
+            f"Niveau Type de contrat {contract} Postuler</p>")
+    job = _career_detail("https://group.bnpparibas/emploi-carriere/offre-emploi/test-market-role",
+                         "BNP Paribas", html_override=page)
+    assert job is not None
+    assert (job.kind, job.location) == (contract, city)
+    assert job in matching_opportunities([job], category=category)
 
 
 def test_marex_uses_job_heading_after_page_heading(monkeypatch):
