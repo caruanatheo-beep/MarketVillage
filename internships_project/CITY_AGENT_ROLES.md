@@ -51,6 +51,22 @@ d'un lot de dix nouveaux contacts : Sales en priorité, puis traders, structureu
 de marché, analystes Market Risk, brokers et gérants de portefeuille pour compléter.
 Aucun quota minimum de Sales ne bloque les métiers proches. Les métiers hors cible,
 sources invérifiables et doublons restent exclus.
+La recherche IA comporte un plan explicite : équipes et biographies de banques/sociétés
+de gestion, puis articles de marchés, interviews, nominations, experts cités et biographies
+d'intervenants d'associations professionnelles. Les domaines proposés sont des exemples,
+sans restriction à LinkedIn ni liste fermée. Les mots-clés combinent français et anglais,
+y compris négociateur de taux, gérant obligataire, ingénieur financier et stratégiste marchés.
+Le complément change de types de publications et d'employeurs. Les plafonds de deux
+appels d'outils initiaux et d'un seul appel pour le complément restent inchangés.
+Une fiche peut être sourcée uniquement par un site bancaire ou un article. Une source
+distincte peut prouver la localisation si elle nomme la même personne et le même employeur.
+Les dates publiées sont conservées ; une source datée de plus de deux ans est rejetée
+comme preuve principale. L'absence de date ne certifie pas l'actualité du poste.
+Paris/Île-de-France et plusieurs communes du secteur de La Défense sont acceptés sur
+preuve explicite ; un nom de famille contenant « Paris » ne prouve pas la localisation.
+La fiche affiche le type et la date de source, le lien principal et la preuve de localisation.
+Le collecteur public sans IA conserve son extraction bornée de profils LinkedIn ;
+l'élargissement aux articles et biographies est porté par la recherche Web IA.
 La première requête combine Sales et métiers proches avec deux appels d'outils maximum,
 contexte Web faible, extraits courts et plafond de 4 500 tokens. Si dix contacts sont
 enregistrés, aucun complément n'est lancé. Sinon, une seule requête supplémentaire vise

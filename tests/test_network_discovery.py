@@ -226,6 +226,40 @@ def test_ai_results_require_real_search_sources_and_paris_evidence():
         network.validate_research(data)
 
 
+@pytest.mark.parametrize('role',['Négociateur de taux','Gérant de portefeuille obligataire','Ingénieur financier','Stratégiste marchés','Macro strategist','Investment Specialist Fixed Income'])
+def test_french_and_english_adjacent_markets_roles(role):
+    assert network.contact_focus({'role':role})['contact_segment']=='secondary'
+
+
+@pytest.mark.parametrize('location_url,location_evidence,accepted',[
+    ('https://bank.example.com/team/alex','Alex Martin, Bank A, based in La Défense',True),
+    ('https://bank.example.com/not-returned','Alex Martin, Bank A, based in Paris',False),
+    ('https://bank.example.com/team/alex','Another Person, Bank A, based in Paris',False),
+    ('https://bank.example.com/team/alex','Alex Martin, Bank A, based in London',False),
+])
+def test_article_can_use_separate_named_location_source(location_url,location_evidence,accepted):
+    article='https://press.example.com/markets-interview'
+    profile='https://bank.example.com/team/alex'
+    record={'name':'Alex Martin','role':'Stratégiste marchés','company':'Bank A','location':'La Défense',
+            'source_url':article,'evidence':'Alex Martin, Bank A, stratégiste marchés, explains rates.',
+            'linkedin_url':'','location_source_url':location_url,'location_evidence':location_evidence,
+            'source_type':'media','source_date':network.datetime.now(network.timezone.utc).date().isoformat()}
+    data={'output':[{'type':'web_search_call','status':'completed','action':{'sources':[{'url':article},{'url':profile}]}},
+                    {'type':'message','content':[{'type':'output_text','text':json.dumps({'contacts':[record]})}]}]}
+    leads,rejected=network.validate_research(data)
+    assert len(leads)==int(accepted)
+    if accepted:
+        assert leads[0]['linkedin_url']=='' and leads[0]['location_source_url']==profile
+        record['source_date']='2003-01-01'
+        data['output'][1]['content'][0]['text']=json.dumps({'contacts':[record]})
+        assert network.validate_research(data)[0]==[]
+
+
+def test_paris_surname_is_not_location_evidence():
+    assert not network._paris_location('Camille Paris, equity derivatives trader at Bank A, based in London','Camille Paris','Bank A')
+    assert network._paris_location('Camille Paris, Bank A, based in Paris','Camille Paris','Bank A')
+
+
 def test_web_research_tokens_and_search_actions_are_costed(tmp_path, monkeypatch):
     from decimal import Decimal
     from internships_project import llm_usage
@@ -384,6 +418,11 @@ def test_ai_daily_mission_saves_contacts_and_attributes_cost_without_real_api(tm
     assert calls[0]['max_tool_calls'] == 2 and calls[0]['store'] is False
     assert calls[0]['tools'][0]['search_context_size']=='low'
     assert calls[0]['max_output_tokens']==4500
+    plan=json.loads(calls[0]['input'])
+    assert 'banks_and_managers' in plan['source_groups']
+    assert 'market_articles' in plan['source_groups']
+    assert 'keywords_fr_en' in plan
+    assert 'LinkedIn is optional' in calls[0]['instructions']
     with store.db() as db:
         task=db.execute("SELECT api_cost_usd FROM city_tasks WHERE agent_id='networker'").fetchone()
         assert float(task[0]) > 0.01

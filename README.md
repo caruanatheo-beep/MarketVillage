@@ -43,6 +43,11 @@ Les tâches automatiques peuvent être suspendues dans les réglages ; Lina cons
 
 **Lina** vise dix nouveaux contacts sourcés : Sales en priorité, puis traders, structureurs, quants de marché, analystes Market Risk, brokers et gérants de portefeuille. Si le premier lot est incomplet, un seul complément ciblé est possible, sous réserve du budget. Le résultat peut rester inférieur à dix si les sources sont insuffisantes.
 
+La recherche Web combine sites de banques et sociétés de gestion, équipes, biographies,
+articles de marchés, interviews et intervenants d’associations professionnelles, avec des
+mots-clés français et anglais. LinkedIn est facultatif. Les fiches conservent les liens,
+les dates disponibles et, si nécessaire, une source distincte prouvant la localisation.
+
 Le bouton **Rechercher les écoles** enrichit jusqu’à cinq fiches existantes par lot. L’établissement, l’extrait et le lien source sont affichés ; une école ou un diplôme ne sont jamais déduits pour remplir une case vide.
 
 **Hugo** appelle directement le collecteur Python Internships, sans ouvrir son site. Son bilan quotidien distingue les stages nouvellement détectés des offres dont la publication est confirmée aujourd’hui. Les erreurs de sources sont signalées.
