@@ -3,7 +3,7 @@ import { worldY } from './worldGeometry';
 
 const images: Record<string, HTMLImageElement> = {};
 export async function loadTowerArchitecture(): Promise<void> {
-  await Promise.all(['penthouse-crown','md_atrium_canopy','md_vertical_sign','manhattan-canyon',
+  await Promise.all(['penthouse-crown','md_atrium_canopy','manhattan-canyon',
     'terrace','garden-parapet','md_slab_edge'].map(name =>
     new Promise<void>((resolve,reject) => {
       const image = new Image();
@@ -138,10 +138,4 @@ export function renderTowerRelief(ctx:CanvasRenderingContext2D,ox:number,oy:numb
       ctx.fillStyle=g;ctx.fillRect(px,py,c*.5,c);
     }
   }ctx.restore();
-}
-
-export function renderTowerSign(ctx:CanvasRenderingContext2D,ox:number,oy:number,zoom:number):void {
-  const sign=images['md_vertical_sign'];if(!sign)return;
-  const c=16*zoom,x=Math.max(3*zoom,ox-1.55*c);
-  ctx.save();ctx.imageSmoothingEnabled=false;ctx.drawImage(sign,x,oy+worldY(11)*c,1.3*c,6.8*c);ctx.restore();
 }

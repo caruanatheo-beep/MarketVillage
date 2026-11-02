@@ -12,7 +12,7 @@ import { type AgentStatus } from "./types";
 import { AMBIENT_LAMPS, renderNightLight } from "./nightLighting";
 import { GolfPractice, GOLF_BAYS, GOLF_ROWS } from "./GolfPractice";
 import { worldY, wingPosition } from "./worldGeometry";
-import { loadTowerArchitecture, renderTowerArchitecture, renderTowerBackdrop, renderTowerRelief, renderTowerSign } from "./TowerArchitecture";
+import { loadTowerArchitecture, renderTowerArchitecture, renderTowerBackdrop, renderTowerRelief } from "./TowerArchitecture";
 import { renderTowerPerspective, projectTowerX, unprojectTowerX, unprojectTowerY, towerDisplayRows } from "./TowerPerspective";
 
 type Agent = { id: string; name: string; status: AgentStatus };
@@ -36,8 +36,14 @@ const ROOT = "/city/pixel-assets";
 const ROSTER = ["market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout"];
 const MANAGER_ID = "desk_manager";
 const WORLD_ROSTER = [...ROSTER, MANAGER_ID];
-const MARKET_PANEL = { col: 0, width: 14.5, top: 0.3, height: 5.3 };
-const OFFERS_PANEL = { col: 34.5, width: 14.5, top: 0.3, height: 5.3 };
+const MARKET_PANEL = { col: -1.25, width: 14.5, top: 0.3, height: 5.3 };
+const OFFERS_PANEL = { col: 35.2, width: 14.5, top: 0.3, height: 5.3 };
+function fitPanel(geometry: typeof MARKET_PANEL, zoom: number, offsetX: number, canvasWidth: number): typeof MARKET_PANEL {
+  const cell = TILE_SIZE * zoom, inset = Math.max(3, cell * .35);
+  const maxX = Math.max(inset, canvasWidth - geometry.width * cell - inset);
+  const x = Math.min(maxX, Math.max(inset, offsetX + geometry.col * cell));
+  return { ...geometry, col: (x - offsetX) / cell };
+}
 const agentIndex = (id: string) => id === MANAGER_ID ? ROSTER.length : ROSTER.indexOf(id);
 const agentSeatId = (id: string) => uid(id === MANAGER_ID ? "manager-chair" : `chair-${id}`);
 const FURNITURE_DIRS = ["BIN", "BOOKSHELF", "CACTUS", "CLOCK", "COFFEE", "COFFEE_TABLE", "CUSHIONED_BENCH", "CUSHIONED_CHAIR", "DESK", "DOUBLE_BOOKSHELF", "HANGING_PLANT", "LARGE_PAINTING", "LARGE_PLANT", "PC", "PLANT", "PLANT_2", "POT", "SMALL_PAINTING", "SMALL_PAINTING_2", "SMALL_TABLE", "SOFA", "TABLE_FRONT", "WHITEBOARD", "WOODEN_BENCH", "WOODEN_CHAIR"];
@@ -705,20 +711,14 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
     const x = offsetX + geometry.col * cell, y = offsetY + geometry.top * cell;
     const w = geometry.width * cell, h = geometry.height * cell;
     ctx.save();
-    // A metal chassis, sill and short mounts physically anchor the LED panel.
-    ctx.fillStyle='#020916b8';ctx.fillRect(x+cell*.18,y+cell*.2,w,h);
-    ctx.fillStyle='#28545a';ctx.fillRect(x-cell*.14,y-cell*.14,w+cell*.28,h+cell*.28);
+    ctx.shadowColor='#061d20a8';ctx.shadowBlur=cell*.75;ctx.shadowOffsetY=cell*.18;
     const glass=ctx.createLinearGradient(x,y,x+w,y+h);
-    glass.addColorStop(0,'#102e32f5');glass.addColorStop(1,'#091b24f5');
-    ctx.fillStyle=glass;ctx.fillRect(x,y,w,h);
-    ctx.strokeStyle='#5d8985';ctx.lineWidth=Math.max(1,zoom*.55);ctx.strokeRect(x,y,w,h);
-    ctx.fillStyle='#35656a';ctx.fillRect(x-cell*.14,y+h+cell*.09,w+cell*.28,cell*.1);
-    for(const bx of [x+cell*.8,x+w-cell*1.1]){
-      ctx.fillStyle='#17363a';ctx.fillRect(bx,y+h+cell*.19,cell*.3,cell*.7);
-      ctx.fillStyle='#608d87';ctx.fillRect(bx,y+h+cell*.19,cell*.07,cell*.7);
-    }
-    ctx.shadowColor=accent;ctx.shadowBlur=cell*.17;
-    ctx.fillStyle=accent;ctx.fillRect(x,y+cell*.28,Math.max(1.5,cell*.065),h-cell*.56);
+    glass.addColorStop(0,'#123d43f5');glass.addColorStop(1,'#102f35f5');
+    ctx.beginPath();ctx.roundRect(x,y,w,h,cell*.34);
+    ctx.fillStyle=glass;ctx.fill();
+    ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetY=0;
+    ctx.strokeStyle='#4e8589';ctx.lineWidth=Math.max(1,zoom*.55);ctx.stroke();
+    ctx.fillStyle=accent;ctx.fillRect(x+cell*.45,y+cell*.24,w-cell*.9,Math.max(1,zoom*.5));
     ctx.restore();return {x,y,w,h};
   };
   const write = (value: string, x: number, y: number, color: string, size: number, weight = "normal", maxWidth?: number) => {
@@ -734,8 +734,8 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
     }
     ctx.fillText(text, x, y);
   };
-  const market = panel(MARKET_PANEL, "#75f0df");
-  const jobs = panel(OFFERS_PANEL, "#27d9b3");
+  const market = panel(fitPanel(MARKET_PANEL, zoom, offsetX, ctx.canvas.width), "#75f0df");
+  const jobs = panel(fitPanel(OFFERS_PANEL, zoom, offsetX, ctx.canvas.width), "#27d9b3");
   const items = [
     {id:"SP500", label:"S&P 500", decimals:1},
     {id:"DGS10", label:"10Y UST", decimals:2},
@@ -1073,7 +1073,6 @@ export function PixelFloorGame(props: Props): React.ReactElement {
         output.clearRect(0,0,node.width,node.height);
         renderTowerBackdrop(output,position.offsetX,position.offsetY,scale);
         renderTowerPerspective(output,worldCanvas,position.offsetX,position.offsetY,scale);
-        renderTowerSign(output,position.offsetX,position.offsetY,scale);
         renderZoneLabels(output,scale,position.offsetX,position.offsetY);
         const focus=floor.characters.get(index),agent=latest.current.agents.find(a=>a.id===selected.current);
         if(focus&&agent){
@@ -1149,18 +1148,21 @@ export function PixelFloorGame(props: Props): React.ReactElement {
     const screenY=unprojectTowerY((event.clientY-rect.top)*dpr,live.offsetY,live.scale);
     const x = (unprojectTowerX((event.clientX-rect.left)*dpr,screenY,live.offsetX,live.offsetY,live.scale)-live.offsetX)/live.scale;
     const y = (screenY - live.offsetY) / live.scale;
-    const tileX = ((event.clientX-rect.left)*dpr-live.offsetX)/live.scale/TILE_SIZE, tileY = y / TILE_SIZE;
-    if (tileX >= MARKET_PANEL.col && tileX <= MARKET_PANEL.col + MARKET_PANEL.width &&
-      tileY >= MARKET_PANEL.top && tileY <= MARKET_PANEL.top + MARKET_PANEL.height) {
+    const tileX = ((event.clientX-rect.left)*dpr-live.offsetX)/live.scale/TILE_SIZE;
+    const tileY = ((event.clientY-rect.top)*dpr-live.offsetY)/live.scale/TILE_SIZE;
+    const marketPanel = fitPanel(MARKET_PANEL,live.scale,live.offsetX,node.width);
+    const offersPanel = fitPanel(OFFERS_PANEL,live.scale,live.offsetX,node.width);
+    if (tileX >= marketPanel.col && tileX <= marketPanel.col + marketPanel.width &&
+      tileY >= marketPanel.top && tileY <= marketPanel.top + marketPanel.height) {
       pick.current("market_analyst");
       return;
     }
     const offers = latest.current.featuredOffers;
-    if (tileX >= OFFERS_PANEL.col && tileX <= OFFERS_PANEL.col + OFFERS_PANEL.width &&
-      tileY >= OFFERS_PANEL.top && tileY <= OFFERS_PANEL.top + OFFERS_PANEL.height) {
-      const prevX = OFFERS_PANEL.col + OFFERS_PANEL.width - 2.62;
-      const nextX = OFFERS_PANEL.col + OFFERS_PANEL.width - 1.48;
-      if (offers.length > 1 && tileY >= OFFERS_PANEL.top + 4.06 && tileY <= OFFERS_PANEL.top + 4.65) {
+    if (tileX >= offersPanel.col && tileX <= offersPanel.col + offersPanel.width &&
+      tileY >= offersPanel.top && tileY <= offersPanel.top + offersPanel.height) {
+      const prevX = offersPanel.col + offersPanel.width - 2.62;
+      const nextX = offersPanel.col + offersPanel.width - 1.48;
+      if (offers.length > 1 && tileY >= offersPanel.top + 4.06 && tileY <= offersPanel.top + 4.65) {
         if (tileX >= prevX && tileX <= prevX + 0.88) {
           setOfferIndex((offerIndexRef.current - 1 + offers.length) % offers.length);
           return;
@@ -1191,14 +1193,17 @@ export function PixelFloorGame(props: Props): React.ReactElement {
     const screenY=unprojectTowerY((event.clientY-rect.top)*dpr,live.offsetY,live.scale);
     const x = (unprojectTowerX((event.clientX-rect.left)*dpr,screenY,live.offsetX,live.offsetY,live.scale)-live.offsetX)/live.scale;
     const y = (screenY - live.offsetY) / live.scale;
-    const tileX = ((event.clientX-rect.left)*dpr-live.offsetX)/live.scale/TILE_SIZE, tileY = y / TILE_SIZE;
-    if (tileX >= MARKET_PANEL.col && tileX <= MARKET_PANEL.col + MARKET_PANEL.width &&
-      tileY >= MARKET_PANEL.top && tileY <= MARKET_PANEL.top + MARKET_PANEL.height) {
+    const tileX = ((event.clientX-rect.left)*dpr-live.offsetX)/live.scale/TILE_SIZE;
+    const tileY = ((event.clientY-rect.top)*dpr-live.offsetY)/live.scale/TILE_SIZE;
+    const marketPanel = fitPanel(MARKET_PANEL,live.scale,live.offsetX,node.width);
+    const offersPanel = fitPanel(OFFERS_PANEL,live.scale,live.offsetX,node.width);
+    if (tileX >= marketPanel.col && tileX <= marketPanel.col + marketPanel.width &&
+      tileY >= marketPanel.top && tileY <= marketPanel.top + marketPanel.height) {
       node.style.cursor = "pointer";
       const labels = ["S&P 500", "10Y UST", "EUR/USD", "WTI"];
       const gap = 0.34;
-      const slot = (MARKET_PANEL.width - gap * 2) / labels.length;
-      const index = Math.max(0, Math.min(labels.length - 1, Math.floor((tileX - MARKET_PANEL.col - gap) / slot)));
+      const slot = (marketPanel.width - gap * 2) / labels.length;
+      const index = Math.max(0, Math.min(labels.length - 1, Math.floor((tileX - marketPanel.col - gap) / slot)));
       const ids = ["SP500", "DGS10", "DEXUSEU", "DCOILWTICO"];
       const point = latest.current.marketPoints.find(item => item.series_id === ids[index]);
       node.title = point
@@ -1207,13 +1212,13 @@ export function PixelFloorGame(props: Props): React.ReactElement {
       return;
     }
     const offers = latest.current.featuredOffers;
-    if (tileX >= OFFERS_PANEL.col && tileX <= OFFERS_PANEL.col + OFFERS_PANEL.width &&
-      tileY >= OFFERS_PANEL.top && tileY <= OFFERS_PANEL.top + OFFERS_PANEL.height) {
+    if (tileX >= offersPanel.col && tileX <= offersPanel.col + offersPanel.width &&
+      tileY >= offersPanel.top && tileY <= offersPanel.top + offersPanel.height) {
       node.style.cursor = "pointer";
       const offer = offers[Math.min(offerIndexRef.current, offers.length - 1)];
-      const prevX = OFFERS_PANEL.col + OFFERS_PANEL.width - 2.62;
-      const nextX = OFFERS_PANEL.col + OFFERS_PANEL.width - 1.48;
-      const isPager = offers.length > 1 && tileY >= OFFERS_PANEL.top + 4.06 && tileY <= OFFERS_PANEL.top + 4.65 &&
+      const prevX = offersPanel.col + offersPanel.width - 2.62;
+      const nextX = offersPanel.col + offersPanel.width - 1.48;
+      const isPager = offers.length > 1 && tileY >= offersPanel.top + 4.06 && tileY <= offersPanel.top + 4.65 &&
         (tileX >= prevX && tileX <= prevX + 0.88 || tileX >= nextX && tileX <= nextX + 0.88);
       node.title = isPager ? "Parcourir les offres" : offer
         ? `${offer.company} — ${offer.title}\n${offer.location || "Lieu non indiqué"}\nContrat : ${offer.kind || "non indiqué"}\nDébut : ${offer.start_period || "non indiqué"}\nPublication : ${offer.published ? offer.published_inferred ? `date estimée à la détection (${offer.published})` : offer.published : "non indiquée"}\nSource : ${offer.source || "non indiquée"}${offer.selection_reason ? `\n${offer.selection_reason}` : ""}`
