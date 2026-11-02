@@ -1,0 +1,53 @@
+import React,{useEffect,useRef,useState} from 'react';
+import {cockpitData,resultSummary,type CockpitTask} from './cockpitData';
+import {type NotificationEvent} from './notifications';
+type Agent={id:string;name:string;role:string;description:string;status:string};
+type Props={agents:Agent[];tasks:CockpitTask[];events:NotificationEvent[];selectedId:string;
+  onSelect:(id:string)=>void;onNotifications:(filter:string,agent?:string)=>void;onOpen:(id:string)=>void;
+  onChat:(message?:string)=>void;onContacts:()=>void;onCancel:(id:string)=>Promise<unknown>;
+  onLaunch:(id:string)=>Promise<unknown>;onReview:()=>Promise<unknown>;onCode:(request:string)=>Promise<unknown>;onRefresh:()=>Promise<void>;
+  onCollapse:()=>void;onSite:(kind:'markets'|'internships')=>void;siteBusy:boolean;siteError:string};
+const STATES:Record<string,string>={idle:'Disponible',running:'En cours',queued:'En attente',waiting_approval:'À valider',completed:'Terminée',failed:'À examiner',cancelled:'Annulée'};
+function Avatar({id}:{id:string}){return <span className={`roster-avatar pixel-agent-avatar ${id}`} aria-hidden="true"><i className="agent-sprite"/></span>;}
+export function Cockpit(p:Props){
+  const data=cockpitData(p.tasks,p.events),selected=p.agents.find(a=>a.id===p.selectedId)||p.agents[0];
+  const [busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[request,setRequest]=useState('');
+  const scroll=useRef<HTMLDivElement>(null),agentCard=useRef<HTMLElement>(null),previousAgent=useRef(p.selectedId);
+  useEffect(()=>{if(previousAgent.current===p.selectedId)return;previousAgent.current=p.selectedId;const body=scroll.current,card=agentCard.current;if(body&&card)body.scrollTop+=card.getBoundingClientRect().top-body.getBoundingClientRect().top;},[p.selectedId]);
+  async function act(key:string,fn:()=>Promise<unknown>,message:string){if(busy)return;setBusy(key);setError('');setNotice('');try{await fn();await p.onRefresh();setNotice(message);}catch(e){setError(e instanceof Error?e.message:'Action impossible.');}finally{setBusy('');}}
+  const next=data.decisions[0],last=selected&&data.finished.find(t=>t.agent_id===selected.id);
+  const failures=p.tasks.filter(t=>t.status==='failed').length;
+  const agentBusy=selected&&p.tasks.some(t=>t.agent_id===selected.id&&['running','queued','waiting_approval'].includes(t.status));
+  const name=(id:string)=>p.agents.find(a=>a.id===id)?.name||'Agent';
+  return <>
+    <header className="cockpit-heading"><div><span className="cockpit-eyebrow">MARKETDESK CITY</span><h2>Ton cockpit</h2></div><button className="cockpit-icon" onClick={p.onCollapse} aria-label="Replier le panneau">→</button></header>
+    <nav className="cockpit-metrics" aria-label="Résumé des missions">
+      <button onClick={()=>p.onNotifications('active')}><strong>{data.active.length}</strong><span><i className="cockpit-dot"/>En cours</span></button>
+      <button className={data.decisions.length?'needs-attention':''} onClick={()=>p.onNotifications('decision')}><strong>{data.decisions.length}</strong><span>Décisions</span></button>
+      <button onClick={()=>p.onNotifications('completed_today')}><strong>{data.today}</strong><span>Terminées ce jour</span></button>
+    </nav>
+    <div className="cockpit-scroll" ref={scroll}>
+      <section className={`cockpit-section cockpit-decision ${next?'has-decision':''}`} aria-label="À toi de décider">
+        <header><h3>À toi de décider</h3>{next&&<span>{data.decisions.length}</span>}</header>
+        {next?<><div className="cockpit-task-title"><Avatar id={next.agent_id}/><div><small>{name(next.agent_id)} attend ta décision</small><h4>{next.description}</h4></div></div><p>{resultSummary(next)}</p><button className="cockpit-primary" onClick={()=>p.onOpen(next.id)}>Examiner la proposition <span>→</span></button>{data.decisions.length>1&&<button className="cockpit-link" onClick={()=>p.onNotifications('decision')}>Voir les {data.decisions.length} décisions</button>}</>:<p className="cockpit-muted">Tout est à jour. Aucune décision en attente.</p>}
+      </section>
+      <section className="cockpit-section" aria-label="Missions actives"><header><h3>En cours</h3>{data.active.length>0&&<button className="cockpit-link" onClick={()=>p.onNotifications('active')}>Tout voir →</button>}</header>
+        {data.active.length?data.active.slice(0,3).map(task=><article className={`cockpit-active ${task.status}`} key={task.id}><div className="cockpit-task-title"><Avatar id={task.agent_id}/><div><small>{name(task.agent_id)} · {STATES[task.status]}</small><button className="cockpit-title-button" onClick={()=>p.onOpen(task.id)}>{task.description}</button></div></div><p className="cockpit-step"><i className="cockpit-dot"/>{data.latest.get(task.id)?.message||(task.status==='running'?'Exécution en cours':'En attente de démarrage')}</p><div className="cockpit-row-actions"><button className="cockpit-link" onClick={()=>p.onOpen(task.id)}>Suivre →</button>{task.status==='queued'&&<button className="cockpit-link" disabled={!!busy} onClick={()=>void act(task.id,()=>p.onCancel(task.id),'Mission annulée.')}>Annuler</button>}</div></article>):<div className="cockpit-idle"><span className="cockpit-orbit" aria-hidden="true">✦</span><strong>Prêt pour la prochaine mission</strong><p>Confie un objectif au Desk Manager ou choisis un agent ci-dessous.</p><button className="cockpit-link" onClick={()=>p.onChat()}>Donner un objectif →</button></div>}
+      </section>
+      {failures>0&&<button className="cockpit-error-link" onClick={()=>p.onNotifications('failed')}>{failures} mission(s) à examiner <span>→</span></button>}
+      <section className="cockpit-section cockpit-agent" ref={agentCard} aria-label="Agent sélectionné"><header><h3>Ton équipe</h3><label className="cockpit-team-select"><span className="sr-only">Toute l’équipe · choisir un agent</span><select aria-label="Toute l’équipe · choisir un agent" value={selected?.id||''} onChange={e=>p.onSelect(e.target.value)}>{p.agents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label></header>
+        {selected?<><div className="cockpit-agent-identity"><Avatar id={selected.id}/><div><h4>{selected.name}</h4><p>{selected.role}</p></div><span className={`cockpit-agent-status ${selected.status}`}>{STATES[selected.status]||selected.status}</span></div><p className="cockpit-agent-description">{selected.description}</p>
+        {last&&<button className="cockpit-last" onClick={()=>p.onOpen(last.id)}><small>Dernière réalisation</small><span>{resultSummary(last)}</span></button>}
+        <div className="cockpit-agent-actions">
+          {selected.id==='desk_manager'?<button className="cockpit-primary" onClick={()=>p.onChat()}>Parler au Desk Manager →</button>:selected.id==='job_hunter'?<><button className="cockpit-primary" disabled={!!busy||agentBusy} onClick={()=>void act('review',p.onReview,'Analyse Codex demandée. La proposition apparaîtra dans les décisions.')}>Proposer une amélioration</button><details className="cockpit-request"><summary>Confier une correction ou fonctionnalité</summary><form onSubmit={e=>{e.preventDefault();void act('code',async()=>{await p.onCode(request);setRequest('');},'Demande confiée à Jules. Sa proposition sera à valider.');}}><label htmlFor="cockpit-code">Que doit réaliser Jules ?</label><textarea id="cockpit-code" rows={3} required minLength={10} maxLength={3000} value={request} onChange={e=>setRequest(e.target.value)} placeholder="Décris le problème ou la fonctionnalité…"/><small>Codex · limites de ton compte · proposition avant réalisation.</small><button className="cockpit-primary" disabled={!!busy||agentBusy||request.trim().length<10}>Préparer la mission</button></form></details></>:selected.id==='networker'?<><button className="cockpit-primary" onClick={p.onContacts}>Ouvrir les contacts →</button><button className="cockpit-link" onClick={()=>p.onChat('Demande à Lina de rechercher 10 nouveaux contacts de marché, priorité Sales à Paris.')}>Demander une recherche au Manager</button></>:['finance_tutor','developer','innovation_lab','internship_scout','market_analyst'].includes(selected.id)?<button className="cockpit-primary" disabled={!!busy||agentBusy} onClick={()=>void act('launch',()=>p.onLaunch(selected.id),'Mission ajoutée. Tu peux suivre son exécution dans le cockpit.')}>{({finance_tutor:'Lancer une analyse quantitative',developer:'Préparer un entretien',innovation_lab:'Proposer des innovations',internship_scout:'Actualiser les stages',market_analyst:'Actualiser les marchés'} as Record<string,string>)[selected.id]}</button>:<button className="cockpit-primary" onClick={()=>p.onChat(`Je souhaite préparer un brouillon avec ${selected.name}.`)}>Préparer une demande au Manager</button>}
+          <button className="cockpit-link" onClick={()=>p.onNotifications('completed',selected.id)}>Voir ses résultats →</button>
+        </div></>:<p className="cockpit-muted">Chargement de l’équipe…</p>}
+      </section>
+      <section className="cockpit-section" aria-label="Derniers résultats"><header><h3>Derniers résultats</h3><button className="cockpit-link" onClick={()=>p.onNotifications('completed')}>Tout voir →</button></header>
+        {data.finished.length?data.finished.slice(0,3).map(task=><button key={task.id} className="cockpit-result" onClick={()=>p.onOpen(task.id)}><Avatar id={task.agent_id}/><span><small>{name(task.agent_id)} · {new Date(task.finished_at||task.created_at).toLocaleDateString('fr-FR',{timeZone:'Europe/Paris',day:'numeric',month:'short'})}</small><strong>{resultSummary(task)}</strong></span><span aria-hidden="true">↗</span></button>):<p className="cockpit-muted">Les résultats de tes prochaines missions apparaîtront ici.</p>}
+      </section>
+      {error&&<p className="cockpit-feedback error" role="alert">{error}</p>}{notice&&<p className="cockpit-feedback" role="status">{notice}</p>}{busy&&<p className="cockpit-muted" role="status">Action en cours…</p>}
+    </div>
+    <footer className="cockpit-footer"><nav aria-label="Applications"><button disabled={p.siteBusy} onClick={()=>p.onSite('markets')}>Markets ↗</button><button disabled={p.siteBusy} onClick={()=>p.onSite('internships')}>Internships ↗</button><button onClick={()=>p.onNotifications('all')}>Journal →</button></nav>{p.siteError&&<p role="alert">{p.siteError}</p>}</footer>
+  </>;
+}

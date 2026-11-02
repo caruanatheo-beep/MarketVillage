@@ -5,6 +5,9 @@ export function isPendingProposal(task:NotificationTask):boolean{
   return task.status==='completed'&&task.result.role_version===2&&!!task.result.approval_required&&!task.result.branch&&!task.result.review_decision&&['job_hunter','innovation_lab'].includes(task.agent_id);
 }
 export const needsDecision=(task:NotificationTask)=>task.status==='waiting_approval'||isPendingProposal(task);
+export function parisDay(value:string|Date):string{
+  const date=new Date(value);return Number.isNaN(date.getTime())?'':new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
+}
 export function notificationRows(tasks:NotificationTask[],events:NotificationEvent[],readThrough:number){
   const latest=new Map<string,NotificationEvent>();
   for(const event of events)if(event.id>(latest.get(event.task_id)?.id||0))latest.set(event.task_id,event);

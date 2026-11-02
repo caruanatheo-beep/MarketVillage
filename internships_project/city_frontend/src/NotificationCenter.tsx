@@ -1,21 +1,21 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityTimeline} from './ActivityTimeline';
-import {isPendingProposal,needsDecision,notificationRows,type NotificationTask,type NotificationEvent} from './notifications';
+import {isPendingProposal,needsDecision,notificationRows,parisDay,type NotificationTask,type NotificationEvent} from './notifications';
 
-type Props={tasks:NotificationTask[];events:NotificationEvent[];agents:{id:string;name:string}[];readThrough:number;
+type Props={tasks:NotificationTask[];events:NotificationEvent[];agents:{id:string;name:string}[];readThrough:number;initialFilter?:string;initialAgent?:string;
   onClose:()=>void;onOpen:(id:string)=>void;onRead:()=>Promise<unknown>;onRelaunch:()=>Promise<unknown>;onCodeRequest:(request:string)=>Promise<unknown>;onCodexReview:()=>Promise<unknown>;
   onApprove:(id:string)=>Promise<unknown>;onCancel:(id:string)=>Promise<unknown>;onReview:(id:string,approved:boolean)=>Promise<unknown>;onRetry:(id:string)=>Promise<unknown>;onRefresh:()=>Promise<void>};
 const LABELS:Record<string,string>={completed:'Terminée',failed:'Erreur',queued:'En attente',running:'En cours',waiting_approval:'À valider',cancelled:'Annulée'};
 export function NotificationCenter(props:Props){
   const dialog=useRef<HTMLDialogElement>(null);
-  const [filter,setFilter]=useState('all'),[query,setQuery]=useState(''),[agent,setAgent]=useState('');
+  const [filter,setFilter]=useState(props.initialFilter||'all'),[query,setQuery]=useState(''),[agent,setAgent]=useState(props.initialAgent||'');
   const [busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [codeRequest,setCodeRequest]=useState('');
   useEffect(()=>{const el=dialog.current,previous=document.activeElement as HTMLElement|null;el?.showModal();el?.querySelector<HTMLInputElement>('input')?.focus();return()=>{el?.close();previous?.focus();};},[]);
   const rows=notificationRows(props.tasks,props.events,props.readThrough);
   const decisions=props.tasks.filter(needsDecision).length,failures=props.tasks.filter(t=>t.status==='failed').length,completed=props.tasks.filter(t=>t.status==='completed'&&!isPendingProposal(t)).length;
   const visible=rows.filter(({task,unread})=>(!agent||task.agent_id===agent)&&
-    (filter==='all'||filter==='decision'&&needsDecision(task)||filter==='completed'&&task.status==='completed'&&!isPendingProposal(task)||filter==='failed'&&task.status==='failed'||filter==='active'&&['queued','running'].includes(task.status)||filter==='unread'&&unread)&&
+    (filter==='all'||filter==='decision'&&needsDecision(task)||filter==='completed'&&task.status==='completed'&&!isPendingProposal(task)||filter==='completed_today'&&task.status==='completed'&&!isPendingProposal(task)&&parisDay(task.finished_at||task.created_at)===parisDay(new Date())||filter==='failed'&&task.status==='failed'||filter==='active'&&['queued','running'].includes(task.status)||filter==='unread'&&unread)&&
     `${task.description} ${task.result.title||''} ${task.error||''} ${task.id}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   async function action(key:string,operation:()=>Promise<unknown>,success:string){
     if(busy)return;setBusy(key);setError('');setNotice('');
@@ -39,7 +39,7 @@ export function NotificationCenter(props:Props){
       <div><small>Codex · connexion ChatGPT locale · modifications dans une branche séparée, diff et vérifications à examiner.</small><button type="submit" disabled={!!busy||julesActive||codeRequest.trim().length<10}>Préparer la mission</button></div>
     </form>
     </details>
-    <div className="notification-tabs" role="group" aria-label="Filtrer les notifications">{[['all','Tout'],['decision','Décisions'],['unread','Non lues'],['completed','Terminées'],['active','En cours'],['failed','Erreurs']].map(([id,label])=><button key={id} aria-pressed={filter===id} className={filter===id?'selected':''} onClick={()=>setFilter(id)}>{label}</button>)}</div>
+    <div className="notification-tabs" role="group" aria-label="Filtrer les notifications">{[['all','Tout'],['decision','Décisions'],['unread','Non lues'],['completed','Terminées'],['completed_today','Aujourd’hui'],['active','En cours'],['failed','Erreurs']].map(([id,label])=><button key={id} aria-pressed={filter===id} className={filter===id?'selected':''} onClick={()=>setFilter(id)}>{label}</button>)}</div>
     <div className="notification-filters"><input aria-label="Rechercher une notification" placeholder="Mission, résultat ou identifiant…" value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="Agent des notifications" value={agent} onChange={e=>setAgent(e.target.value)}><option value="">Tous les agents</option>{props.agents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
     {error&&<p className="notification-feedback error" role="alert">{error}</p>}{notice&&<p className="notification-feedback" role="status">{notice}</p>}
     <div className="notification-feed"><p className="notification-count">{visible.length} mission(s) affichée(s) · décisions en priorité</p>

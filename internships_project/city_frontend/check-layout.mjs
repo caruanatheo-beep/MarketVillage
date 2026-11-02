@@ -11,7 +11,8 @@ export async function checkLayout() {
     stdin: {
       contents: `export { loadFurniture, buildOfficeLayout, validateAgentRoutes } from './src/PixelFloorGame';
         export { worldY } from './src/worldGeometry';
-        export { notificationRows, isPendingProposal, needsDecision } from './src/notifications';
+        export { cockpitData, resultSummary } from './src/cockpitData';
+        export { notificationRows, isPendingProposal, needsDecision, parisDay } from './src/notifications';
         export { buildTowerStructure } from './src/TowerArchitecture';
         export { TileType } from './vendor/pixel-agents/webview-ui/src/office/types';
         export { projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows } from './src/TowerPerspective';
@@ -25,7 +26,7 @@ export async function checkLayout() {
   });
   const { loadFurniture, buildOfficeLayout, validateAgentRoutes, OfficeState, findPath, GolfPractice, GOLF_BAYS, worldY,
     projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows, buildTowerStructure, TileType,
-    notificationRows, isPendingProposal, needsDecision } =
+    notificationRows, isPendingProposal, needsDecision, parisDay, cockpitData, resultSummary } =
     await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString("base64")}`);
   const proposal={id:'proposal',agent_id:'job_hunter',status:'completed',description:'Audit',created_at:'2026-01-01',result:{approval_required:true,role_version:2}};
   const done={id:'done',agent_id:'networker',status:'completed',description:'Contacts',created_at:'2026-01-02',result:{}};
@@ -37,6 +38,21 @@ export async function checkLayout() {
   assert.equal(isPendingProposal({...proposal,result:{...proposal.result,review_decision:'approved'}}),false);
   assert.equal(isPendingProposal({...proposal,result:{...proposal.result,branch:'isolated'}}),false);
   console.log('Notifications OK: decision priority, read markers and reviewed/branched proposals.');
+  const finished={...done,agent_id:'internship_scout',description:'Stages',finished_at:'2026-11-02T23:10:00Z',result:{new_count:4}};
+  const queued={...done,id:'queued',agent_id:'job_hunter',status:'queued'};
+  const running={...queued,id:'running',status:'running'};
+  const decision={...proposal,agent_id:'job_hunter',description:'Review'};
+  const cockpit=cockpitData([finished,queued,running,decision],[{id:1,task_id:'running',message:'Sources analysées'},{id:2,task_id:'running',message:'Vérification en cours'}],new Date('2026-11-03T00:20:00Z'));
+  assert.equal(cockpit.today,1,'Paris day crosses UTC midnight correctly');
+  assert.equal(parisDay('2026-11-02T23:10:00Z'),'2026-11-03');
+  assert.equal(cockpit.active[0].id,'running','Running tasks precede queued tasks');
+  assert.equal(cockpit.decisions[0].id,decision.id);
+  assert.equal(cockpit.latest.get('running').message,'Vérification en cours','Use latest real event');
+  assert.equal(cockpit.finished.length,1,'Unresolved proposals are decisions, not finished results');
+  assert.equal(resultSummary(finished),'4 nouveaux stages d\u00e9tect\u00e9s');
+  assert.equal(cockpitData([],[]).today,0);
+  console.log('Cockpit OK: real phases, decisions, results and Paris daily counts.');
+
   for(const zoom of [.5,1,2])for(const row of [-2,0,9,worldY(21),worldY(40),worldY(40)+2])for(const col of [-4,0,24,48,52]){
     const x=17+col*16*zoom,y=23+row*16*zoom;
     const projected=projectTowerX(x,y,17,23,zoom);

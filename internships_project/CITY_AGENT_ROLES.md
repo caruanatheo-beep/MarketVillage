@@ -5,6 +5,14 @@ Les identifiants SQLite existants sont conservés pour ne pas perdre l'historiqu
 `developer` Axel Interview Coach. `innovation_lab` désigne Nova. Ces identifiants ne
 donnent aucun accès aux anciens outils. Le Desk Manager est l'unique chat utilisateur.
 
+Le cockpit latéral privilégie les décisions, les missions actives, la fiche de l'agent
+sélectionné et les derniers résultats. Ses compteurs ouvrent les notifications avec
+le filtre correspondant (dont les résultats du jour à l'heure de Paris).
+Les étapes affichées proviennent du dernier événement enregistré, sans progression
+inventée. Seules les missions en attente proposent une annulation ; les décisions
+restent dans leurs écrans de validation existants. Les diagnostics et l'usage API
+sont accessibles dans Réglages. Le chat du Manager et les contacts conservent leurs fenêtres.
+
 | Agent | Opérations serveur | Récurrence (Europe/Paris) | Livrable |
 |---|---|---|---|
 | Jules | `repository_audit`, `codex_review`, `code_change`, préparation de branche après validation humaine | Audit quotidien ; analyse Codex et développement sur demande | Audit AST ou mission Codex, diff, fichiers modifiés et vérifications dans un worktree isolé |

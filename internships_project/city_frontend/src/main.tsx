@@ -3,10 +3,10 @@ import { createRoot } from "react-dom/client";
 import { type AgentStatus } from "./types";
 import { PixelFloorGame } from "./PixelFloorGame";
 import "./liveDashboard";
-import {ActivityTimeline} from "./ActivityTimeline";
 import {NetworkContactsWindow} from "./NetworkContacts";
 import {ManagerChatWindow} from "./ManagerChatWindow";
 import {NotificationCenter} from "./NotificationCenter";
+import {Cockpit} from "./Cockpit";
 import {isPendingProposal} from "./notifications";
 
 // The standalone fallback panel is only used by the currently deployed bundle.
@@ -123,7 +123,7 @@ async function api<T>(path: string, payload?: object): Promise<T> {
 function App(): React.ReactElement {
   const [panelCollapsed,setPanelCollapsed]=useState(false);
   const [panelWidth,setPanelWidth]=useState(340);
-  const [teamExpanded,setTeamExpanded]=useState(false);
+  const [notificationView,setNotificationView]=useState({filter:"all",agent:""});
   const [missionFilter,setMissionFilter]=useState("active");
   const [resultTaskId,setResultTaskId]=useState<string|null>(null);
   const [launchingSite,setLaunchingSite]=useState<string|null>(null);
@@ -153,9 +153,7 @@ function App(): React.ReactElement {
   const [mission, setMission] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [showHistory, setShowHistory] = useState(false);
   const [openedTaskId, setOpenedTaskId] = useState<string | null>(null);
-  const [panelTab, setPanelTab] = useState<"chat"|"missions"|"history">("chat");
   const [windowMode, setWindowMode] = useState<"none"|"agent"|"agents"|"missions"|"activity"|"contacts"|"chat">("agent");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -267,12 +265,7 @@ function App(): React.ReactElement {
     return () => { observer.disconnect(); window.removeEventListener("resize", publishHeight); };
   }, []);
 
-  const selected = snapshot?.agents.find(agent => agent.id === selectedId) || null;
   const deskManager = snapshot?.agents.find(agent => agent.id === "desk_manager") || null;
-  const ownTasks = snapshot?.tasks.filter(task => task.agent_id === selectedId) || [];
-  const ownEvents = snapshot?.events.filter(event => event.agent_id === selectedId).slice(0, 8) || [];
-  const active = ownTasks.find(task => ["running", "queued", "waiting_approval"].includes(task.status));
-  const resultTask = ownTasks.find(task => task.id === openedTaskId) || ownTasks.find(task => task.status === "completed" || task.status === "failed");
   const pendingCount = snapshot?.tasks.filter(task=>task.status==="waiting_approval"||isPendingProposal(task)).length||0;
   const activeCount = snapshot?.tasks.filter(task=>task.status==="running").length||0;
   const todayKey = (value: string) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? "" : `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`; };
@@ -321,11 +314,20 @@ function App(): React.ReactElement {
     } catch (exc) { setError(exc instanceof Error ? exc.message : "La collecte n'a pas pu démarrer."); }
     finally { setCollectionBusy(null); }
   }
+  function openNotifications(filter="all",agent=""):void {
+    setNotificationView({filter,agent});setWindowMode("activity");
+  }
   function openAgent(id:string, tab?:"chat"|"missions"|"history"):void {
-    if(id==="networker"&&!tab){setWindowMode("contacts");return;}
-    const nextTab = tab || (id === "desk_manager" ? "chat" : "missions");
-    const nextId = nextTab === "chat" ? "desk_manager" : id;
-    setPanelCollapsed(false);setSelectedId(nextId);setPanelTab(nextTab);setWindowMode(nextTab === "chat" ? "chat" : "agent");
+    setPanelCollapsed(false);setSelectedId(id);
+    if(tab==="history"){openNotifications("all",id==="desk_manager"?"":id);return;}
+    if(tab==="missions"){setWindowMode("missions");return;}
+    if(tab==="chat"||id==="desk_manager"){setWindowMode("chat");return;}
+    setWindowMode(id==="networker"?"contacts":"agent");
+  }
+  function inspectCockpitTask(id:string):void {
+    const task=snapshot?.tasks.find(t=>t.id===id);if(!task)return;
+    if(["completed","failed"].includes(task.status)){showResult(task);return;}
+    setSelectedId(task.agent_id);setOpenedTaskId(id);setMissionFilter(task.status==="running"?"active":"pending");setWindowMode("missions");
   }
 
   async function startWorkflow(event: React.FormEvent): Promise<void> {
@@ -532,7 +534,7 @@ function App(): React.ReactElement {
         allTasks.find(item=>item.workflow_id===task.workflow_id)?.id === task.id);
       const summary = task.result.text || task.result.title ||
         (task.result.new_count !== undefined ? `${task.result.new_count} nouvelle(s) offre(s) sur ${task.result.total_count ?? "?"}.` : "");
-      return <article className={`mission-record ${task.status}`} key={task.id}>
+      return <article className={`mission-record ${task.status} ${openedTaskId===task.id?'mission-highlight':''}`} key={task.id}>
         <div className="mission-record-head"><div><button className="mission-title" type="button" onClick={()=>{setOpenedTaskId(task.id);setSelectedId(task.agent_id);}}>{task.description}</button><small>{assigned}{task.delegated_by?` / transmis par ${snapshot?.agents.find(agent=>agent.id===task.delegated_by)?.name||task.delegated_by}`:""}</small></div><span className={`task-chip ${task.status}`}>{LABELS[task.status]}</span></div>
         <div className="mission-record-meta"><code title={`Identifiant persistant : ${task.id}`}>ID {task.id}</code><time>{dateTime(task.created_at)}</time>{task.workflow_id&&<span>Projet {task.workflow_id.slice(0,8)}</span>}</div>
         {!!dependencies.length&&<div className="mission-dependencies"><b>{dependencies.filter(d=>d?.status==="completed").length}/{dependencies.length} prérequis terminés</b>{dependencies.map((dependency,index)=><span key={task.depends_on?.[index]} title={task.depends_on?.[index]}>{dependency?`${snapshot?.agents.find(agent=>agent.id===dependency.agent_id)?.name||dependency.agent_id} / ${LABELS[dependency.status]}`:`ID ${task.depends_on?.[index].slice(0,10)} indisponible`}</span>)}</div>}
@@ -693,7 +695,7 @@ function App(): React.ReactElement {
           <div className="command-search"><span aria-hidden="true">⌕</span><input aria-label="Rechercher un agent ou une mission" placeholder="Rechercher un agent, une mission…" value={commandQuery} onChange={e=>setCommandQuery(e.target.value)}/>{commandQuery.trim()&&<div className="command-search-results">{(snapshot?.agents||[]).filter(a=>(a.name+" "+a.role).toLowerCase().includes(commandQuery.toLowerCase())).map(a=><button key={a.id} onClick={()=>{openAgent(a.id);setCommandQuery("");}}>{a.name}<small>{a.role}</small></button>)}{(snapshot?.tasks||[]).filter(t=>t.description.toLowerCase().includes(commandQuery.toLowerCase())).slice(0,5).map(t=><button key={t.id} onClick={()=>{showResult(t);setCommandQuery("");}}>{t.description}<small>{LABELS[t.status]}</small></button>)}<button onClick={()=>setCommandQuery("")}>Fermer la recherche</button></div>}</div>
           <nav className="game-hud" aria-label="Commandes MarketDesk City">
             <button type="button" className={windowMode==="missions"?"active":""} onClick={()=>setWindowMode(windowMode==="missions"?"none":"missions")} aria-label="Missions" aria-pressed={windowMode==="missions"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M9 3h6v4H9zM8 12h8M8 16h5"/></svg><span>Missions</span>{activeCount>0&&<b>{activeCount}</b>}</button>
-            <button type="button" className={windowMode==="activity"?"active":""} onClick={()=>setWindowMode(windowMode==="activity"?"none":"activity")} aria-label="Notifications" aria-pressed={windowMode==="activity"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M2 12h5l3-8 4 16 3-8h5"/></svg><span>Notifications</span>{(pendingCount>0||(snapshot?.events||[]).some(e=>e.id>notificationReadThrough))&&<b>{Math.max(pendingCount,(snapshot?.events||[]).filter(e=>e.id>notificationReadThrough).length)}</b>}</button>
+            <button type="button" className={windowMode==="activity"?"active":""} onClick={()=>{if(windowMode==="activity")setWindowMode("none");else openNotifications();}} aria-label="Notifications" aria-pressed={windowMode==="activity"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M2 12h5l3-8 4 16 3-8h5"/></svg><span>Notifications</span>{(pendingCount>0||(snapshot?.events||[]).some(e=>e.id>notificationReadThrough))&&<b>{Math.max(pendingCount,(snapshot?.events||[]).filter(e=>e.id>notificationReadThrough).length)}</b>}</button>
             <button type="button" className={windowMode==="contacts"?"active":""} onClick={()=>setWindowMode(windowMode==="contacts"?"none":"contacts")} aria-label="Contacts" aria-pressed={windowMode==="contacts"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-4-5"/></svg><span>Contacts</span></button>
             <button type="button" aria-label="Réglages" onClick={()=>{setSettingsOpen(true);void loadSettings();}}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor"/><circle cx="15" cy="17" r="3" fill="currentColor"/></svg><span>Réglages</span></button>
             <form action="/logout" method="post" className="city-logout"><button type="submit">Quitter</button></form>
@@ -708,48 +710,15 @@ function App(): React.ReactElement {
           onPointerDown={e=>{resizeStart.current={x:e.clientX,width:panelWidth};e.currentTarget.setPointerCapture(e.pointerId);}}
           onPointerMove={e=>{if(resizeStart.current)setPanelWidth(Math.max(340,Math.min(600,resizeStart.current.width+resizeStart.current.x-e.clientX)));}}
           onPointerUp={()=>{resizeStart.current=null;}} onPointerCancel={()=>{resizeStart.current=null;}}/>
-        <header className="console-header"><div><strong>Command Center</strong><small><i className="live-dot"/>{activeCount} mission(s) en cours · {pendingCount} à valider</small></div><button type="button" className="text-button" onClick={()=>setPanelCollapsed(true)} aria-label="Replier le panneau">→</button></header>
-        <div className="dashboard-shortcuts" aria-label="Tes applications"><button type="button" disabled={!!launchingSite} onClick={()=>void openLocalSite("markets")}>{launchingSite==="markets"?"Démarrage…":"Markets ↗"}</button><button type="button" disabled={!!launchingSite} onClick={()=>void openLocalSite("internships")}>{launchingSite==="internships"?"Démarrage…":"Internships ↗"}</button>{(snapshot?.tasks||[]).some(t=>t.status==="completed")&&<button type="button" onClick={()=>{setMissionFilter("completed");openAgent("desk_manager","missions");}}>Résultats</button>}</div>
-        {siteError&&<p className="site-launch-error" role="alert">{siteError}</p>}
-        <section className="console-team"><button className="team-toggle" type="button" onClick={()=>setTeamExpanded(!teamExpanded)} aria-expanded={teamExpanded}><span>Équipe · {snapshot?.agents.length||0} agents</span><span>{teamExpanded?"Réduire ▴":"Choisir un agent ▾"}</span></button>
-        <div className={`agent-chooser ${teamExpanded?"expanded":"compact"}`} role="group" aria-label="Sélectionner un agent">
-          {snapshot?.agents.map(agent=><button key={agent.id} type="button" className={`agent-choice ${agent.id} ${selectedId===agent.id?"chosen":""} ${agent.status}`} onClick={()=>openAgent(agent.id)} aria-pressed={selectedId===agent.id} title={`${agent.name} · ${LABELS[agent.status]}${agent.latest?` · ${agent.latest.description}`:""}`}>
-            <span className={`roster-avatar pixel-agent-avatar ${agent.id}`} aria-hidden="true"><i className="agent-sprite"/></span>
-            <span className="agent-choice-copy"><strong>{agent.name}</strong><small>{teamExpanded?agent.role:LABELS[agent.status]}</small>{teamExpanded&&agent.latest&&<small className="current-activity">{agent.latest.description}</small>}</span><i className={`status-light ${agent.status}`}/>
-          </button>)}
-        </div></section>
-        <nav className="panel-tabs" aria-label="Espace de travail du Desk Manager"><button type="button" className={panelTab==="chat"?"selected":""} onClick={()=>openAgent("desk_manager","chat")}>Chat</button><button type="button" className={panelTab==="missions"?"selected":""} onClick={()=>setPanelTab("missions")}>Missions</button><button type="button" className={panelTab==="history"?"selected":""} onClick={()=>setPanelTab("history")}>Historique</button></nav>
-        {selected?<>
-          {panelTab!=="chat"&&<div className="agent-meta"><strong>{selected.name} <small>· {selected.role}</small></strong><span className={`agent-status ${selected.status}`}><i className={`status-light ${selected.status}`}/>{LABELS[selected.status]}</span></div>}
-          <details className="agent-about"><summary>Rôle et dernière activité</summary><p>{selected.description}</p>{selected.latest&&<p>{LABELS[selected.latest.status]} · {selected.latest.description} · {dateTime(selected.latest.created_at)}</p>}</details>
-          {panelTab==="chat"?<section className="manager-routing-note"><p>Retrouve ta conversation dans la fen&ecirc;tre du Desk Manager.</p><button type="button" className="primary-button" onClick={()=>openAgent("desk_manager","chat")}>Ouvrir le chat</button></section>:panelTab==="missions"&&selected.id==="desk_manager"?managerPanel():panelTab==="missions"?<div className="task-panel-content mission-tab">
-            <section className="mission-section"><div className="section-heading"><h3>Mission</h3>{active&&<span className={`task-chip ${active.status}`}>{LABELS[active.status]}</span>}</div>
-              {active&&<div className="active-mission"><strong>{active.description}</strong><small>{active.status==="running"?`D&eacute;marr&eacute;e ${dateTime(active.started_at)}`:active.status==="waiting_approval"?"En attente de ton approbation":`Planifi&eacute;e ou en attente &middot; ${dateTime(active.created_at)}`}</small></div>}
-              <div className="manager-routing-note"><p>Desk Manager centralise les validations, erreurs et relances. Consulte le suivi global dans Mission Control.</p><button type="button" className="primary-button compact-button" onClick={()=>openAgent("desk_manager","missions")}>Ouvrir Mission Control</button></div></section>
-            <section className="results-section"><div className="section-heading"><h3>R&eacute;sultat r&eacute;cent</h3>{resultTask&&<span className={`task-chip ${resultTask.status}`}>{LABELS[resultTask.status]}</span>}</div>
-              {!resultTask?<p className="muted">Aucune mission termin&eacute;e.</p>:resultTask.status==="failed"?<><p className="error-copy">{resultTask.error}</p></>:<div>{resultTask.result.title&&<h4>{resultTask.result.title}</h4>}{resultTask.result.text&&<p className="result-text">{resultTask.result.text}</p>}{resultTask.result.new_count!==undefined&&<p><strong>{resultTask.result.new_count} nouvelles offres</strong> sur {resultTask.result.total_count} suivies.</p>}{resultTask.result.question&&<div className="exercise-card"><strong>Question</strong><p>{resultTask.result.question}</p><details><summary>Voir la correction</summary><p>{resultTask.result.answer}</p></details></div>}{resultTask.result.body&&<div className="draft-card"><strong>{resultTask.result.contact?.name} &middot; {resultTask.result.contact?.company}</strong><p><b>Objet :</b> {resultTask.result.subject}</p><pre>{resultTask.result.body}</pre><details><summary>Relance</summary><pre>{resultTask.result.followup}</pre></details><small>Aucun message n'a &eacute;t&eacute; envoy&eacute;.</small></div>}
-                {resultTask.result.offers?.map(offer=><article className="result-item" key={offer.url}><a href={offer.url} target="_blank" rel="noopener noreferrer">{offer.title}</a><small>{offer.company} &middot; {offer.location||"Lieu non indiqu&eacute;"}</small></article>)}
-                {resultTask.result.contacts?.map(contact=><article className="result-item" key={contact.id}><strong>{contact.name}</strong><small>{contact.role} &middot; {contact.company} &middot; {contact.verification}</small>{contact.linkedin_url&&<a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer">Voir le profil</a>}</article>)}
-                {resultTask.result.errors?.map((item,index)=><article className="result-item" key={index}><strong>{item.source}</strong><small>{item.status} &middot; {item.error}</small></article>)}
-                </div>}</section>
-          </div>:<div className="task-panel-content history-tab"><div className="section-heading"><h3>Historique des missions</h3><span className="panel-code">{snapshot?.events.length||0} événements</span></div>
-            <ActivityTimeline events={snapshot?.events||[]} agents={snapshot?.agents||[]} onOpen={(agent,task)=>{setOpenedTaskId(task);openAgent(agent,"missions");}}/>
-            <div className="cost-line"><span>Usage IA de ton compte</span><strong>{snapshot?.api_usage.calls??0} appel(s) &middot; ${(snapshot?.api_usage.estimated_usd??0).toFixed(4)}</strong><small>{snapshot?.api_usage.input_tokens??0} jetons entr&eacute;e &middot; {snapshot?.api_usage.output_tokens??0} sortie</small></div>
-            <section className="diagnostics-section"><div className="section-heading"><h3>Diagnostics des services</h3><button type="button" className="secondary-button" onClick={()=>void checkIntegrations()} disabled={diagnosticsBusy}>{diagnosticsBusy?"V&eacute;rification...":"V&eacute;rifier"}</button></div>{diagnostics&&<div className="integration-list">{diagnostics.map(item=><article className="integration-row" key={item.name}><span className={`integration-dot ${item.status.toLowerCase()}`}/><div><strong>{item.name}</strong><small>{item.source} &middot; {item.access}</small><p>{item.detail}</p></div><b className={`integration-status ${item.status.toLowerCase()}`}>{item.status}</b></article>)}</div>}</section>
-          </div>}
-          {panelTab==="chat"&&<div className="console-overview">
-            <section aria-label="Missions en cours"><header><h3>Missions en cours</h3><button type="button" onClick={()=>{setMissionFilter("active");openAgent("desk_manager","missions");}}>Tout voir →</button></header>
-              {(snapshot?.tasks||[]).filter(t=>["running","queued","waiting_approval"].includes(t.status)).slice(0,2).map(t=><button className="overview-task" type="button" key={t.id} onClick={()=>{setOpenedTaskId(t.id);setMissionFilter(t.status==="waiting_approval"?"pending":"active");openAgent("desk_manager","missions");}}>
-                <span className={`roster-avatar pixel-agent-avatar ${t.agent_id}`} aria-hidden="true"><i className="agent-sprite"/></span><span><strong>{t.description}</strong><small>{snapshot?.agents.find(a=>a.id===t.agent_id)?.name}</small></span><b className={`task-chip ${t.status}`}>{LABELS[t.status]}</b>
-              </button>)}
-              {!(snapshot?.tasks||[]).some(t=>["running","queued","waiting_approval"].includes(t.status))&&<p>Aucune mission en cours.</p>}
-            </section>
-            <section aria-label="Activité récente"><header><h3>Activité récente</h3><button type="button" onClick={()=>setWindowMode("activity")}>Tout voir →</button></header>
-              {[...(snapshot?.events||[])].sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)).slice(0,2).map(event=><button className="overview-event" type="button" key={event.id} onClick={()=>{const task=snapshot?.tasks.find(t=>t.id===event.task_id);if(task?.status==="completed")showResult(task);else{setOpenedTaskId(event.task_id);openAgent("desk_manager","history");}}}><i className={`status-light ${event.status}`}/><span>{event.message}</span><time>{dateTime(event.created_at)}</time></button>)}
-              {!snapshot?.events.length&&<p>Aucune activité enregistrée.</p>}
-            </section>
-          </div>}
-        </>:<p className="muted">Chargement des agents...</p>}
+        <Cockpit agents={snapshot?.agents||[]} tasks={snapshot?.tasks||[]} events={snapshot?.events||[]} selectedId={selectedId}
+          onSelect={id=>{setSelectedId(id);setPanelCollapsed(false);setWindowMode("agent");}} onCollapse={()=>setPanelCollapsed(true)}
+          onNotifications={openNotifications} onOpen={inspectCockpitTask}
+          onChat={message=>{if(message)setChatInput(message);openAgent("desk_manager","chat");}}
+          onContacts={()=>setWindowMode("contacts")} onCancel={id=>api(`/city/api/tasks/${id}/cancel`,{})}
+          onLaunch={id=>id==="internship_scout"?api('/city/api/collect/internships',{}):id==="market_analyst"?api('/city/api/collect/markets',{}):api(`/city/api/agents/${id}/run`,{})}
+          onReview={()=>api('/city/api/jules/review',{})} onCode={request=>api('/city/api/jules/change',{request})} onRefresh={refresh}
+          onSite={kind=>void openLocalSite(kind)} siteBusy={!!launchingSite} siteError={siteError}/>
+
       </aside>
     </div>
     {windowMode==="chat"&&<ManagerChatWindow onClose={()=>setWindowMode("agent")}>{managerChat}</ManagerChatWindow>}
@@ -757,7 +726,7 @@ function App(): React.ReactElement {
     {windowMode==="missions"&&<section className="game-popup game-mission-control" aria-label="Mission Control">
       <div className="game-popup-heading"><div><strong>Mission Control</strong><small>{activeCount} en cours &middot; {pendingCount} à valider</small></div><button type="button" onClick={()=>setWindowMode("none")} aria-label="Fermer">&times;</button></div>
       {managerPanel()}</section>}
-    {windowMode==="activity"&&<NotificationCenter tasks={snapshot?.tasks||[]} events={snapshot?.events||[]} agents={snapshot?.agents||[]} readThrough={notificationReadThrough}
+    {windowMode==="activity"&&<NotificationCenter key={`${notificationView.filter}-${notificationView.agent}`} initialFilter={notificationView.filter} initialAgent={notificationView.agent} tasks={snapshot?.tasks||[]} events={snapshot?.events||[]} agents={snapshot?.agents||[]} readThrough={notificationReadThrough}
       onClose={()=>setWindowMode("agent")} onOpen={id=>{const task=snapshot?.tasks.find(t=>t.id===id);if(task)showResult(task);else setError("Cette mission n'est plus dans les données chargées.");}}
       onRead={async()=>{const result=await api<{last_read_event_id:number}>("/city/api/notifications/read",{read_through:Math.max(0,...(snapshot?.events||[]).map(e=>e.id))});setNotificationReadThrough(result.last_read_event_id);}}
       onRelaunch={()=>api("/city/api/agents/job_hunter/run",{})} onCodeRequest={request=>api('/city/api/jules/change',{request})} onCodexReview={()=>api('/city/api/jules/review',{})} onApprove={id=>api(`/city/api/tasks/${id}/approve`,{})}
@@ -794,6 +763,8 @@ function App(): React.ReactElement {
       <div className="settings-heading"><div><span className="tiny-label">PR&Eacute;F&Eacute;RENCES DU COMPTE</span><h2 id="settings-title">R&eacute;glages MarketDesk City</h2></div><button type="button" className="icon-button" onClick={()=>setSettingsOpen(false)} aria-label="Fermer">&times;</button></div>
       <p>La cl&eacute; du fournisseur reste sur le serveur. Choisis le mod&egrave;le par agent et tes limites de d&eacute;penses.</p>
       <div className="settings-model-grid">{INITIAL_IDS.map(id=><label key={id}>{snapshot?.agents.find(agent=>agent.id===id)?.name||id}<select value={settings.models[id]||"gpt-4o-mini"} onChange={event=>setSettings({...settings,models:{...settings.models,[id]:event.target.value}})}>{(settings.available_models||["gpt-4o-mini"]).map(model=><option key={model}>{model}</option>)}</select></label>)}</div>
+<div className="cost-line"><span>Usage IA du compte</span><strong>{snapshot?.api_usage.calls??0} appel(s) API &middot; ${(snapshot?.api_usage.estimated_usd??0).toFixed(4)}</strong><small>Codex utilise les limites de ta connexion ChatGPT.</small></div>
+            <section className="diagnostics-section"><div className="section-heading"><h3>Diagnostics des services</h3><button type="button" className="secondary-button" onClick={()=>void checkIntegrations()} disabled={diagnosticsBusy}>{diagnosticsBusy?"V&eacute;rification...":"V&eacute;rifier"}</button></div>{diagnostics&&<div className="integration-list">{diagnostics.map(item=><article className="integration-row" key={item.name}><span className={`integration-dot ${item.status.toLowerCase()}`}/><div><strong>{item.name}</strong><small>{item.source} &middot; {item.access}</small><p>{item.detail}</p></div><b className={`integration-status ${item.status.toLowerCase()}`}>{item.status}</b></article>)}</div>}</section>
       <div className="settings-limits"><label>Plafond quotidien ($)<input type="number" min="0" max="1000" step="0.5" value={settings.daily_limit_usd} onChange={event=>setSettings({...settings,daily_limit_usd:Number(event.target.value)})}/></label><label>Plafond mensuel ($)<input type="number" min="0" max="10000" step="1" value={settings.monthly_limit_usd} onChange={event=>setSettings({...settings,monthly_limit_usd:Number(event.target.value)})}/></label><label>Missions simultan&eacute;es<select value={settings.max_concurrent_tasks} onChange={event=>setSettings({...settings,max_concurrent_tasks:Number(event.target.value)})}>{[1,2,3,4,5,6].map(value=><option key={value} value={value}>{value}</option>)}</select></label></div>
       <label className="settings-checkbox"><input type="checkbox" checked={settings.auto_tasks} onChange={event=>setSettings({...settings,auto_tasks:event.target.checked})}/><span>Lancer les missions d&egrave;s leur ajout ; sinon, demander mon approbation</span></label><small className={settings.api_key_configured?"provider-ready":"provider-missing"}>{settings.api_key_configured?"OpenAI est configur&eacute; c&ocirc;t&eacute; serveur.":"OPENAI_API_KEY n'est pas configur&eacute;e sur le serveur."}</small>
       <div className="dialog-actions"><button type="button" className="secondary-button" onClick={()=>setSettingsOpen(false)}>Fermer</button><button type="submit" className="primary-button" disabled={settingsBusy}>{settingsBusy?"Enregistrement...":"Enregistrer"}</button></div>

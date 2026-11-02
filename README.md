@@ -24,6 +24,7 @@ le bouton de validation d’une proposition. Les fichiers préparés sont indiqu
 - Enrichir certaines fiches avec l’école ou l’université fréquentée, lorsqu’une source l’atteste.
 - Demander une analyse quantitative, préparer un entretien ou produire un brouillon de communication.
 - Confier à Jules des corrections ou fonctionnalités avec Codex, puis examiner le diff et les vérifications en branche isolée.
+- Piloter City depuis le cockpit : décisions prioritaires, étapes réelles des missions, agent sélectionné et derniers résultats. Les compteurs ouvrent les notifications filtrées ; le total du jour suit l’heure de Paris.
 
 ## Les agents
 
