@@ -148,12 +148,17 @@ Mira et Iris n'ont pas de récurrence à rattraper. Les missions déjà en atten
 - Jules analyse les modules Python City locaux sans exécuter leur code. Ce dossier de
   travail possède désormais un dépôt Git local initialisé le 2 novembre 2026.
   Les anciens audits sans révision Git doivent être relancés avant validation.
-  Aucun dépôt distant n'est configuré ; la synchronisation GitHub reste distincte.
+  Le remote `origin` référence MarketVillage ; la synchronisation GitHub reste distincte.
   Dans un clone, la validation humaine crée une branche `marketdesk/jules-*` et un worktree
   `.city-worktrees/`, avec un nouveau test AST vérifié. Aucun fichier existant n'est remplacé,
   aucun commit, push, merge, installation ou déploiement automatique. Le test AST n'est pas
-  présenté comme une suite complète de performance. `MARKETDESK_GITHUB_REPO=owner/repo`
-  permet de consulter les cinq derniers commits publics ; cette lecture ne synchronise pas le clone.
+  présenté comme une suite complète de performance. Jules reconnaît automatiquement un
+  remote `origin` GitHub HTTPS ou SSH ; `MARKETDESK_GITHUB_REPO=owner/repo` reste une
+  surcharge facultative. Il consulte cinq commits publics et indique si le HEAD local
+  correspond au dernier commit consulté, s'il diffère ou si la comparaison est indisponible.
+  Cette lecture ne lance aucun fetch/pull et ne certifie pas l'absence de modifications
+  locales, lesquelles sont signalées séparément. Le rapport dit clairement que le test
+  attend encore la validation de l'utilisateur avant sa création en branche isolée.
 - Noé utilise les historiques FRED du collecteur Markets, sans interface ni LLM. Les
   stratégies exécutables initiales sont momentum et retour à la moyenne, long/cash sur
   SP500 ou NASDAQCOM. Signaux décalés, coûts à l'entrée/sortie, liquidation finale. Les

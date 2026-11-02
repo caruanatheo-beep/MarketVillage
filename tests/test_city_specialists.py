@@ -226,6 +226,46 @@ def test_prepare_branch_is_isolated_and_never_merges(tmp_path, monkeypatch):
     assert specialists.git(repo,'rev-parse','HEAD') == audit['revision']
 
 
+@pytest.mark.parametrize('origin',[
+    'https://github.com/example/MarketVillage.git',
+    'git@github.com:example/MarketVillage.git',
+    'ssh://git@github.com/example/MarketVillage.git',
+])
+def test_jules_discovers_github_origin_and_explains_approval(tmp_path,monkeypatch,origin):
+    monkeypatch.delenv('MARKETDESK_GITHUB_REPO',raising=False)
+    monkeypatch.setattr(specialists,'repo_root',lambda:tmp_path)
+    def git(root,*args):
+        if args==('rev-parse','HEAD'):return 'a'*40
+        if args==('remote','get-url','origin'):return origin
+        if args==('status','--porcelain','--untracked-files=no'):return ''
+        raise AssertionError('Audit must not fetch, pull or write Git state')
+    monkeypatch.setattr(specialists,'git',git)
+    class Response:
+        def raise_for_status(self):pass
+        def json(self):return [{'sha':'a'*40,'html_url':'https://github.com/example/MarketVillage/commit/'+('a'*40),
+                               'commit':{'committer':{'date':'2026-11-02T10:00:00Z'}}}]
+    calls=[]
+    def get(url,**kwargs):
+        calls.append(url)
+        return Response()
+    monkeypatch.setattr('requests.get',get)
+    audit=specialists.repository_audit()
+    assert calls==['https://api.github.com/repos/example/MarketVillage/commits']
+    assert audit['github']['sync_status']=='same_head'
+    assert 'Valider la proposition' in audit['text']
+    assert 'Configure MARKETDESK_GITHUB_REPO' not in audit['text']
+
+
+def test_jules_does_not_leak_credential_bearing_or_unknown_remote(tmp_path,monkeypatch):
+    monkeypatch.delenv('MARKETDESK_GITHUB_REPO',raising=False)
+    monkeypatch.setattr(specialists,'repo_root',lambda:tmp_path)
+    monkeypatch.setattr(specialists,'git',lambda root,*args:'https://private-token@github.com/example/private.git' if args[0]=='remote' else 'a'*40 if args[0]=='rev-parse' else '')
+    monkeypatch.setattr('requests.get',lambda *args,**kwargs:pytest.fail('No API request for an unrecognized origin'))
+    audit=specialists.repository_audit()
+    assert 'private-token' not in str(audit)
+    assert audit['github']=={}
+
+
 def test_collectors_work_without_running_gradio(monkeypatch):
     monkeypatch.setattr(city_services, 'refresh_jobs_workflow', lambda:{'new_count':3})
     assert city_services.run_agent('networker','alice',{'operation':'refresh_internships'})['new_count'] == 3

@@ -91,16 +91,25 @@ def repository_audit() -> dict:
         for index, line in enumerate(text.splitlines(), 1):
             if re.search(r"requests\.(get|post)\(", line) and "timeout" not in line:
                 findings.append({"file": path.name, "line": index, "issue": "Vérifier le délai HTTP (appel potentiellement multiligne)", "severity": "review"})
-    revision, blocked = "", ""
+    revision, blocked, dirty = "", "", False
     try:
         revision = git(root, "rev-parse", "HEAD")
         # Read local tracking state; do not silently fetch/push to an unknown remote.
-        git(root, "status", "--porcelain", "--untracked-files=no")
+        dirty = bool(git(root, "status", "--porcelain", "--untracked-files=no"))
     except CityError as exc:
         blocked = str(exc)
     proposal = {"issue": "Ajouter un test AST de non-régression des modules City", "file": "tests/test_city_syntax_audit.py", "severity": "proposal"}
     remote = {}
     repository = os.getenv('MARKETDESK_GITHUB_REPO', '').strip()
+    if not repository:
+        try:
+            origin = git(root,'remote','get-url','origin')
+            match = re.fullmatch(r'(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/?',origin)
+            if match:
+                repository = match[1].removesuffix('.git')
+        except CityError:
+            pass
+    remote_note = "Aucun dépôt GitHub reconnu : configure MARKETDESK_GITHUB_REPO=owner/repo ou un remote origin GitHub."
     if re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository):
         import requests
         try:
@@ -109,14 +118,27 @@ def repository_audit() -> dict:
             remote = {'source': f'https://github.com/{repository}', 'commits': [
                 {'sha': item['sha'], 'url': item['html_url'], 'date': item['commit']['committer']['date']}
                 for item in response.json()[:5]], 'checked_at': datetime.now(timezone.utc).isoformat()}
+            latest = remote['commits'][0]['sha'] if remote['commits'] else ''
+            remote['sync_status'] = 'unknown' if not revision or not latest else 'same_head' if revision == latest else 'different_head'
+            remote_note = (f"GitHub : {repository}. Révision locale identique au dernier commit distant consulté. "
+                           if remote['sync_status']=='same_head' else
+                           f"GitHub : {repository}. La révision locale diffère du dernier commit distant consulté. "
+                           if remote['sync_status']=='different_head' else
+                           f"GitHub : {repository}. Comparaison des révisions indisponible. ")
+            remote_note += "Consultation en lecture seule ; aucun fetch, pull ou changement de fichiers."
         except (requests.RequestException, ValueError, KeyError, TypeError):
             remote = {'blockage': 'API GitHub publique inaccessible ; aucune authentification supplémentaire activée.'}
-    return {"title": "Jules · revue du code MarketDesk City", "revision": revision, "checked_files": checked,
+            remote_note = f"Dépôt GitHub reconnu : {repository}, mais son API publique est inaccessible. L’audit porte sur les fichiers locaux."
+    next_step = ("Audit terminé, aucun fichier généré à cette étape. Clique sur « Valider la proposition » pour préparer "
+                 "le test AST dans une branche locale isolée, puis consulter son résultat. Aucun commit, push ou merge automatique."
+                 if revision else "Préparation de branche bloquée : crée un dépôt Git local avec une première révision, puis relance l’audit.")
+    if dirty:
+        remote_note += " Des fichiers suivis ont des modifications locales non commitées ; l’audit lit leur contenu actuel."
+    return {"title": "Jules · revue du code MarketDesk City", "revision": revision, "working_tree_dirty":dirty, "checked_files": checked,
             "findings": findings[:15], "proposal": proposal, "blockage": blocked, "github": remote,
             "source": "Analyse AST du clone local, référence Git" if revision else "Analyse AST locale · Git non disponible",
-            "approval_required": True, "text": f"{checked} modules City analysés. Proposition : {proposal['issue']}. "
-            "Le dépôt distant n'a pas été synchronisé. Configure MARKETDESK_GITHUB_REPO pour suivre ses commits publics. "
-            "Une branche isolée doit être préparée puis revue avant intégration.",
+            "approval_required": True, "text": f"{checked} modules City analysés. Proposition : {proposal['issue']}.\n\n"
+            + remote_note + "\n\n" + next_step,
             "as_of": datetime.now(timezone.utc).isoformat(), "role_version": VERSION}
 
 

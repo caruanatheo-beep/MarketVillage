@@ -93,7 +93,7 @@ La configuration reste côté serveur, dans l’environnement ou un fichier `.en
 | `INTERNSHIPS_USER_DB` | Emplacement de la base SQLite partagée par les services |
 | `MARKETDESK_CITY_HOST` / `MARKETDESK_CITY_PORT` | Adresse d’écoute et port ; valeurs locales par défaut : `127.0.0.1` et `7862` |
 | `MARKETDESK_CITY_SESSION_KEY` | Clé de session stable d’au moins 32 caractères pour un hébergement public ; générée en mémoire si absente en usage strictement local |
-| `MARKETDESK_GITHUB_REPO` | Référence `owner/repo` pour consulter les commits publics dans les audits de Jules ; ne synchronise pas le clone |
+| `MARKETDESK_GITHUB_REPO` | Surcharge facultative `owner/repo` ; Jules détecte aussi GitHub depuis `origin`, consulte les commits publics et compare les révisions sans synchroniser les fichiers |
 
 Les budgets IA sont réglables par compte dans City. La disponibilité des données dépend aussi des fournisseurs utilisés par les services partagés.
 
