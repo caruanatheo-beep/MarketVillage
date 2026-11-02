@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from fastapi import Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 
-from .marketdesk_city import AGENTS, CityError, CityStore, CityWorker
+from .marketdesk_city import AGENTS, AGENT_BY_ID, CityError, CityStore, CityWorker
 
 
 ASSETS = Path(__file__).with_name("city_assets")
@@ -119,6 +119,46 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
         from .network_discovery import list_contacts
         return JSONResponse({"contacts": list_contacts(username), "schedule": store.network_schedule(username)},
                             headers={"Cache-Control": "private, no-store"})
+
+    @server.get('/city/api/notifications')
+    def notification_state(request: Request):
+        username=owner(request)
+        if not username:
+            return denied()
+        return JSONResponse(store.notification_state(username),headers={'Cache-Control':'private, no-store'})
+
+    @server.post('/city/api/notifications/read')
+    async def read_notifications(request: Request):
+        username=owner(request)
+        if not username:
+            return denied()
+        if not safe_post(request):
+            return JSONResponse({'detail':'Requête refusée.'},status_code=403)
+        try:
+            payload=await bounded_json(request,200)
+            return JSONResponse(store.notification_state(username,payload.get('read_through')),headers={'Cache-Control':'private, no-store'})
+        except (ValueError,TypeError) as exc:
+            return JSONResponse({'detail':str(exc)},status_code=400)
+
+    @server.post('/city/api/agents/{agent_id}/run')
+    async def run_specialist(agent_id: str, request: Request):
+        username=owner(request)
+        if not username:
+            return denied()
+        if not safe_post(request):
+            return JSONResponse({'detail':'Requête refusée.'},status_code=403)
+        from .city_specialists import DEFAULT_OPERATIONS
+        if agent_id not in DEFAULT_OPERATIONS:
+            return JSONResponse({'detail':'Choisis un agent spécialisé.'},status_code=400)
+        try:
+            payload=await bounded_json(request,200)
+            if payload:
+                raise CityError('Cette action lance uniquement la mission principale de cet agent.')
+            task=store.create_task(username,agent_id,'Nouvelle mission · '+AGENT_BY_ID[agent_id]['name'],
+                                   {'operation':DEFAULT_OPERATIONS[agent_id]})
+            return JSONResponse({'task':task},status_code=201)
+        except (ValueError,TypeError) as exc:
+            return JSONResponse({'detail':str(exc)},status_code=400)
 
     @server.post('/city/api/network/assisted')
     async def import_network_assisted(request: Request):

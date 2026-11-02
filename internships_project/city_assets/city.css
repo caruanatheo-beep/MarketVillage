@@ -93,6 +93,46 @@ h1, h2, h3, p { margin-top: 0; }
 .network-window { width:min(960px,calc(100vw - 48px)); height:min(820px,calc(100dvh - 100px)); max-width:none; max-height:none; margin:auto; padding:0; border:1px solid #324f6b; border-radius:18px; background:#091a2c; color:#e6eef7; font:inherit; box-shadow:0 32px 100px #0009,0 0 0 1px #8daec00a; overflow:hidden; }
 .network-window[open] { display:flex; flex-direction:column; animation:network-window-enter .18s ease-out; }
 .network-window::backdrop { background:#020b18a6; backdrop-filter:blur(3px); }
+.notification-center { width:min(1060px,calc(100vw - 36px)); height:min(900px,calc(100dvh - 40px)); background:#091626; }
+.notification-heading { display:flex; justify-content:space-between; align-items:flex-start; padding:28px 30px 20px; background:radial-gradient(ellipse at 15% 0,#204c6170,transparent 65%),linear-gradient(115deg,#15283f,#101c32); border-bottom:1px solid #294056; }
+.notification-eyebrow { font-size:10px; letter-spacing:.18em; color:#8fd7db; }
+.notification-heading h2 { margin:8px 0; font-size:28px; letter-spacing:-.03em; }
+.notification-heading p { margin:0; font-size:12px; color:#adc2d6; }
+.notification-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; padding:20px 28px 12px; }
+.notification-summary button { display:grid; text-align:left; gap:4px; padding:16px; border:1px solid #344d66; border-radius:12px; background:linear-gradient(140deg,#182e44,#0e2135); color:#e3edf6; cursor:pointer; }
+.notification-summary .decision { border-color:#82704c; background:linear-gradient(140deg,#413727,#1b2632); }
+.notification-summary .success { border-color:#356958; background:linear-gradient(140deg,#153d37,#112735); }
+.notification-summary .failure { border-color:#754655; background:linear-gradient(140deg,#3c2438,#192436); }
+.notification-summary strong { font-size:32px; font-weight:650; line-height:1.2; }
+.notification-summary span { font-size:12px; }.notification-summary small { font-size:10px; color:#b1c2d0; }
+.notification-commands,.notification-tabs,.notification-filters { display:flex; gap:8px; padding:6px 28px; flex-wrap:wrap; }
+.notification-center button:not(.network-close),.notification-center select,.notification-center input { font:inherit; }
+.notification-commands button,.notification-tabs button,.notification-actions button { padding:8px 12px; border:1px solid #35506c; border-radius:8px; background:#152b43; color:#dce8f4; font-size:12px; cursor:pointer; }
+.notification-commands button:first-child { border-color:#537ca3; background:#20456b; }
+.notification-center button:disabled { opacity:.48; cursor:default; }
+.notification-tabs { padding-top:12px; }.notification-tabs .selected { background:#284d66; border-color:#83c3d0; color:#c9f7ff; }
+.notification-filters input,.notification-filters select { min-width:0; padding:9px 12px; border:1px solid #304b65; border-radius:8px; color:#d7e7f3; background:#0a1b2c; }
+.notification-filters input { flex:1; }.notification-filters select { max-width:200px; }
+.notification-feed { flex:1; min-height:0; overflow:auto; padding:8px 28px 22px; scrollbar-gutter:stable; }
+.notification-count { font-size:11px; color:#8ca9be; }
+.notification-card { margin:12px 0; padding:17px 19px; border:1px solid #2c425b; border-radius:12px; background:#102339; box-shadow:0 8px 22px #0002; }
+.notification-card.decision { border-left:3px solid #e9bf77; background:linear-gradient(110deg,#302d27,#12263b 55%); }
+.notification-card.failed { border-left:3px solid #ee91a3; }.notification-card.completed { border-left:3px solid #69bca2; }
+.notification-card.unread { box-shadow:0 0 0 1px #8cc8da1c,0 8px 22px #0002; }
+.notification-card-top { display:flex; align-items:center; gap:10px; }.notification-card-top>div { flex:1; display:grid; gap:3px; }
+.notification-card-top strong { font-size:13px; }.notification-card-top small { color:#91a9bd; font-size:10px; }
+.notification-card-top .roster-avatar { width:36px; height:38px; flex-basis:36px; }
+.notification-status { font-size:10px; color:#c0d7e9; padding:4px 8px; background:#ffffff09; border-radius:20px; }
+.notification-unread { width:7px; height:7px; border-radius:50%; background:#8ee1ed; box-shadow:0 0 8px #8ee1ed66; }
+.notification-card h3 { margin:13px 0 6px; font-size:15px; }.notification-card p { font-size:12px; color:#b8cbda; line-height:1.55; overflow-wrap:anywhere; white-space:pre-wrap; }
+.notification-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:13px; }.notification-actions .accept { background:#28554c; border-color:#589c87; color:#d5ffec; }
+.notification-card .notification-blockage { color:#edcb91; padding:9px; background:#d4a15212; border-radius:7px; }.notification-file { font-size:11px; }
+.notification-feedback { margin:6px 28px; padding:9px 12px; border-radius:8px; background:#194236; color:#c5f2df; font-size:12px; }.notification-feedback.error { color:#ffd2d5; background:#472c37; }
+.notification-empty { text-align:center; padding:45px 12px; color:#a8c2d7; }.notification-empty strong { font-size:18px; }
+.notification-journal { margin-top:24px; font-size:12px; }.notification-journal>summary { cursor:pointer; color:#9fb9d0; padding:12px 0; }
+.notification-footer { padding:12px 28px; border-top:1px solid #283c52; font-size:10px; color:#92aabd; }
+.notification-heading,.notification-summary,.notification-commands,.notification-tabs,.notification-filters,.notification-footer { flex-shrink:0; }
+@media(max-width:650px) { .notification-center { width:calc(100vw - 12px); height:calc(100dvh - 16px); }.notification-heading { padding:18px 16px; }.notification-heading h2 { font-size:22px; }.notification-summary { gap:7px; padding:12px 12px 8px; }.notification-summary button { padding:10px; }.notification-summary strong { font-size:25px; }.notification-summary small { display:none; }.notification-commands,.notification-tabs,.notification-filters { padding-left:12px; padding-right:12px; }.notification-feed { padding:6px 12px 15px; }.notification-card { padding:13px; }.notification-status { max-width:90px; text-align:center; }.notification-footer { padding:10px 16px; } }
 .game-app .manager-chat-window .manager-chat-content { display:flex; flex:1; flex-direction:column; width:100%; min-width:0; min-height:0; height:auto; padding:16px; overflow:hidden; border:0; border-radius:0; box-shadow:none; background:#091a2c; }
 .network-window * { box-sizing:border-box; }
 .network-window-heading { display:flex; align-items:center; gap:14px; flex-shrink:0; padding:22px 26px; border-bottom:1px solid #263d55; background:linear-gradient(110deg,#10283f,#0b1c30); }

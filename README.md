@@ -6,6 +6,16 @@ MarketDesk City est le produit principal de ce dépôt : une interface pixel-art
 
 Le Manager transforme tes demandes en missions, suit leur avancement et te présente les résultats. Cliquer sur son personnage ouvre le chat dans une fenêtre ; Lina dispose de sa propre fenêtre de contacts.
 
+Le **centre de notifications** regroupe décisions à prendre, résultats récents, missions
+en cours et erreurs. Ses filtres, indicateurs de lecture par compte et journal détaillé
+permettent d’ouvrir les résultats et d’autoriser, refuser ou réessayer les missions
+concernées. Marquer comme lu ne valide jamais une proposition.
+
+Pour Jules, demande « Lance une nouvelle revue du code avec Jules » au Manager ou
+utilise **Notifications → Relancer l’audit de Jules**. Le Manager accepte les noms des
+spécialistes et leurs identifiants techniques ; la préparation de branche exige toujours
+le bouton de validation d’une proposition. Les fichiers préparés sont indiqués dans le résultat.
+
 ## Ce que tu peux faire
 
 - Confier une demande au Desk Manager et suivre son exécution dans Mission Control.

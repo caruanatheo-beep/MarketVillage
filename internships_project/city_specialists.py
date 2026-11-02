@@ -18,6 +18,8 @@ from .marketdesk_city import CityError
 
 VERSION = 2
 SPECIALISTS = {"job_hunter", "finance_tutor", "developer", "innovation_lab"}
+DEFAULT_OPERATIONS = {'job_hunter':'repository_audit','finance_tutor':'quant_report',
+                      'developer':'daily_questions','innovation_lab':'innovation_review'}
 OPERATIONS = {
     "job_hunter": {"repository_audit", "prepare_branch"},
     "finance_tutor": {"quant_report", "collect_markets"},

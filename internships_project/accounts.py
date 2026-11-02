@@ -136,7 +136,7 @@ def delete_registered_account(username: str, configured: list[tuple[str, str]]) 
             connection.execute("DELETE FROM user_data WHERE username=?", (username,))
             for city_table in ("city_events", "city_awarded_offers", "city_tasks", "city_agents",
                                "city_chat_messages", "city_chat_turns", "city_chat_conversations",
-                               "city_learning_progress", "city_settings", "city_network_schedule"):
+                               "city_learning_progress", "city_settings", "city_network_schedule", "city_notification_state"):
                 if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
                                       (city_table,)).fetchone():
                     connection.execute(f"DELETE FROM {city_table} WHERE username=?", (username,))

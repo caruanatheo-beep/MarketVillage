@@ -6,6 +6,8 @@ import "./liveDashboard";
 import {ActivityTimeline} from "./ActivityTimeline";
 import {NetworkContactsWindow} from "./NetworkContacts";
 import {ManagerChatWindow} from "./ManagerChatWindow";
+import {NotificationCenter} from "./NotificationCenter";
+import {isPendingProposal} from "./notifications";
 
 // The standalone fallback panel is only used by the currently deployed bundle.
 // New frontend builds render these same live feeds directly in the game canvas.
@@ -21,7 +23,7 @@ type Result = { title?: string; text?: string; question?: string; answer?: strin
   followup?: string; new_count?: number; total_count?: number; priority_count?: number; source_errors?: number;
   updated_at?: string; as_of?: string; market_data?: MarketReading[]; featured_offer?: (Offer & { detected_at?: string; selection_reason?: string }) | null;
   offers?: Offer[]; contacts?: {id:string;name:string;role:string;company:string;verification:string;linkedin_url:string}[];
-  equity?: {date:string;value:number}[]; approval_required?:boolean; branch?:string; role_version?:number; review_decision?:string;
+  equity?: {date:string;value:number}[]; approval_required?:boolean; branch?:string; role_version?:number; review_decision?:string; revision?:string; blockage?:string; file?:string;
   errors?: {source:string;status:string;error:string}[]; contact?: {name?:string;company?:string}; };
 type Task = {
   id: string; agent_id: string; task_type: string; description: string; status: AgentStatus;
@@ -88,9 +90,7 @@ function MarkdownText({text}: {text:string}): React.ReactElement {
   return <div className="markdown-content">{out}</div>;
 }
 
-function isPendingProposal(task:Task):boolean {
-  return task.status==="completed"&&task.result.role_version===2&&!!task.result.approval_required&&!task.result.branch&&!task.result.review_decision&&["job_hunter","innovation_lab"].includes(task.agent_id);
-}
+
 function EquityChart({points}:{points:{date:string;value:number}[]}):React.ReactElement {
   const values=points.map(p=>p.value).filter(Number.isFinite); const lo=Math.min(...values),hi=Math.max(...values);
   const coordinates=values.map((v,i)=>`${i*480/Math.max(1,values.length-1)},${100-(v-lo)/Math.max(.001,hi-lo)*90}`).join(" ");
@@ -171,10 +171,12 @@ function App(): React.ReactElement {
   const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
   const [collectionBusy, setCollectionBusy] = useState<"markets"|"internships"|null>(null);
 
+  const [notificationReadThrough,setNotificationReadThrough]=useState(0);
   const refresh = useCallback(async () => {
     try {
-      const next = await api<Snapshot>("/city/api/state");
+      const [next,notifications]=await Promise.all([api<Snapshot>("/city/api/state"),api<{last_read_event_id:number}>("/city/api/notifications")]);
       setSnapshot(next);
+      setNotificationReadThrough(notifications.last_read_event_id);
       setError("");
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "Impossible de charger MarketDesk City.");
@@ -513,7 +515,7 @@ function App(): React.ReactElement {
   }
 
   async function reviewProposal(taskId:string,approved:boolean) {
-    try {await api(`/city/api/proposals/${taskId}/review`,{approved});setError(approved?"Proposition transmise à Jules.":"Proposition refusée.");} catch(error){setError(error instanceof Error?error.message:"Validation impossible.");}
+    try {await api(`/city/api/proposals/${taskId}/review`,{approved});await refresh();setError(approved?"Proposition transmise à Jules.":"Proposition refusée.");} catch(error){setError(error instanceof Error?error.message:"Validation impossible.");}
   }
   function showResult(task:Task):void {setResultTaskId(task.id);setOpenedTaskId(task.id);setSelectedId(task.agent_id);setWindowMode("none");}
 
@@ -690,7 +692,7 @@ function App(): React.ReactElement {
           <div className="command-search"><span aria-hidden="true">⌕</span><input aria-label="Rechercher un agent ou une mission" placeholder="Rechercher un agent, une mission…" value={commandQuery} onChange={e=>setCommandQuery(e.target.value)}/>{commandQuery.trim()&&<div className="command-search-results">{(snapshot?.agents||[]).filter(a=>(a.name+" "+a.role).toLowerCase().includes(commandQuery.toLowerCase())).map(a=><button key={a.id} onClick={()=>{openAgent(a.id);setCommandQuery("");}}>{a.name}<small>{a.role}</small></button>)}{(snapshot?.tasks||[]).filter(t=>t.description.toLowerCase().includes(commandQuery.toLowerCase())).slice(0,5).map(t=><button key={t.id} onClick={()=>{showResult(t);setCommandQuery("");}}>{t.description}<small>{LABELS[t.status]}</small></button>)}<button onClick={()=>setCommandQuery("")}>Fermer la recherche</button></div>}</div>
           <nav className="game-hud" aria-label="Commandes MarketDesk City">
             <button type="button" className={windowMode==="missions"?"active":""} onClick={()=>setWindowMode(windowMode==="missions"?"none":"missions")} aria-label="Missions" aria-pressed={windowMode==="missions"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M9 3h6v4H9zM8 12h8M8 16h5"/></svg><span>Missions</span>{activeCount>0&&<b>{activeCount}</b>}</button>
-            <button type="button" className={windowMode==="activity"?"active":""} onClick={()=>setWindowMode(windowMode==="activity"?"none":"activity")} aria-label="Activité" aria-pressed={windowMode==="activity"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M2 12h5l3-8 4 16 3-8h5"/></svg><span>Activité</span>{pendingCount>0&&<b>{pendingCount}</b>}</button>
+            <button type="button" className={windowMode==="activity"?"active":""} onClick={()=>setWindowMode(windowMode==="activity"?"none":"activity")} aria-label="Notifications" aria-pressed={windowMode==="activity"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M2 12h5l3-8 4 16 3-8h5"/></svg><span>Notifications</span>{(pendingCount>0||(snapshot?.events||[]).some(e=>e.id>notificationReadThrough))&&<b>{Math.max(pendingCount,(snapshot?.events||[]).filter(e=>e.id>notificationReadThrough).length)}</b>}</button>
             <button type="button" className={windowMode==="contacts"?"active":""} onClick={()=>setWindowMode(windowMode==="contacts"?"none":"contacts")} aria-label="Contacts" aria-pressed={windowMode==="contacts"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-4-5"/></svg><span>Contacts</span></button>
             <button type="button" aria-label="Réglages" onClick={()=>{setSettingsOpen(true);void loadSettings();}}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor"/><circle cx="15" cy="17" r="3" fill="currentColor"/></svg><span>Réglages</span></button>
             <form action="/logout" method="post" className="city-logout"><button type="submit">Quitter</button></form>
@@ -754,11 +756,12 @@ function App(): React.ReactElement {
     {windowMode==="missions"&&<section className="game-popup game-mission-control" aria-label="Mission Control">
       <div className="game-popup-heading"><div><strong>Mission Control</strong><small>{activeCount} en cours &middot; {pendingCount} à valider</small></div><button type="button" onClick={()=>setWindowMode("none")} aria-label="Fermer">&times;</button></div>
       {managerPanel()}</section>}
-    {windowMode==="activity"&&<section className="game-popup game-activity" aria-label="Notifications et activité">
-      <div className="game-popup-heading"><strong>Activité des agents</strong><button type="button" onClick={()=>setWindowMode("none")} aria-label="Fermer">&times;</button></div>
-      <div className="game-activity-list">{snapshot?.events.slice(0,20).map(event=><button type="button" key={event.id} onClick={()=>{setOpenedTaskId(event.task_id);openAgent(event.agent_id,"missions");}}>
-        <span className={`event-dot ${event.status}`}/><span><strong>{snapshot.agents.find(agent=>agent.id===event.agent_id)?.name||event.agent_id}</strong><small>{event.message}</small></span><time>{dateTime(event.created_at)}</time></button>)}
-        {!snapshot?.events.length&&<p className="muted">Aucune activité récente.</p>}</div></section>}
+    {windowMode==="activity"&&<NotificationCenter tasks={snapshot?.tasks||[]} events={snapshot?.events||[]} agents={snapshot?.agents||[]} readThrough={notificationReadThrough}
+      onClose={()=>setWindowMode("agent")} onOpen={id=>{const task=snapshot?.tasks.find(t=>t.id===id);if(task)showResult(task);else setError("Cette mission n'est plus dans les données chargées.");}}
+      onRead={async()=>{const result=await api<{last_read_event_id:number}>("/city/api/notifications/read",{read_through:Math.max(0,...(snapshot?.events||[]).map(e=>e.id))});setNotificationReadThrough(result.last_read_event_id);}}
+      onRelaunch={()=>api("/city/api/agents/job_hunter/run",{})} onApprove={id=>api(`/city/api/tasks/${id}/approve`,{})}
+      onCancel={id=>api(`/city/api/tasks/${id}/cancel`,{})} onReview={(id,approved)=>api(`/city/api/proposals/${id}/review`,{approved})}
+      onRetry={id=>api(`/city/api/tasks/${id}/retry`,{})} onRefresh={refresh}/>}
     {error&&<div className="city-toast" role="alert"><span>{error}</span><button type="button" onClick={()=>setError("")} aria-label="Fermer">&times;</button></div>}
     {resultTaskId&&<section className="game-popup mission-results-window" role="dialog" aria-label="Résultat de mission"><div className="game-popup-heading"><div><strong>Résultat de mission</strong><small>Contributions enregistrées par les agents</small></div><button type="button" onClick={()=>setResultTaskId(null)} aria-label="Fermer le résultat">×</button></div><div className="mission-results-body">
       {(()=>{const root=snapshot?.tasks.find(t=>t.id===resultTaskId);if(!root)return <p>Cette mission n’est plus disponible dans les données chargées.</p>;
@@ -768,7 +771,8 @@ function App(): React.ReactElement {
           {!["completed","failed","cancelled"].includes(task.status)&&<p className="muted">Contribution : {LABELS[task.status].toLocaleLowerCase()}.</p>}
           {task.result.title&&<h4>{task.result.title}</h4>}{task.result.text&&<MarkdownText text={task.result.text}/>}
           {task.result.equity&&<EquityChart points={task.result.equity}/>}
-          {isPendingProposal(task)&&<div className="workflow-builder-actions"><button type="button" onClick={()=>void reviewProposal(task.id,true)}>Valider la proposition</button><button type="button" onClick={()=>void reviewProposal(task.id,false)}>Refuser</button><small>Validation explicite · branche isolée ou transfert à Jules · aucun merge ni service payant.</small></div>}
+          {task.result.file&&<p>Fichier préparé : <code>{task.result.file}</code></p>}{isPendingProposal(task)&&task.agent_id==="job_hunter"&&!task.result.revision&&<p className="notification-blockage">Cet audit ne contient pas de révision Git. Relance Jules depuis le centre de notifications avant de valider.</p>}
+          {isPendingProposal(task)&&<div className="workflow-builder-actions"><button type="button" disabled={task.agent_id==="job_hunter"&&!task.result.revision} onClick={()=>void reviewProposal(task.id,true)}>Valider la proposition</button><button type="button" onClick={()=>void reviewProposal(task.id,false)}>Refuser</button><small>Validation explicite · branche isolée ou transfert à Jules · aucun merge ni service payant.</small></div>}
           {task.result.new_count!==undefined&&<p>{task.result.new_count} nouvelles offres{task.result.total_count!==undefined?` sur ${task.result.total_count} suivies`:""}.</p>}
           {task.result.market_data?.map(p=><p key={p.series_id}><strong>{p.label}</strong> {p.value} {p.unit} · {p.observed_at}</p>)}
           {task.result.offers?.map(offer=><article className="result-item" key={offer.url}><a href={/^https?:\/\//i.test(offer.url)?offer.url:undefined} target="_blank" rel="noopener noreferrer">{offer.title} ↗</a><small>{offer.company} · {offer.location||"Lieu non indiqué"}</small></article>)}

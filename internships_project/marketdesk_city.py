@@ -294,6 +294,7 @@ class CityStore:
             db.execute('BEGIN IMMEDIATE')
             db.execute("CREATE TABLE IF NOT EXISTS city_role_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)")
             db.execute("CREATE TABLE IF NOT EXISTS city_specialist_schedule(username TEXT NOT NULL, operation TEXT NOT NULL, period TEXT NOT NULL, task_id TEXT NOT NULL, PRIMARY KEY(username,operation,period))")
+            db.execute('CREATE TABLE IF NOT EXISTS city_notification_state(username TEXT PRIMARY KEY,last_read_event_id INTEGER NOT NULL DEFAULT 0)')
             db.execute("CREATE TABLE IF NOT EXISTS city_proposal_reviews(task_id TEXT PRIMARY KEY,username TEXT NOT NULL,approved INTEGER NOT NULL,next_task_id TEXT,created_at TEXT NOT NULL)")
             columns = {row[1] for row in db.execute('PRAGMA table_info(city_workflow_definitions)')}
             if 'role_version' not in columns:
@@ -461,6 +462,17 @@ class CityStore:
                             else "Collecte quotidienne de contacts publics planifiée pour Lina.")
                 count += 1
         return count
+
+    def notification_state(self, username: str, read_through: int | None = None) -> dict:
+        with self.db() as db:
+            if read_through is not None:
+                if isinstance(read_through,bool) or not isinstance(read_through,int) or read_through < 0:
+                    raise CityError('Identifiant de notification invalide.')
+                latest = db.execute('SELECT COALESCE(MAX(id),0) FROM city_events WHERE username=?',(username,)).fetchone()[0]
+                db.execute('INSERT INTO city_notification_state VALUES(?,?) ON CONFLICT(username) DO UPDATE SET last_read_event_id=MAX(last_read_event_id,excluded.last_read_event_id)',
+                           (username,min(read_through,latest)))
+            row = db.execute('SELECT last_read_event_id FROM city_notification_state WHERE username=?',(username,)).fetchone()
+        return {'last_read_event_id':row[0] if row else 0}
 
     def get_settings(self, username: str) -> dict:
         with self.db() as db:
@@ -1340,7 +1352,11 @@ class CityStore:
             progress = {row["agent_id"]: row["xp"] for row in db.execute(
                 "SELECT agent_id,xp FROM city_agents WHERE username=?", (username,))}
             tasks = [dict(row) for row in db.execute(
-                "SELECT * FROM city_tasks WHERE username=? ORDER BY created_at DESC,rowid DESC LIMIT 60", (username,))]
+                "SELECT * FROM city_tasks WHERE username=? AND (id IN (SELECT id FROM city_tasks WHERE username=? ORDER BY created_at DESC,rowid DESC LIMIT 100) "
+                "OR status IN ('queued','running','waiting_approval') OR (status='completed' AND agent_id IN ('job_hunter','innovation_lab') "
+                "AND json_extract(COALESCE(result_json,'{}'),'$.role_version')=2 AND json_extract(COALESCE(result_json,'{}'),'$.approval_required')=1 "
+                "AND COALESCE(json_extract(COALESCE(result_json,'{}'),'$.review_decision'),'')='' AND COALESCE(json_extract(COALESCE(result_json,'{}'),'$.branch'),'')='')) "
+                "ORDER BY created_at DESC,rowid DESC", (username,username))]
             events = [dict(row) for row in db.execute(
                 "SELECT id,agent_id,task_id,status,message,created_at FROM city_events "
                 "WHERE username=? ORDER BY id DESC LIMIT 80", (username,))]
@@ -1441,7 +1457,7 @@ class CityStore:
                           "city_chat_messages", "city_chat_turns", "city_chat_conversations",
                           "city_learning_progress", "city_settings", "city_workflows", "city_shared_results",
                           "city_memory", "city_workflow_definitions", "city_network_schedule",
-                          "city_specialist_schedule", "city_proposal_reviews"):
+                          "city_specialist_schedule", "city_proposal_reviews", "city_notification_state"):
                 db.execute(f"DELETE FROM {table} WHERE username=?", (username,))
 
 

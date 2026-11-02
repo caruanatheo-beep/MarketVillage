@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
@@ -228,16 +228,26 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
             return await _tool(ctx, "Desk Manager · suivi", fetch)
 
         @agent.tool
-        async def start_specialist_mission(ctx: RunContext[ChatDeps], specialist: str, operation: str,
+        async def start_specialist_mission(ctx: RunContext[ChatDeps],
+                                           specialist: Literal['Jules','Noé','Noe','Axel','Nova','job_hunter','finance_tutor','developer','innovation_lab'],
+                                           operation: Literal['','repository_audit','quant_report','collect_markets','daily_questions','mock_interview','evaluate_answer','innovation_review'] = '',
                                            question_id: str = "", answer: str = "",
                                            strategy: str = "momentum", series_id: str = "SP500",
                                            lookback: int = 60, cost_bps: float = 10) -> dict:
             """Queue Jules audit, Noé quant report, Axel questions/mock/evaluate, or Nova innovation review.
             No code branch or paid integration can be approved through this tool.
             """
-            from .city_specialists import SPECIALISTS
-            if specialist not in SPECIALISTS or operation == "prepare_branch":
-                raise CityError("Opération non autorisée par ce canal.")
+            from .city_specialists import SPECIALISTS, DEFAULT_OPERATIONS, OPERATIONS
+            aliases = {AGENT_BY_ID[key]['name'].casefold():key for key in SPECIALISTS}
+            aliases['noe'] = 'finance_tutor'
+            specialist = aliases.get(specialist.strip().casefold(), specialist)
+            if specialist not in SPECIALISTS:
+                raise CityError('Choisis Jules, Noé, Axel ou Nova pour une mission spécialisée.')
+            if operation == 'prepare_branch':
+                raise CityError('La préparation de branche nécessite le bouton « Valider la proposition » sur un audit Jules terminé.')
+            operation = operation or DEFAULT_OPERATIONS[specialist]
+            if operation not in OPERATIONS[specialist]:
+                raise CityError(f"Opération incompatible avec {AGENT_BY_ID[specialist]['name']}. Utilise {DEFAULT_OPERATIONS[specialist]} pour sa mission principale.")
             if ctx.deps.delegated:
                 raise CityError("Une seule nouvelle mission par message.")
             parameters = {"operation": operation}

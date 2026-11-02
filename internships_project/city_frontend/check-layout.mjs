@@ -11,6 +11,7 @@ export async function checkLayout() {
     stdin: {
       contents: `export { loadFurniture, buildOfficeLayout, validateAgentRoutes } from './src/PixelFloorGame';
         export { worldY } from './src/worldGeometry';
+        export { notificationRows, isPendingProposal, needsDecision } from './src/notifications';
         export { buildTowerStructure } from './src/TowerArchitecture';
         export { TileType } from './vendor/pixel-agents/webview-ui/src/office/types';
         export { projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows } from './src/TowerPerspective';
@@ -23,8 +24,19 @@ export async function checkLayout() {
     bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
   });
   const { loadFurniture, buildOfficeLayout, validateAgentRoutes, OfficeState, findPath, GolfPractice, GOLF_BAYS, worldY,
-    projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows, buildTowerStructure, TileType } =
+    projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows, buildTowerStructure, TileType,
+    notificationRows, isPendingProposal, needsDecision } =
     await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString("base64")}`);
+  const proposal={id:'proposal',agent_id:'job_hunter',status:'completed',description:'Audit',created_at:'2026-01-01',result:{approval_required:true,role_version:2}};
+  const done={id:'done',agent_id:'networker',status:'completed',description:'Contacts',created_at:'2026-01-02',result:{}};
+  const rows=notificationRows([done,proposal],[{id:5,task_id:'done',created_at:'2026-01-02'}],4);
+  assert.equal(rows[0].task.id,'proposal','Decisions stay ahead of newer completed missions');
+  assert.equal(rows[1].unread,true,'Unread depends on the latest event per task');
+  assert.equal(notificationRows([done],[{id:5,task_id:'done'}],5)[0].unread,false);
+  assert.equal(needsDecision(proposal),true);
+  assert.equal(isPendingProposal({...proposal,result:{...proposal.result,review_decision:'approved'}}),false);
+  assert.equal(isPendingProposal({...proposal,result:{...proposal.result,branch:'isolated'}}),false);
+  console.log('Notifications OK: decision priority, read markers and reviewed/branched proposals.');
   for(const zoom of [.5,1,2])for(const row of [-2,0,9,worldY(21),worldY(40),worldY(40)+2])for(const col of [-4,0,24,48,52]){
     const x=17+col*16*zoom,y=23+row*16*zoom;
     const projected=projectTowerX(x,y,17,23,zoom);

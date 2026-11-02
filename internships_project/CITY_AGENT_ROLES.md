@@ -16,6 +16,25 @@ donnent aucun accès aux anciens outils. Le Desk Manager est l'unique chat utili
 
 Mira, Iris et le Desk Manager conservent leurs autres responsabilités.
 
+## Relance et notifications
+
+Le Manager accepte les noms Jules, Noé/Noe, Axel et Nova, ainsi que les identifiants
+techniques conservés. Son outil expose des choix explicites et choisit l'opération
+principale si elle n'est pas fournie. Une opération incompatible produit un message
+actionnable ; `prepare_branch` reste exclue du schéma de l'outil et de la relance directe.
+Le bouton « Relancer l'audit de Jules » utilise une route authentifiée qui ne peut
+exécuter que l'opération principale autorisée, sans appel IA de coordination.
+
+Le centre Notifications affiche une entrée par mission, les décisions en premier,
+les résultats récents, les erreurs et un journal d'événements. Les propositions non
+résolues restent chargées même au-delà des cent dernières missions. Les marqueurs
+de lecture sont persistants et isolés par compte ; ils n'autorisent ni n'annulent rien.
+Les actions réutilisent les routes de validation, approbation, annulation et relance
+existantes. Les erreurs d'action sont affichées dans le centre. Un ancien audit Jules
+sans révision Git explique le blocage de préparation et propose de relancer un audit.
+Le résultat d'une branche indique le chemin du fichier local ; il ne s'agit pas d'une
+publication automatique sur GitHub.
+
 ## Collectes sans interfaces ouvertes
 
 Depuis le chat du Manager : « Noé, actualise les données Markets », ou « Hugo,
