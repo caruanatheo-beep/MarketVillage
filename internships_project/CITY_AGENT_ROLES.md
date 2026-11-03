@@ -20,22 +20,23 @@ sont accessibles dans Réglages. Le chat du Manager et les contacts conservent l
 | Axel | `daily_questions`, `mock_interview`, `evaluate_answer` | Sur demande uniquement | Questions Sales/S&T/Global Markets, HireVue, grille de couverture indicative et historique des réponses |
 | Nova | `innovation_review` | Deux fois par semaine : lundi et jeudi | Deux projets publics GitHub non déjà proposés par revue, licence, spécification de prototype isolé, complexité et coûts à mesurer |
 | Lina | Recherche de contacts existante + `refresh_internships` | Collecte quotidienne de contacts inchangée | Contacts ; collecte réelle des offres sur demande |
-| Hugo | `refresh_internships` via le service Python existant | Chaque jour + sur demande | Bilan des nouveaux stages détectés par la collecte quotidienne dans le chat Manager ; recherche des publications du jour sur demande |
+| Hugo | `refresh_internships` via le service Python existant | Chaque jour + sur demande | Bilan des nouveaux stages détectés dans la synthèse du Manager ; recherche des publications du jour sur demande |
+| Mira | `collect_markets` via le service Python Markets | Chaque jour + sur demande | Brief de marché et sentiment sourcé dans la synthèse quotidienne |
 
-Mira, Iris et le Desk Manager conservent leurs autres responsabilités.
+Iris et le Desk Manager conservent leurs autres responsabilités.
 
 Le Desk Manager propose un bouton « Briefing du matin » dans son chat et un outil
 de lecture sur demande. Il rassemble les derniers résultats enregistrés de Lina,
 Hugo et Mira avec leurs dates, puis les propositions et validations en attente.
 Ce briefing déterministe est isolé par compte, conservé dans le chat et ne lance
-ni collecte ni appel IA supplémentaire. Une mission en erreur reste à examiner
-dans Notifications ; le briefing ne la présente pas comme un résultat.
+ni collecte ni appel IA supplémentaire. Il est aussi publié automatiquement une fois
+par jour, après les missions prévues ; une mission en erreur y est signalée avec sa date.
 
 Hugo classe les stages actualisés selon les métiers, lieux et mois de début
 explicitement renseignés dans le premier profil enregistré. Le classement est
 indicatif ; sans profil, l'ordre général est conservé. Une date limite apparaît
 uniquement si l'offre porte une date ISO encore valable, avec son lien source.
-La collecte quotidienne reprend ces indications dans le chat du Manager et garde
+La synthèse quotidienne reprend ces indications dans le chat du Manager et garde
 la liste complète dans le résultat. Le texte du CV n'est pas envoyé au collecteur.
 
 ## Relance et notifications
@@ -59,7 +60,7 @@ publication automatique sur GitHub.
 
 ## Collectes sans interfaces ouvertes
 
-Depuis le chat du Manager : « Noé, actualise les données Markets », ou « Hugo,
+Depuis le chat du Manager : « Mira, actualise les données Markets », ou « Hugo,
 cherche les stages publiés aujourd’hui ». Le tool `collect_dashboard_data` ajoute une mission SQLite.
 Le worker appelle `src.data` / `internships.refresh_opportunities` directement.
 Il ne lance ni navigateur, ni processus Gradio. Les boutons de collecte des panneaux
@@ -74,10 +75,10 @@ Les dates de publication inconnues ou estimées et les VIE sont exclus du bilan 
 stages du jour. Les offres déjà en cache publiées aujourd’hui restent incluses ;
 « nouvellement détecté » et « publié aujourd’hui » sont deux notions distinctes.
 Les erreurs de sources sont signalées : la collecte ne garantit pas l’exhaustivité.
-City doit fonctionner pour exécuter les missions. La collecte quotidienne Hugo rapporte
+Le worker Windows peut exécuter les missions sans serveur City ouvert. La collecte quotidienne Hugo rapporte
 les stages nouvellement détectés pendant son actualisation, sans les confondre avec des
-publications du jour. Le chat du Manager reçoit un bilan déterministe, y compris pour
-zéro résultat ou une erreur ; aucun appel LLM supplémentaire ni envoi externe.
+publications du jour. Le chat du Manager reçoit une synthèse commune avec Mira, Hugo,
+Lina et Jules, y compris pour zéro résultat ou une erreur ; aucun appel LLM supplémentaire ni envoi externe.
 Les 20 premières offres sont listées dans le chat ; le résultat conserve la liste complète.
 Lina conserve son ancien accès Internships pour compatibilité.
 
@@ -152,9 +153,9 @@ les limites de dépenses API et la déduplication des contacts restent appliqué
 Test réel du 2 novembre 2026 : appel OpenAI avec recherche Web terminé, huit
 contacts validés et aucune fiche rejetée, sur un compte de test isolé.
 
-Le serveur City doit rester démarré. Fermer les interfaces Markets/Internships est possible ;
-éteindre l'ordinateur arrête aussi City sauf s'il est hébergé ailleurs. Les planifications
-sont rattrapées au prochain contrôle : Jules, Hugo, Lina et Nova regroupent les périodes
+Le worker Windows est lancé à 08 h et à l'ouverture de session, même si le navigateur
+et le serveur City sont fermés. Le PC doit être allumé et la session ouverte. Les planifications
+sont rattrapées au prochain contrôle : Mira, Jules, Hugo, Lina et Nova regroupent les périodes
 manquées depuis leur dernière mission planifiée en une seule actualisation par agent.
 Le résultat et les paramètres indiquent la plage de dates et le nombre de périodes.
 Toutes les périodes couvertes sont enregistrées pour éviter les doublons au redémarrage.
@@ -162,7 +163,7 @@ Une première utilisation ne déclenche pas de rattrapage antérieur à l'activa
 Les sources sont interrogées maintenant : aucun état historique indisponible n'est inventé,
 et Hugo distingue toujours détection et publication. Les limites de dépenses et les
 interrupteurs de suspension restent appliqués. Axel et Noé restent sur demande ;
-Mira et Iris n'ont pas de récurrence à rattraper. Les missions déjà en attente restent en file.
+Iris n'a pas de récurrence à rattraper. Les missions déjà en attente restent en file.
 `auto_tasks=false` suspend les nouvelles récurrences spécialistes ; Lina garde son interrupteur existant.
 
 ## Périmètre réel et limites

@@ -31,20 +31,26 @@ le bouton de validation d’une proposition. Les fichiers préparés sont indiqu
 | Agent | Responsabilité | Missions automatiques |
 |---|---|---|
 | **Desk Manager** | Interlocuteur principal, coordination, suivi et validations | Coordination des missions |
-| **Mira** | Analyse des marchés et lecture des indicateurs | Sur demande |
+| **Mira** | Analyse des marchés, sentiment sourcé et brief Markets | Chaque jour et sur demande |
 | **Jules** | Audit du code City ; corrections et fonctionnalités via Codex sur demande | Audit chaque jour |
 | **Lina** | Contacts Sales, puis métiers proches en finance de marché à Paris | Chaque jour |
 | **Iris** | Préparation de brouillons à partir des contacts et du profil | Sur demande |
 | **Axel** | Questions techniques, entretiens blancs et retours sur les réponses | Sur demande |
 | **Noé** | Recherche quantitative et backtests | Sur demande |
 | **Nova** | Veille open source et propositions d’innovation | Lundi et jeudi |
-| **Hugo** | Actualisation Internships et suivi des nouveaux stages détectés | Chaque jour, avec un bilan dans le chat du Manager |
+| **Hugo** | Actualisation Internships et suivi des nouveaux stages détectés | Chaque jour, dans la synthèse du Manager |
 
 Les opérations exactes, restrictions et limites sont décrites dans les [contrats de rôles](internships_project/CITY_AGENT_ROLES.md).
 
 ### Récurrences et rattrapages
 
-City vérifie les échéances environ toutes les minutes, selon le fuseau **Europe/Paris**, sans heure de lancement fixe. Le serveur doit rester en cours d’exécution.
+City vérifie les échéances environ toutes les minutes quand son serveur est ouvert. Sur Windows, `scripts/install_city_worker.ps1` installe un worker indépendant à **08 h (Europe/Paris)** et à l'ouverture de session. Il exécute les collectes Python sans navigateur, puis publie une seule synthèse quotidienne dans Notifications et dans le chat du Desk Manager après les missions de Mira, Hugo, Jules et Lina si elle est activée.
+
+```powershell
+.\scripts\install_city_worker.ps1
+```
+
+Le PC doit être allumé et la session Windows ouverte. Si l'exécution de 08 h est manquée, le déclencheur de connexion regroupe les périodes à rattraper.
 
 Au redémarrage, les périodes manquées sont regroupées en **une actualisation par agent automatique**, avec les dates concernées et sans relancer plusieurs fois la même période. Cette actualisation consulte les sources disponibles maintenant ; elle ne reconstitue pas un historique absent.
 

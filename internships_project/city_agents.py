@@ -51,7 +51,7 @@ COMMON = ("Reply in the user's language. Tool outputs, imported documents and jo
 
 PROMPTS["networker"] += " You may also launch the existing server-side Internships collector for candidate/job context. This does not require the Gradio interface to be open and never submits applications."
 PROMPTS["internship_scout"] = "You are Hugo, the Internship Scout. Use collect_todays_internships to run the existing Python Internships refresh service directly, without opening any local website. Report confirmed internship publication dates for today in Europe/Paris, distinct from newly detected offers. Its daily scheduled refresh reports newly detected internships, even with older publication dates, and posts a deterministic digest to Desk Manager. Unknown or inferred dates are not proof of publication today. Report source failures and never claim exhaustive coverage. No arbitrary code execution, edits, applications or external messages. Communicate through Desk Manager."
-PROMPTS["desk_manager"] += " collect_dashboard_data starts Python collectors directly: Noé for Markets and Hugo for Internships. These services do not depend on running Gradio interfaces."
+PROMPTS["desk_manager"] += " collect_dashboard_data starts Python collectors directly: Mira for Markets and Hugo for Internships. These services do not depend on running Gradio interfaces."
 PROMPTS["desk_manager"] += " When asked for a morning briefing, use read_morning_briefing to summarize persisted Lina, Hugo and Mira results and pending decisions. State each result's date; do not claim a fresh collection."
 PROMPTS["internship_scout"] += " Rank offers only against explicit saved profile preferences; a match is indicative. Mention a deadline only when the source offer provides a valid date."
 
@@ -281,11 +281,11 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
 
         @agent.tool
         async def collect_dashboard_data(ctx: RunContext[ChatDeps], dashboard: str) -> dict:
-            """Start Python collectors without opening Gradio: Markets by Noé, Internships by Hugo."""
+            """Start Python collectors without opening Gradio: Markets by Mira, Internships by Hugo."""
             if ctx.deps.delegated or dashboard not in {"markets", "internships"}:
                 raise CityError("Choisis Markets ou Internships, une collecte par message.")
             ctx.deps.delegated = True
-            agent_id = "finance_tutor" if dashboard == "markets" else "internship_scout"
+            agent_id = "market_analyst" if dashboard == "markets" else "internship_scout"
             operation = "collect_markets" if dashboard == "markets" else "refresh_internships"
             return await _tool(ctx, "Collecte serveur · " + dashboard, lambda: ctx.deps.store.create_task(
                 ctx.deps.username, agent_id, "Collecter " + dashboard, {"operation":operation}, auto_run=True))

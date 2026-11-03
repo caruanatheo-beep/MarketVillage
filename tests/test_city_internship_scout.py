@@ -1,5 +1,6 @@
 """Hugo calls the Python collector, with confirmed publication dates and no email."""
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
@@ -52,6 +53,21 @@ def test_manager_hugo_refresh_and_same_day_repeat(tmp_path, monkeypatch):
     assert 'delegate_to_agent' not in hugo._function_toolset.tools
 
 
+def test_manager_routes_markets_collection_to_mira(tmp_path, monkeypatch):
+    from pydantic_ai.models.test import TestModel
+    from internships_project.city_agents import ChatDeps, build_agent
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
+    store = CityStore(state_store.USER_DB_PATH)
+    tool = build_agent('desk_manager', TestModel())._function_toolset.tools['collect_dashboard_data'].function
+    response = asyncio.run(tool(SimpleNamespace(deps=ChatDeps('alice', store)), 'markets'))
+    assert response['status'] == 'completed'
+    task = store.snapshot('alice')['tasks'][0]
+    assert task['agent_id'] == 'market_analyst'
+    with store.db() as db:
+        parameters = db.execute('SELECT parameters_json FROM city_tasks WHERE id=?', (task['id'],)).fetchone()[0]
+    assert json.loads(parameters)['operation'] == 'collect_markets'
+
+
 def test_daily_hugo_reports_detection_not_publication_and_posts_once(tmp_path, monkeypatch):
     monkeypatch.setattr(state_store,'USER_DB_PATH',tmp_path/'accounts.sqlite3')
     now=datetime.now(timezone.utc)
@@ -72,9 +88,8 @@ def test_daily_hugo_reports_detection_not_publication_and_posts_once(tmp_path, m
     assert [o['url'] for o in task['result']['offers']]==['https://example.com/new']
     assert task['result']['today_count']==1
     store.finish(task['id'],result=task['result'])
-    chat=store.chat_history('alice','desk_manager')
-    assert len(chat)==1 and 'https://example.com/new' in chat[0]['content']
-    assert 'publication' in chat[0]['content']
+    # The daily manager digest waits for Mira, Hugo and Jules before posting once.
+    assert store.chat_history('alice','desk_manager')==[]
     assert store.chat_history('bob','desk_manager')==[]
     assert store.enqueue_specialist_schedules()==0
 
@@ -86,5 +101,4 @@ def test_daily_hugo_failure_is_reported_once(tmp_path, monkeypatch):
     assert store.claim_next()['id']==task['id']
     store.finish(task['id'],error='Source unavailable')
     store.finish(task['id'],error='Source unavailable')
-    messages=store.chat_history('alice','desk_manager')
-    assert len(messages)==1 and 'Source unavailable' in messages[0]['content']
+    assert store.chat_history('alice','desk_manager')==[]

@@ -69,14 +69,49 @@ def test_scheduler_once_per_day_and_week_and_disabled_accounts(store):
     assert store.enqueue_specialist_schedules(thursday) == 0
 
 
-def test_mira_daily_brief_reaches_manager_chat(store):
+def test_one_manager_digest_after_scheduled_work(store):
+    from concurrent.futures import ThreadPoolExecutor
     store.ensure_agents('alice')
-    store.enqueue_specialist_schedules(datetime(2026, 11, 2, 9, tzinfo=timezone.utc))
-    task_id = store.claim_next()['id']
-    store.finish(task_id, result={'title': 'Brief de marché', 'text': 'Marchés vérifiés : 24 séries.'})
+    store.network_schedule('alice', False)
+    moment = datetime.now(timezone.utc).replace(hour=9, minute=0)
+    store.enqueue_specialist_schedules(moment)
+    assert store.enqueue_daily_digest(moment) == 0
+
+
+    with store.db() as db:
+        rows = db.execute("SELECT id,agent_id FROM city_tasks WHERE agent_id IN ('market_analyst','internship_scout','job_hunter')").fetchall()
+        db.execute("UPDATE city_tasks SET status='running' WHERE agent_id IN ('market_analyst','internship_scout','job_hunter')")
+    for row in rows:
+        result = ({'title': 'Brief de marché', 'text': 'Marchés vérifiés : 24 séries.'}
+                  if row['agent_id'] == 'market_analyst' else
+                  {'text': 'Deux nouveaux stages détectés.', 'offers': [{'title': 'Sales', 'company': 'Bank', 'url': 'https://example.test/job'}]}
+                  if row['agent_id'] == 'internship_scout' else
+                  {'text': 'Proposition prête.', 'role_version': 2, 'approval_required': True})
+        store.finish(row['id'], result=result)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        assert sum(pool.map(store.enqueue_daily_digest, [moment] * 3)) == 1
     with store.db() as db:
         messages = db.execute("SELECT content FROM city_chat_messages WHERE username='alice' AND agent_id='desk_manager'").fetchall()
-    assert any('Marchés vérifiés : 24 séries.' in row[0] for row in messages)
+        digests = db.execute("SELECT count(*) FROM city_tasks WHERE username='alice' AND task_type='daily_digest'").fetchone()[0]
+    assert digests == 1 and len(messages) == 1
+    assert 'Marchés vérifiés : 24 séries.' in messages[0][0]
+    assert 'https://example.test/job' in messages[0][0]
+    assert 'Proposition prête' in messages[0][0]
+    assert store.enqueue_daily_digest(moment) == 0
+
+
+def test_manager_digest_reports_failed_collection(store):
+    store.ensure_agents('alice')
+    store.network_schedule('alice', False)
+    moment = datetime.now(timezone.utc).replace(hour=9, minute=0)
+    store.enqueue_specialist_schedules(moment)
+    with store.db() as db:
+        db.execute("UPDATE city_tasks SET status='completed',finished_at=? "
+                   "WHERE agent_id IN ('market_analyst','job_hunter')", (datetime.now(timezone.utc).isoformat(),))
+        db.execute("UPDATE city_tasks SET status='failed',finished_at=?,error='Source unavailable' "
+                   "WHERE agent_id='internship_scout'", (datetime.now(timezone.utc).isoformat(),))
+    assert store.enqueue_daily_digest(moment) == 1
+    assert 'Source unavailable' in store.chat_history('alice', 'desk_manager')[0]['content']
 
 
 def test_retired_automatic_tasks_cancel_but_manual_and_history_survive(store):

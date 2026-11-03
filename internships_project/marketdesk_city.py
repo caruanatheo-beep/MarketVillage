@@ -544,12 +544,17 @@ class CityStore:
         """Summarize persisted work for one account; no model call or new collection."""
         from zoneinfo import ZoneInfo
         moment = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Paris"))
-        names = {"networker": "Lina", "internship_scout": "Hugo", "market_analyst": "Mira"}
+        names = {"market_analyst": "Mira", "internship_scout": "Hugo", "networker": "Lina", "job_hunter": "Jules"}
+        day_start = moment.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
         with self.db() as db:
             latest = {agent: db.execute(
                 "SELECT description,finished_at,result_json FROM city_tasks WHERE username=? AND agent_id=? "
                 "AND status='completed' ORDER BY finished_at DESC,rowid DESC LIMIT 1", (username, agent)).fetchone()
                 for agent in names}
+            failed_today = {agent: db.execute(
+                "SELECT error FROM city_tasks WHERE username=? AND agent_id=? AND status='failed' "
+                "AND finished_at>=? ORDER BY finished_at DESC LIMIT 1",
+                (username, agent, day_start)).fetchone() for agent in names}
             proposals = db.execute(
                 "SELECT description FROM city_tasks WHERE username=? AND status='completed' "
                 "AND agent_id IN ('job_hunter','innovation_lab') "
@@ -569,11 +574,31 @@ class CityStore:
             row = latest[agent]
             if not row:
                 lines.append(f"- {label} : aucun résultat enregistré.")
+                if failed_today[agent]:
+                    lines.append(f"  Collecte du jour en échec : {failed_today[agent][0][:160]}")
                 continue
             result = json.loads(row["result_json"] or "{}")
             finished = datetime.fromisoformat(row["finished_at"]).astimezone(ZoneInfo("Europe/Paris"))
-            summary = str(result.get("text") or row["description"]).splitlines()[0][:220]
+            summary = str(result.get("summary") or result.get("text") or row["description"]).splitlines()[0].lstrip('# ')[:220]
             lines.append(f"- {label} ({finished:%d/%m %H:%M}) : {summary}")
+            if failed_today[agent]:
+                lines.append(f"  Collecte du jour en échec : {failed_today[agent][0][:160]}")
+            if finished.date() == moment.date() and agent == "market_analyst" and result.get("text"):
+                lines.extend(["", "**Analyse de Mira**", str(result["text"])[:3500]])
+            if finished.date() == moment.date() and agent == "internship_scout":
+                offers = result.get("offers") or []
+                if offers:
+                    lines.append("**Stages détectés**")
+                    lines.extend(f"- {offer['title']} · {offer['company']} — {offer['url']}"
+                                 for offer in offers[:20])
+                    if len(offers) > 20:
+                        lines.append(f"- {len(offers)-20} autres offres dans le résultat de Hugo.")
+            if finished.date() == moment.date() and agent == "networker":
+                contacts = result.get("contacts") or []
+                if contacts:
+                    lines.append("**Contacts ajoutés**")
+                    lines.extend(f"- {contact['name']} · {contact['role']} · {contact['company']}"
+                                 for contact in contacts[:10])
         decisions = [row["description"] for row in [*proposals, *waiting]]
         lines.extend(["", "**À décider**"])
         lines.extend(f"- {item[:180]}" for item in decisions[:5])
@@ -583,6 +608,62 @@ class CityStore:
             lines.append(f"- {failures} mission(s) en erreur sur les sept derniers jours : voir Notifications.")
         lines.append("\nLes horaires sont à l'heure de Paris. Ouvre Notifications pour consulter les sources et les résultats complets.")
         return "\n".join(lines)
+
+    def enqueue_daily_digest(self, now: datetime | None = None) -> int:
+        """Publish one free, persisted manager digest after today's scheduled work finishes."""
+        from zoneinfo import ZoneInfo
+        moment = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Paris"))
+        if moment.hour < 8:
+            return 0
+        day = moment.date().isoformat()
+        count = 0
+        with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            users = db.execute("SELECT DISTINCT username FROM city_agents").fetchall()
+            for user in users:
+                username = user[0]
+                saved = db.execute("SELECT settings_json FROM city_settings WHERE username=?", (username,)).fetchone()
+                if saved and not json.loads(saved[0]).get("auto_tasks", True):
+                    continue
+                if db.execute("SELECT 1 FROM city_tasks WHERE username=? AND task_type='daily_digest' "
+                              "AND json_extract(parameters_json,'$.day')=?", (username, day)).fetchone():
+                    continue
+                scheduled = db.execute("SELECT s.operation,t.status FROM city_specialist_schedule s "
+                                       "JOIN city_tasks t ON t.id=s.task_id AND t.username=s.username "
+                                       "WHERE s.username=? AND s.period=? AND s.operation IN "
+                                       "('collect_markets','refresh_internships','repository_audit')",
+                                       (username, day)).fetchall()
+                states = {row[0]: row[1] for row in scheduled}
+                if any(states.get(operation) not in FINAL for operation in
+                       ("collect_markets", "refresh_internships", "repository_audit")):
+                    continue
+                lina = db.execute("SELECT enabled,last_day,last_task_id FROM city_network_schedule WHERE username=?",
+                                  (username,)).fetchone()
+                if lina and lina['enabled']:
+                    lina_task = db.execute("SELECT status FROM city_tasks WHERE id=? AND username=?",
+                                           (lina['last_task_id'], username)).fetchone()
+                    if lina['last_day'] != day or not lina_task or lina_task[0] not in FINAL:
+                        continue
+                content = self.morning_briefing(username, moment)
+                task_id = uuid.uuid4().hex
+                now_utc = _utc()
+                db.execute("INSERT INTO city_tasks(id,username,agent_id,task_type,description,status,created_at,finished_at,result_json,parameters_json) "
+                           "VALUES(?,?, 'desk_manager','daily_digest',?,'completed',?,?,?,?)",
+                           (task_id, username, f"Synthèse City du {moment:%d/%m/%Y}", now_utc, now_utc,
+                            json.dumps({"title": "Synthèse quotidienne", "text": content,
+                                        "summary": "Marchés, stages, contacts et décisions du jour."}, ensure_ascii=False),
+                            json.dumps({"day": day})))
+                self._event(db, {"id": task_id, "username": username, "agent_id": "desk_manager"},
+                            "completed", "Synthèse quotidienne disponible : marchés, stages, contacts et décisions.")
+                db.execute("INSERT OR IGNORE INTO city_chat_conversations(username,agent_id,conversation_id) "
+                           "VALUES(?,'desk_manager',?)", (username, uuid.uuid4().hex))
+                conversation = db.execute("SELECT conversation_id FROM city_chat_conversations "
+                                          "WHERE username=? AND agent_id='desk_manager'", (username,)).fetchone()[0]
+                db.execute("INSERT INTO city_chat_messages(username,agent_id,role,content,model,created_at,conversation_id,input_tokens,output_tokens,tool_calls_json) "
+                           "VALUES(?,'desk_manager','assistant',?,'',?,?,0,0,'[]')",
+                           (username, content[:12000], now_utc, conversation))
+                count += 1
+        return count
 
     def conversation_id(self, username: str, agent_id: str) -> str:
         if agent_id not in AGENT_BY_ID:
@@ -1268,33 +1349,6 @@ class CityStore:
                 summary = str((result or {}).get("text") or (result or {}).get("title") or "Résultat disponible.")
                 message = summary[:250]
             self._event(db, task, status, message)
-            if task['agent_id'] == 'market_analyst' and json.loads(task['parameters_json'] or '{}').get('daily_digest'):
-                digest = ("Mira · brief quotidien indisponible : " + error if error else
-                          str((result or {}).get('text') or 'Mira · brief de marché disponible.'))
-                db.execute("INSERT OR IGNORE INTO city_chat_conversations(username,agent_id,conversation_id) VALUES(?,'desk_manager',?)",
-                           (task['username'], uuid.uuid4().hex))
-                conversation = db.execute("SELECT conversation_id FROM city_chat_conversations WHERE username=? AND agent_id='desk_manager'",
-                                          (task['username'],)).fetchone()[0]
-                db.execute("INSERT INTO city_chat_messages(username,agent_id,role,content,model,created_at,conversation_id,input_tokens,output_tokens,tool_calls_json) "
-                           "VALUES(?,'desk_manager','assistant',?,'',?,?,0,0,'[]')",
-                           (task['username'], digest[:12000], _utc(), conversation))
-            if task['agent_id'] == 'internship_scout' and json.loads(task['parameters_json'] or '{}').get('daily_digest'):
-                digest = ("Hugo · actualisation quotidienne impossible : " + error if error else
-                          str((result or {}).get('text') or 'Hugo · actualisation terminée.') + "\n\n" +
-                          str((result or {}).get('ranking_note') or '') + "\n" +
-                          "\n".join(f"• {offer['title']} · {offer['company']}"
-                                    + (f" · {offer['relevance']} ({', '.join(offer['match_reasons'])})"
-                                       if offer.get('match_reasons') else "")
-                                    + (f" · date limite indiquée : {offer['deadline']}" if offer.get('deadline') else "")
-                                    + f" — {offer['url']}"
-                                    for offer in (result or {}).get('offers', [])[:20]))
-                db.execute("INSERT OR IGNORE INTO city_chat_conversations(username,agent_id,conversation_id) VALUES(?,'desk_manager',?)",
-                           (task['username'], uuid.uuid4().hex))
-                conversation = db.execute("SELECT conversation_id FROM city_chat_conversations WHERE username=? AND agent_id='desk_manager'",
-                                          (task['username'],)).fetchone()[0]
-                db.execute("INSERT INTO city_chat_messages(username,agent_id,role,content,model,created_at,conversation_id,input_tokens,output_tokens,tool_calls_json) "
-                           "VALUES(?,'desk_manager','assistant',?,'',?,?,0,0,'[]')",
-                           (task['username'], digest[:12000], _utc(), conversation))
             if not error and task["agent_id"] in {"job_hunter", "networker", "market_analyst", "finance_tutor", "developer", "innovation_lab", "internship_scout"}:
                 compact = json.dumps(result or {}, ensure_ascii=False)
                 if len(compact) <= 24000:
@@ -1648,6 +1702,7 @@ class CityWorker:
                 if time.monotonic() >= next_network_check:
                     self.store.enqueue_network_daily()
                     self.store.enqueue_specialist_schedules()
+                    self.store.enqueue_daily_digest()
                     next_network_check = time.monotonic() + 60
                 worked = self.run_once()
             except sqlite3.Error as exc:
