@@ -29,6 +29,11 @@ def test_ambiguous_sales_requires_a_financial_context(role):
     assert not network.contact_focus({'role':role, 'company':'Example'})['sales_priority']
 
 
+@pytest.mark.parametrize('company', ['LCL', 'BRED Banque Populaire', 'CIC Marchés'])
+def test_smaller_bank_institutional_sales_has_financial_context(company):
+    assert network.contact_focus({'role':'Institutional Sales', 'company':company})['sales_priority']
+
+
 def test_daily_selection_prioritizes_sales_after_dedup_and_keeps_existing_data(tmp_path, monkeypatch):
     monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path / 'users.sqlite3')
     def lead(i, role):
@@ -114,6 +119,20 @@ def test_public_evidence_and_filters():
         network.parse_results('<h1>Unavailable</h1>', "Paris")
     assert network.linkedin_url("https://linkedin.com.evil.test/in/alex") == ""
     assert network.linkedin_url("https://[invalid") == ""
+
+
+def test_public_search_targets_smaller_banks_without_extra_requests(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path / 'accounts.sqlite3')
+    monkeypatch.setenv('MARKETDESK_NETWORK_SEARCH_MODE', 'public')
+    queries = []
+    def search(query):
+        queries.append(query)
+        return []
+    monkeypatch.setattr(network, 'search_public', search)
+    report = network.discover_contacts('alice')
+    assert len(queries) == 6
+    assert all(any(bank in query for query in queries) for bank in network.PRIORITY_BANKS)
+    assert report['queries'] == queries
 
 
 def test_repeat_import_preserves_manual_edits_and_account_isolation(tmp_path, monkeypatch):
@@ -422,6 +441,9 @@ def test_ai_daily_mission_saves_contacts_and_attributes_cost_without_real_api(tm
     assert 'banks_and_managers' in plan['source_groups']
     assert 'market_articles' in plan['source_groups']
     assert 'keywords_fr_en' in plan
+    assert {'LCL', 'BRED Banque Populaire', 'CIC Marchés'} <= set(plan['priority_employers'])
+    assert 'lcl.fr' in plan['source_groups']['french_banks']
+    assert 'cic.fr' in plan['source_groups']['french_banks']
     assert 'LinkedIn is optional' in calls[0]['instructions']
     with store.db() as db:
         task=db.execute("SELECT api_cost_usd FROM city_tasks WHERE agent_id='networker'").fetchone()
@@ -429,6 +451,7 @@ def test_ai_daily_mission_saves_contacts_and_attributes_cost_without_real_api(tm
     assert store.enqueue_network_daily('alice') == 0 and len(calls) == 2
     assert calls[1]['max_tool_calls']==1
     assert json.loads(calls[1]['input'])['target_new_contacts']==9
+    assert json.loads(calls[1]['input'])['priority_employers'] != plan['priority_employers']
 
 
 @pytest.mark.parametrize('error,expected', [
