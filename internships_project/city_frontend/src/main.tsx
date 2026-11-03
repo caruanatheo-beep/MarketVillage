@@ -16,10 +16,10 @@ import {isPendingProposal} from "./notifications";
 type Offer = { title: string; company: string; location: string; url: string; kind?: string; start_period?: string;
   published?: string; published_inferred?: boolean; source?: string; selection_source?: "job_hunter"|"internships_cache";
   selection_reason?: string; detected_at?: string; total_offers?: number; tracker_updated_at?: string };
-type MarketReading = { series_id: string; label: string; value: number; unit: string; observed_at: string; change?: number | null };
+type MarketReading = { series_id: string; label: string; value: number; unit: string; observed_at: string; change?: number | null; change_display?: string; source_url?: string };
 type MarketSnapshot = { points: MarketReading[]; retrieved_at?: string; error?: string };
 type InternshipHighlight = { featured_offer: Offer | null; updated_at?: string; total_count?: number; source_errors?: number; error?: string };
-type Result = { title?: string; text?: string; question?: string; answer?: string; subject?: string; body?: string;
+type Result = { title?: string; text?: string; summary?: string; market_points?: number; question?: string; answer?: string; subject?: string; body?: string;
   followup?: string; new_count?: number; total_count?: number; priority_count?: number; source_errors?: number;
   updated_at?: string; as_of?: string; market_data?: MarketReading[]; featured_offer?: (Offer & { detected_at?: string; selection_reason?: string }) | null;
   offers?: Offer[]; contacts?: {id:string;name:string;role:string;company:string;verification:string;linkedin_url:string}[];
@@ -71,7 +71,9 @@ function MarkdownText({text}: {text:string}): React.ReactElement {
     .replace(/\\\(|\\\)|\\\[|\\\]/g, "")
     .replace(/\\(?:text|mathrm)\{([^{}]*)\}/g, "$1")
     .replace(/\\times/g, "×").replace(/\\cdot/g, "·").replace(/\\%/g, "%")
-    .split(/(\*\*[^*]+\*\*|`[^`]+`|https?:\/\/[^\s)]+)/g).map((part,index) => {
+    .split(/(\[[^\]]+\]\(https?:\/\/[^\s)]+\)|\*\*[^*]+\*\*|`[^`]+`|https?:\/\/[^\s)]+)/g).map((part,index) => {
+    const link = part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
+    if (link) return <a key={index} href={link[2]} target="_blank" rel="noopener noreferrer">{link[1]} ↗</a>;
     if (part.startsWith("**") && part.endsWith("**")) return <strong key={index}>{part.slice(2,-2)}</strong>;
     if (part.startsWith("`") && part.endsWith("`")) return <code key={index}>{part.slice(1,-1)}</code>;
     if (/^https?:\/\//.test(part)) return <a key={index} href={part} target="_blank" rel="noopener noreferrer">{part}</a>;
@@ -542,7 +544,7 @@ function App(): React.ReactElement {
       const dependencies = (task.depends_on||[]).map(id=>allTasks.find(item=>item.id===id));
       const needsApproval = task.status === "waiting_approval" && (!task.workflow_id ||
         allTasks.find(item=>item.workflow_id===task.workflow_id)?.id === task.id);
-      const summary = task.result.text || task.result.title ||
+      const summary = task.result.summary || task.result.text || task.result.title ||
         (task.result.new_count !== undefined ? `${task.result.new_count} nouvelle(s) offre(s) sur ${task.result.total_count ?? "?"}.` : "");
       return <article className={`mission-record ${task.status} ${openedTaskId===task.id?'mission-highlight':''}`} key={task.id}>
         <div className="mission-record-head"><div><button className="mission-title" type="button" onClick={()=>{setOpenedTaskId(task.id);setSelectedId(task.agent_id);}}>{task.description}</button><small>{assigned}{task.delegated_by?` / transmis par ${snapshot?.agents.find(agent=>agent.id===task.delegated_by)?.name||task.delegated_by}`:""}</small></div><span className={`task-chip ${task.status}`}>{LABELS[task.status]}</span></div>
@@ -743,13 +745,15 @@ function App(): React.ReactElement {
       onCancel={id=>api(`/city/api/tasks/${id}/cancel`,{})} onReview={(id,approved)=>api(`/city/api/proposals/${id}/review`,{approved})}
       onRetry={id=>api(`/city/api/tasks/${id}/retry`,{})} onRefresh={refresh}/>}
     {error&&<div className="city-toast" role="alert"><span>{error}</span><button type="button" onClick={()=>setError("")} aria-label="Fermer">&times;</button></div>}
-    {resultTaskId&&<section className="game-popup mission-results-window" role="dialog" aria-label="Résultat de mission"><div className="game-popup-heading"><div><strong>Résultat de mission</strong><small>Contributions enregistrées par les agents</small></div><button type="button" onClick={()=>setResultTaskId(null)} aria-label="Fermer le résultat">×</button></div><div className="mission-results-body">
+    {resultTaskId&&<section className={`game-popup mission-results-window ${snapshot?.tasks.find(t=>t.id===resultTaskId)?.agent_id==='market_analyst'?'market-brief-window':''}`} role="dialog" aria-label="Résultat de mission"><div className="game-popup-heading"><div><strong>Résultat de mission</strong><small>Contributions enregistrées par les agents</small></div><button type="button" onClick={()=>setResultTaskId(null)} aria-label="Fermer le résultat">×</button></div><div className="mission-results-body">
       {(()=>{const root=snapshot?.tasks.find(t=>t.id===resultTaskId);if(!root)return <p>Cette mission n’est plus disponible dans les données chargées.</p>;
         const parts=root.workflow_id?(snapshot?.tasks||[]).filter(t=>t.workflow_id===root.workflow_id):[root];
-        return <><h2>{root.description}</h2>{parts.map(task=><article className="mission-result-part" key={task.id}><header><strong>{snapshot?.agents.find(a=>a.id===task.agent_id)?.name||task.agent_id}</strong><span className={`task-chip ${task.status}`}>{LABELS[task.status]}</span></header><h3>{task.description}</h3><small>{dateTime(task.finished_at||task.created_at)} · ID {task.id}</small>
+        return <><h2>{root.description}</h2>{parts.map(task=><article className={`mission-result-part ${task.agent_id==='market_analyst'?'market-brief-result':''}`} key={task.id}><header><strong>{snapshot?.agents.find(a=>a.id===task.agent_id)?.name||task.agent_id}</strong><span className={`task-chip ${task.status}`}>{LABELS[task.status]}</span></header><h3>{task.description}</h3><small>{dateTime(task.finished_at||task.created_at)} · ID {task.id}</small>
           {task.error&&<p className="error-copy">{task.error}</p>}
           {!["completed","failed","cancelled"].includes(task.status)&&<p className="muted">Contribution : {LABELS[task.status].toLocaleLowerCase()}.</p>}
-          {task.result.title&&<h4>{task.result.title}</h4>}{task.result.text&&<MarkdownText text={task.result.text}/>}
+          {task.agent_id==='market_analyst'&&task.result.market_data?.length&&<div className="market-brief-heading"><div><span>POINT MARCHÉS</span><strong>{task.result.title||'Brief de marché'}</strong><small>{task.result.market_points??task.result.market_data.length} séries vérifiées · relevé {dateTime(task.result.as_of)}</small></div><span aria-hidden="true">◈</span></div>}
+          {task.agent_id==='market_analyst'&&task.result.market_data?.length&&<div className="market-brief-grid">{task.result.market_data.map(p=><div className="market-brief-kpi" key={p.series_id}><span>{p.label}</span><strong>{new Intl.NumberFormat('fr-FR',{maximumFractionDigits:4}).format(p.value)} <small>{p.unit}</small></strong><small>{p.change_display&&p.change_display!=='N/A'?`${p.change_display} · `:''}{p.observed_at}</small>{p.source_url?.startsWith('https://')&&<a href={p.source_url} target="_blank" rel="noopener noreferrer">Source ↗</a>}</div>)}</div>}
+          {task.result.title&&task.agent_id!=='market_analyst'&&<h4>{task.result.title}</h4>}{task.result.text&&<MarkdownText text={task.result.text}/>}
           {task.result.equity&&<EquityChart points={task.result.equity}/>}
           {task.result.branch&&<p>Branche locale : <code>{task.result.branch}</code></p>}
           {task.result.files&&<details><summary>{task.result.files.length} fichier(s) modifié(s)</summary><ul>{task.result.files.map(file=><li key={file}><code>{file}</code></li>)}</ul></details>}
@@ -758,7 +762,7 @@ function App(): React.ReactElement {
           {task.result.file&&<p>Fichier préparé : <code>{task.result.file}</code></p>}{isPendingProposal(task)&&task.agent_id==="job_hunter"&&!task.result.revision&&<p className="notification-blockage">Cet audit ne contient pas de révision Git. Relance Jules depuis le centre de notifications avant de valider.</p>}
           {isPendingProposal(task)&&<div className="workflow-builder-actions"><button type="button" disabled={task.agent_id==="job_hunter"&&!task.result.revision} onClick={()=>void reviewProposal(task.id,true)}>Valider la proposition</button><button type="button" onClick={()=>void reviewProposal(task.id,false)}>Refuser</button><small>Validation explicite · branche isolée ou transfert à Jules · aucun merge ni service payant.</small></div>}
           {task.result.new_count!==undefined&&<p>{task.result.new_count} nouvelles offres{task.result.total_count!==undefined?` sur ${task.result.total_count} suivies`:""}.</p>}
-          {task.result.market_data?.map(p=><p key={p.series_id}><strong>{p.label}</strong> {p.value} {p.unit} · {p.observed_at}</p>)}
+          {task.agent_id!=='market_analyst'&&task.result.market_data?.map(p=><p key={p.series_id}><strong>{p.label}</strong> {p.value} {p.unit} · {p.observed_at}</p>)}
           {task.result.offers?.map(offer=><article className="result-item" key={offer.url}><a href={/^https?:\/\//i.test(offer.url)?offer.url:undefined} target="_blank" rel="noopener noreferrer">{offer.title} ↗</a><small>{offer.company} · {offer.location||"Lieu non indiqué"}</small></article>)}
           {task.result.contacts?.map(contact=><article className="result-item" key={contact.id}><strong>{contact.name}</strong><p>{contact.role} · {contact.company}</p><small>{contact.verification}</small>{/^https?:\/\//i.test(contact.linkedin_url||"")&&<a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer">Profil LinkedIn ↗</a>}</article>)}
           {task.result.question&&<div className="exercise-card"><strong>Question</strong><MarkdownText text={task.result.question}/><details><summary>Correction</summary><MarkdownText text={task.result.answer||"Correction non disponible."}/></details></div>}

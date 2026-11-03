@@ -26,16 +26,26 @@ def test_networker_only_reads_the_users_existing_contacts(tmp_path, monkeypatch)
 
 
 def test_market_analyst_uses_the_existing_market_brief_services(monkeypatch):
-    import src.data, src.news, src.calendar, src.analytics
+    import src.data, src.news, src.calendar
+    from src.models import MarketPoint, NewsItem
     from internships_project.city_services import market_brief
-    point = type("Point", (), {"value": 3.1})()
+    point = MarketPoint(series_id="SP500", label="S&P 500", category="Risk", value=7587.22,
+                        previous=7722.36, change=-135.14, date="2026-11-03", unit="index",
+                        frequency="daily", status="latest available", source_name="FRED",
+                        source_url="https://fred.stlouisfed.org/series/SP500")
     monkeypatch.setattr(src.data, "load_snapshot", lambda: ([point], {"state": "cached"}))
-    monkeypatch.setattr(src.news, "load_news", lambda: ([], []))
+    monkeypatch.setattr(src.news, "load_news", lambda: ([
+        NewsItem("Credit union reforms", "Bank of England", "2026-11-03", "https://example.org/credit-unions"),
+        NewsItem("Monetary policy decision", "ECB", "2026-11-03", "https://example.org/monetary-policy"),
+    ], []))
     monkeypatch.setattr(src.calendar, "load_calendar", lambda **kwargs: ([], None))
-    monkeypatch.setattr(src.analytics, "briefing_markdown", lambda *args: "Observed market brief")
     result = market_brief()
     assert result["market_points"] == 1
-    assert result["text"] == "Observed market brief"
+    assert "## À retenir" in result["text"]
+    assert "## Prochains rendez-vous" in result["text"]
+    assert "Monetary policy decision" in result["text"]
+    assert "Credit union reforms" not in result["text"]
+    assert "1 série vérifiée" in result["summary"]
 
 
 def test_outreach_adapter_saves_a_draft_without_sending(tmp_path, monkeypatch):

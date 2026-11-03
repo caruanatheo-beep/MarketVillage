@@ -114,7 +114,7 @@ def market_brief() -> dict:
         from src.data import load_snapshot
         from src.news import load_news
         from src.calendar import load_calendar
-        from src.analytics import briefing_markdown
+        from src.analytics import curve_spreads, format_change, format_value, point_map
         from src.models import NewsItem
 
         points, status = load_snapshot()
@@ -123,14 +123,43 @@ def market_brief() -> dict:
         news, news_errors = load_news()
         events, calendar_error = load_calendar(days_ahead=14, limit=20)
         verified_news = [item for item in news if isinstance(item, NewsItem)]
-        brief = briefing_markdown(points, events, verified_news)
-        if not brief.strip():
-            raise CityError("Le Market Brief n'a pas renvoyé de données utilisables.")
+        values = point_map(points)
+        spread = curve_spreads(points).get("US 2s10s")
+        facts = []
+        if spread is not None:
+            facts.append(f"**Taux** · La courbe américaine 2–10 ans est à {spread:+.0f} pb. C'est un écart observé, pas une prévision.")
+        spx, vix = values.get("SP500"), values.get("VIXCLS")
+        if spx and spx.value is not None and vix and vix.value is not None:
+            facts.append(f"**Actions et volatilité** · S&P 500 {format_change(spx)} ; VIX {format_change(vix)} sur leurs dernières observations.")
+        eur = values.get("DEXUSEU")
+        if eur and eur.value is not None:
+            facts.append(f"**Change** · EUR/USD à {format_value(eur)} ({format_change(eur)}).")
+        hy = values.get("BAMLH0A0HYM2")
+        if hy and hy.value is not None:
+            facts.append(f"**Crédit** · Spread high yield américain à {format_value(hy)} ({format_change(hy)}).")
+        agenda = [f"- **{event.date} · {event.time}** · [{event.title}]({event.url}) — {event.institution}"
+                  for event in events[:3] if event.url.startswith(('https://', 'http://'))]
+        market_terms = ("monetary", "interest rate", "inflation", "market", "bond", "exchange rate",
+                        "financial stability", "economic outlook", "gdp", "employment", "central bank")
+        publications = [f"- [{item.title}]({item.url}) · {item.source} · {item.published}"
+                        for item in verified_news if item.url.startswith(('https://', 'http://'))
+                        and any(term in item.title.casefold() for term in market_terms)][:3]
+        brief = "\n\n".join((
+            "## À retenir\n" + ("\n".join(f"- {fact}" for fact in facts) or "- Données disponibles, sans mouvement majeur vérifié."),
+            "## Prochains rendez-vous\n" + ("\n".join(agenda) or "- Aucun rendez-vous daté récupéré."),
+            "## Publications de marché\n" + ("\n".join(publications) or "- Aucune publication monétaire ou de marché pertinente dans les sources récupérées."),
+            "Les variations comparent deux observations. Elles ne prouvent pas, à elles seules, la cause d'un mouvement.",
+        ))
+        market_count = sum(p.value is not None for p in points)
         return {"title": "Brief de marché", "as_of": datetime.now(timezone.utc).isoformat(),
-                "market_points": len([p for p in points if getattr(p, "value", None) is not None]),
+                "market_points": market_count,
                 "market_data": _market_readings(points),
                 "headlines": len(verified_news), "calendar_events": len(events),
                 "data_status": status, "warnings": [*news_errors[:3], *([calendar_error] if calendar_error else [])],
+                "summary": " · ".join(part for part in (
+                    f"{market_count} série{'s' if market_count != 1 else ''} vérifiée{'s' if market_count != 1 else ''}",
+                    f"S&P 500 {format_change(spx)}" if spx and spx.value is not None else "",
+                    f"VIX {format_change(vix)}" if vix and vix.value is not None else "") if part),
                 "text": brief[:18000], "source": "Market Brief · données et publications existantes"}
     except CityError:
         raise
@@ -139,6 +168,7 @@ def market_brief() -> dict:
 
 
 def _market_readings(points: list) -> list[dict]:
+    from src.analytics import format_change
     selected = []
     wanted = {"DGS2", "DGS10", "DEXUSEU", "DEXUSUK", "SP500", "VIXCLS", "BAMLH0A0HYM2", "DCOILWTICO"}
     for point in points:
@@ -147,6 +177,7 @@ def _market_readings(points: list) -> list[dict]:
                              "value": float(point.value), "unit": point.unit,
                              "previous": float(point.previous) if point.previous is not None else None,
                              "change": float(point.change) if point.change is not None else None,
+                             "change_display": format_change(point),
                              "observed_at": str(point.date or ""), "source": point.source_name,
                              "source_url": point.source_url, **_observation_age(point.date)})
     return selected[:8]

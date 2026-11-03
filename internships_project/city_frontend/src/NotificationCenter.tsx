@@ -47,7 +47,7 @@ export function NotificationCenter(props:Props){
       {visible.map(({task,event,unread})=>{const decision=needsDecision(task),proposal=isPendingProposal(task),blocked=proposal&&task.agent_id==='job_hunter'&&!task.result.revision;
         return <article key={task.id} className={`notification-card ${decision?'decision':task.status} ${unread?'unread':''}`}>
           <div className="notification-card-top"><span className={`roster-avatar pixel-agent-avatar ${task.agent_id}`} aria-hidden="true"><i className="agent-sprite"/></span><div><strong>{props.agents.find(a=>a.id===task.agent_id)?.name||task.agent_id}</strong><small>{new Date(event?.created_at||task.finished_at||task.created_at).toLocaleString('fr-FR',{dateStyle:'medium',timeStyle:'short',timeZone:'Europe/Paris'})}</small></div><span className="notification-status">{decision?'Décision requise':LABELS[task.status]||task.status}</span>{unread&&<i className="notification-unread" title="Non lue"/>}</div>
-          <h3>{task.description}</h3><p>{task.error||task.result.text?.slice(0,240)||task.result.title||event?.message||'Mission enregistrée.'}</p>
+          <h3>{task.description}</h3><p>{task.error||task.result.summary||task.result.text?.slice(0,240)||task.result.title||event?.message||'Mission enregistrée.'}</p>
           {blocked&&<p className="notification-blockage">La branche nécessite un audit avec une révision Git. Relance l’audit de Jules pour obtenir une proposition à jour.</p>}
           {task.result.file&&<p className="notification-file">Fichier préparé : <code>{task.result.file}</code></p>}
           <div className="notification-actions"><button onClick={()=>props.onOpen(task.id)}>{task.status==='completed'?'Voir le résultat':'Voir la mission'} →</button>
