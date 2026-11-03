@@ -21,6 +21,7 @@ def account(tmp_path, monkeypatch):
 def test_mira_preserves_observation_age_and_unknown_dates():
     today = datetime.now(timezone.utc).date().isoformat()
     assert city_services._observation_age(today)["age_days"] == 0
+    assert city_services._observation_age(today + " 18:18 UTC")["age_days"] == 0
     assert city_services._observation_age("")["date_status"] == "unknown"
     assert city_services._observation_age("2999-01-01")["date_status"] == "future"
     from tests.sample_data import sample_points

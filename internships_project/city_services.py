@@ -38,7 +38,7 @@ def redact_diagnostic(value: object) -> str:
 
 def _observation_age(value: object) -> dict:
     try:
-        observed = datetime.fromisoformat(str(value).replace("Z", "+00:00")).date()
+        observed = datetime.fromisoformat(str(value).replace(" UTC", "+00:00").replace("Z", "+00:00")).date()
         age = (datetime.now(timezone.utc).date() - observed).days
     except (ValueError, TypeError):
         return {"age_days": None, "date_status": "unknown"}
@@ -112,7 +112,7 @@ def market_brief() -> dict:
     """Read the existing Market Brief snapshot, news and official calendar."""
     try:
         from src.data import load_snapshot
-        from src.news import load_news
+        from src.news import fetch_global_news, load_news
         from src.calendar import load_calendar
         from src.analytics import curve_spreads, format_change, format_value, point_map
         from src.models import NewsItem
@@ -121,8 +121,10 @@ def market_brief() -> dict:
         if not any(getattr(point, "value", None) is not None for point in points):
             raise CityError("Markets n'a retourné aucune observation exploitable. Vérifie l'accès réseau à FRED et DBnomics.")
         news, news_errors = load_news()
+        market_news, market_news_errors = fetch_global_news()
         events, calendar_error = load_calendar(days_ahead=14, limit=20)
         verified_news = [item for item in news if isinstance(item, NewsItem)]
+        sentiment = _market_sentiment(points, [item for item in market_news if isinstance(item, NewsItem)])
         values = point_map(points)
         spread = curve_spreads(points).get("US 2s10s")
         facts = []
@@ -144,19 +146,29 @@ def market_brief() -> dict:
         publications = [f"- [{item.title}]({item.url}) · {item.source} · {item.published}"
                         for item in verified_news if item.url.startswith(('https://', 'http://'))
                         and any(term in item.title.casefold() for term in market_terms)][:3]
+        corroboration = [f"- [{item['title']}]({item['url']}) · {item['source']} · {item['published']}"
+                         for item in sentiment['supporting_news']]
         brief = "\n\n".join((
+            "## Analyse et sentiment\n" + f"**{sentiment['label']} · confiance {sentiment['confidence'].lower()}**\n"
+            + sentiment['explanation'] + "\n"
+            + ("\n".join(corroboration) if corroboration else
+               "Aucun titre récent suffisamment précis ne corrobore ce sentiment ; lecture fondée sur les cours observés."),
             "## À retenir\n" + ("\n".join(f"- {fact}" for fact in facts) or "- Données disponibles, sans mouvement majeur vérifié."),
             "## Prochains rendez-vous\n" + ("\n".join(agenda) or "- Aucun rendez-vous daté récupéré."),
             "## Publications de marché\n" + ("\n".join(publications) or "- Aucune publication monétaire ou de marché pertinente dans les sources récupérées."),
-            "Les variations comparent deux observations. Elles ne prouvent pas, à elles seules, la cause d'un mouvement.",
+            "Sentiment indicatif (seuils : S&P 500 ±0,5 %, VIX ±5 %, spread HY ±3 pb), "
+            "fondé sur les variations observées et les titres des articles cités. "
+            "Le contenu intégral des articles n'a pas été analysé ; ni les titres ni les cours ne prouvent une causalité.",
         ))
         market_count = sum(p.value is not None for p in points)
         return {"title": "Brief de marché", "as_of": datetime.now(timezone.utc).isoformat(),
                 "market_points": market_count,
                 "market_data": _market_readings(points),
                 "headlines": len(verified_news), "calendar_events": len(events),
-                "data_status": status, "warnings": [*news_errors[:3], *([calendar_error] if calendar_error else [])],
+                "sentiment": sentiment, "data_status": status,
+                "warnings": [*news_errors[:3], *market_news_errors[:2], *([calendar_error] if calendar_error else [])],
                 "summary": " · ".join(part for part in (
+                    sentiment['label'],
                     f"{market_count} série{'s' if market_count != 1 else ''} vérifiée{'s' if market_count != 1 else ''}",
                     f"S&P 500 {format_change(spx)}" if spx and spx.value is not None else "",
                     f"VIX {format_change(vix)}" if vix and vix.value is not None else "") if part),
@@ -165,6 +177,67 @@ def market_brief() -> dict:
         raise
     except Exception as exc:
         raise CityError(f"Market Brief indisponible ({type(exc).__name__}).") from exc
+
+
+def _market_sentiment(points: list, news: list) -> dict:
+    from src.analytics import point_map
+
+    values = point_map(points)
+    signals = []
+    spx, vix, hy = (values.get(key) for key in ("SP500", "VIXCLS", "BAMLH0A0HYM2"))
+    def recent(point) -> bool:
+        age = _observation_age(point.date)['age_days']
+        return age is not None and 0 <= age <= 4
+
+    if spx and recent(spx) and spx.previous and spx.change is not None:
+        move = spx.change / spx.previous * 100
+        if abs(move) >= 0.5:
+            signals.append(("Actions", -1 if move < 0 else 1, f"S&P 500 {move:+.2f}%"))
+    if vix and recent(vix) and vix.previous and vix.change is not None:
+        move = vix.change / vix.previous * 100
+        if abs(move) >= 5:
+            signals.append(("Volatilité", -1 if move > 0 else 1, f"VIX {move:+.2f}%"))
+    if hy and recent(hy) and hy.change is not None:
+        move = hy.change * 100
+        if abs(move) >= 3:
+            signals.append(("Crédit", -1 if move > 0 else 1, f"spread HY {move:+.1f} pb"))
+    defensive = sum(direction < 0 for _, direction, _ in signals)
+    constructive = sum(direction > 0 for _, direction, _ in signals)
+    if defensive >= 2 and defensive > constructive:
+        label, direction = "Défensif", -1
+    elif constructive >= 2 and constructive > defensive:
+        label, direction = "Constructif", 1
+    else:
+        label, direction = "Mitigé", 0
+    detail = "; ".join(move for _, _, move in signals) or "mouvements insuffisants pour conclure"
+    opposition = min(defensive, constructive)
+    reading = ("Cette combinaison suggère un appétit pour le risque en retrait. " if direction == -1 else
+               "Cette combinaison suggère un appétit pour le risque plus ferme. " if direction == 1 else
+               "Les signaux ne convergent pas assez pour conclure. ")
+    explanation = f"{detail}. {reading}"
+    if opposition:
+        explanation += f"{opposition} indicateur va dans le sens opposé. "
+    if hy and recent(hy) and hy.change is not None and abs(hy.change * 100) < 3:
+        explanation += "Le spread high yield ne confirme pas de tension marquée."
+    topic = re.compile(r"\b(stocks?|shares?|equities|ftse|s&p|nasdaq|wall street)\b", re.I)
+    down = re.compile(r"\b(fall|falls|fell|drop|drops|slip|slips|slide|slides|sell-?off|retreats?|tumbles?|weighs?|snaps)\b", re.I)
+    up = re.compile(r"\b(rise|rises|rose|gain|gains|rally|rallies|climb|climbs|rebound|rebounds|surge|surges|advance|advances|lift|lifts|boost|boosts)\b", re.I)
+    trusted = ("reuters", "bloomberg", "wsj", "financial times", "ft.com", "associated press", "ap news", "cnbc", "marketwatch")
+    supporting = []
+    for item in news:
+        if not item.url.startswith(('https://', 'http://')) or not any(name in item.source.casefold() for name in trusted):
+            continue
+        lead = re.split(r"[,;:]|\b(?:as|while|but|despite)\b", item.title, maxsplit=1, flags=re.I)[0]
+        if topic.search(lead) and ((direction == -1 and down.search(lead) and not up.search(lead))
+                                   or (direction == 1 and up.search(lead) and not down.search(lead))):
+            supporting.append(item)
+        if len(supporting) == 2:
+            break
+    confidence = "modérée" if direction and len(signals) >= 2 and supporting else "faible"
+    return {"label": label, "confidence": confidence, "explanation": explanation.strip(),
+            "signals": [move for _, _, move in signals],
+            "supporting_news": [{"title": item.title, "url": item.url, "source": item.source,
+                                 "published": item.published} for item in supporting]}
 
 
 def _market_readings(points: list) -> list[dict]:

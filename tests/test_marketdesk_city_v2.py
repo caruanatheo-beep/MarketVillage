@@ -38,6 +38,7 @@ def test_market_analyst_uses_the_existing_market_brief_services(monkeypatch):
         NewsItem("Credit union reforms", "Bank of England", "2026-11-03", "https://example.org/credit-unions"),
         NewsItem("Monetary policy decision", "ECB", "2026-11-03", "https://example.org/monetary-policy"),
     ], []))
+    monkeypatch.setattr(src.news, "fetch_global_news", lambda: ([], []))
     monkeypatch.setattr(src.calendar, "load_calendar", lambda **kwargs: ([], None))
     result = market_brief()
     assert result["market_points"] == 1
@@ -46,6 +47,37 @@ def test_market_analyst_uses_the_existing_market_brief_services(monkeypatch):
     assert "Monetary policy decision" in result["text"]
     assert "Credit union reforms" not in result["text"]
     assert "1 série vérifiée" in result["summary"]
+
+
+def test_mira_sentiment_uses_recent_prices_and_matching_news():
+    from datetime import datetime, timezone
+    from src.models import MarketPoint, NewsItem
+    from internships_project.city_services import _market_sentiment
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    def point(series_id, previous, value, unit):
+        return MarketPoint(series_id, series_id, 'Risk' if series_id != 'BAMLH0A0HYM2' else 'Credit',
+                           value, previous, value - previous, today, unit, 'daily', 'latest available',
+                           'FRED', f'https://fred.stlouisfed.org/series/{series_id}')
+
+    prices = [point('SP500', 100, 98, 'index'), point('VIXCLS', 20, 23, 'index'),
+              point('BAMLH0A0HYM2', 3.4, 3.39, '%')]
+    headlines = [NewsItem('Stocks fall as Wall Street retreats', 'Reuters', today,
+                          'https://news.google.com/articles/stocks'),
+                 NewsItem('Nvidia lifts Wall Street despite Apple drop', 'AP', today,
+                          'https://news.google.com/articles/nvidia'),
+                 NewsItem('Oil prices rise', 'WSJ', today, 'https://news.google.com/articles/oil')]
+    result = _market_sentiment(prices, headlines)
+    assert result['label'] == 'Défensif' and result['confidence'] == 'modérée'
+    assert [item['source'] for item in result['supporting_news']] == ['Reuters']
+    assert 'appétit pour le risque en retrait' in result['explanation']
+    assert 'ne confirme pas de tension marquée' in result['explanation']
+    assert _market_sentiment(prices, headlines[1:])['confidence'] == 'faible'
+    prices[-1].change = -0.05
+    assert 'sens opposé' in _market_sentiment(prices, headlines)['explanation']
+    for item in prices:
+        item.date = '2025-01-01'
+    assert _market_sentiment(prices, headlines)['label'] == 'Mitigé'
 
 
 def test_outreach_adapter_saves_a_draft_without_sending(tmp_path, monkeypatch):

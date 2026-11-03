@@ -20,6 +20,7 @@ type MarketReading = { series_id: string; label: string; value: number; unit: st
 type MarketSnapshot = { points: MarketReading[]; retrieved_at?: string; error?: string };
 type InternshipHighlight = { featured_offer: Offer | null; updated_at?: string; total_count?: number; source_errors?: number; error?: string };
 type Result = { title?: string; text?: string; summary?: string; market_points?: number; question?: string; answer?: string; subject?: string; body?: string;
+  sentiment?: {label:string;confidence:string;explanation:string;signals:string[];supporting_news:{title:string;url:string;source:string;published:string}[]};
   followup?: string; new_count?: number; total_count?: number; priority_count?: number; source_errors?: number;
   updated_at?: string; as_of?: string; market_data?: MarketReading[]; featured_offer?: (Offer & { detected_at?: string; selection_reason?: string }) | null;
   offers?: Offer[]; contacts?: {id:string;name:string;role:string;company:string;verification:string;linkedin_url:string}[];
@@ -752,6 +753,7 @@ function App(): React.ReactElement {
           {task.error&&<p className="error-copy">{task.error}</p>}
           {!["completed","failed","cancelled"].includes(task.status)&&<p className="muted">Contribution : {LABELS[task.status].toLocaleLowerCase()}.</p>}
           {task.agent_id==='market_analyst'&&task.result.market_data?.length&&<div className="market-brief-heading"><div><span>POINT MARCHÉS</span><strong>{task.result.title||'Brief de marché'}</strong><small>{task.result.market_points??task.result.market_data.length} séries vérifiées · relevé {dateTime(task.result.as_of)}</small></div><span aria-hidden="true">◈</span></div>}
+          {task.agent_id==='market_analyst'&&task.result.sentiment&&<div className={`market-sentiment ${task.result.sentiment.label==='Défensif'?'defensive':task.result.sentiment.label==='Constructif'?'constructive':'mixed'}`}><div><span>SENTIMENT DU MARCHÉ</span><strong>{task.result.sentiment.label}</strong></div><div><b>Confiance {task.result.sentiment.confidence}</b><small>{task.result.sentiment.signals.length} signaux observés · {task.result.sentiment.supporting_news.length} titre(s) concordant(s)</small></div></div>}
           {task.agent_id==='market_analyst'&&task.result.market_data?.length&&<div className="market-brief-grid">{task.result.market_data.map(p=><div className="market-brief-kpi" key={p.series_id}><span>{p.label}</span><strong>{new Intl.NumberFormat('fr-FR',{maximumFractionDigits:4}).format(p.value)} <small>{p.unit}</small></strong><small>{p.change_display&&p.change_display!=='N/A'?`${p.change_display} · `:''}{p.observed_at}</small>{p.source_url?.startsWith('https://')&&<a href={p.source_url} target="_blank" rel="noopener noreferrer">Source ↗</a>}</div>)}</div>}
           {task.result.title&&task.agent_id!=='market_analyst'&&<h4>{task.result.title}</h4>}{task.result.text&&<MarkdownText text={task.result.text}/>}
           {task.result.equity&&<EquityChart points={task.result.equity}/>}
