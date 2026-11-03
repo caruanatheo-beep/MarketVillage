@@ -107,12 +107,13 @@ def test_complete_batch_stops_after_first_request(tmp_path,monkeypatch):
 def test_public_evidence_and_filters():
     html = result() + result(role="Private Equity Analyst", slug="pe") + result(city="London", slug="london")
     contacts = network.parse_results(html, "Paris Sales")
-    assert len(contacts) == 1
+    assert len(contacts) == 2
     c = contacts[0]
     assert (c["name"], c["role"], c["company"]) == ("Alex Martin", "Fixed Income Sales", "Bank A")
     assert c["linkedin_url"] == "https://www.linkedin.com/in/alex-martin"
     assert c["email"] == "" and c["verification_status"] == "À vérifier"
     assert "Paris" in c["source_excerpt"]
+    assert contacts[1]["location"] == ""
     with pytest.raises(ValueError, match="anti-robot"):
         network.parse_results('<form id="challenge-form"></form>', "Paris")
     with pytest.raises(ValueError, match="exploitable"):
@@ -230,13 +231,21 @@ def test_all_sources_blocked_are_reported_not_an_empty_success(monkeypatch):
         network.discover_contacts("alice")
 
 
-def test_ai_results_require_real_search_sources_and_paris_evidence():
+def test_ai_results_require_real_search_sources_and_sourced_bank_role():
     url = "https://www.linkedin.com/in/alex-martin"
     record = {"name": "Alex Martin", "role": "Rates Sales", "company": "Bank A", "location": "Paris",
               "linkedin_url": url, "source_url": url, "evidence": "Alex Martin, Rates Sales at Bank A, Paris", "notes": ""}
     data = {"output": [{"type": "web_search_call", "status": "completed", "action": {"type": "search", "sources": [{"url": url}]}},
                        {"type": "message", "content": [{"type": "output_text", "text": json.dumps({"contacts": [record]})}]}]}
     assert len(network.validate_research(data)[0]) == 1
+    record['location'] = 'Paris'
+    record['evidence'] = 'Alex Martin, Rates Sales at Bank A'
+    data['output'][1]['content'][0]['text'] = json.dumps({"contacts": [record]})
+    assert network.validate_research(data)[0][0]['location'] == ''
+    record['company'] = 'Invented Bank'
+    data['output'][1]['content'][0]['text'] = json.dumps({"contacts": [record]})
+    assert network.validate_research(data) == ([], 1)
+    record['company'] = 'Bank A'
     record['source_url'] = "https://www.linkedin.com/in/invented"
     data['output'][1]['content'][0]['text'] = json.dumps({"contacts": [record]})
     assert network.validate_research(data) == ([], 1)
@@ -250,13 +259,13 @@ def test_french_and_english_adjacent_markets_roles(role):
     assert network.contact_focus({'role':role})['contact_segment']=='secondary'
 
 
-@pytest.mark.parametrize('location_url,location_evidence,accepted',[
+@pytest.mark.parametrize('location_url,location_evidence,location_confirmed',[
     ('https://bank.example.com/team/alex','Alex Martin, Bank A, based in La Défense',True),
     ('https://bank.example.com/not-returned','Alex Martin, Bank A, based in Paris',False),
     ('https://bank.example.com/team/alex','Another Person, Bank A, based in Paris',False),
     ('https://bank.example.com/team/alex','Alex Martin, Bank A, based in London',False),
 ])
-def test_article_can_use_separate_named_location_source(location_url,location_evidence,accepted):
+def test_article_can_use_separate_named_location_source(location_url,location_evidence,location_confirmed):
     article='https://press.example.com/markets-interview'
     profile='https://bank.example.com/team/alex'
     record={'name':'Alex Martin','role':'Stratégiste marchés','company':'Bank A','location':'La Défense',
@@ -266,17 +275,19 @@ def test_article_can_use_separate_named_location_source(location_url,location_ev
     data={'output':[{'type':'web_search_call','status':'completed','action':{'sources':[{'url':article},{'url':profile}]}},
                     {'type':'message','content':[{'type':'output_text','text':json.dumps({'contacts':[record]})}]}]}
     leads,rejected=network.validate_research(data)
-    assert len(leads)==int(accepted)
-    if accepted:
-        assert leads[0]['linkedin_url']=='' and leads[0]['location_source_url']==profile
-        record['source_date']='2003-01-01'
-        data['output'][1]['content'][0]['text']=json.dumps({'contacts':[record]})
-        assert network.validate_research(data)[0]==[]
+    assert len(leads)==1 and rejected==0
+    assert leads[0]['linkedin_url']==''
+    assert leads[0]['location']==('La Défense' if location_confirmed else '')
+    assert leads[0]['location_source_url']==(profile if location_confirmed else '')
+    record['source_date']='2003-01-01'
+    data['output'][1]['content'][0]['text']=json.dumps({'contacts':[record]})
+    assert network.validate_research(data)[0][0]['source_date']=='2003-01-01'
 
 
 def test_paris_surname_is_not_location_evidence():
     assert not network._paris_location('Camille Paris, equity derivatives trader at Bank A, based in London','Camille Paris','Bank A')
     assert network._paris_location('Camille Paris, Bank A, based in Paris','Camille Paris','Bank A')
+    assert network._documented_location('Paris', 'Camille Paris, Bank A, equity derivatives trader', 'Camille Paris', 'Bank A') == ''
 
 
 def test_web_research_tokens_and_search_actions_are_costed(tmp_path, monkeypatch):

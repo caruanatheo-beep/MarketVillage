@@ -31,9 +31,9 @@ export function LinkedInAssisted({onImported}:{onImported:()=>Promise<void>}){
         <h4>Ajouter un profil sélectionné</h4>
         <div className="network-assisted-fields">{([
           ["name","Nom complet"],["role","Poste en finance de marché"],["company","Entreprise"],
-          ["location","Localisation affichée"],["linkedin_url","Lien du profil LinkedIn"],["school","École / université (facultatif)"],
-        ] as const).map(([field,label])=><label key={field}>{label}<input value={contact[field]} type={field==="linkedin_url"?"url":"text"} maxLength={300} required={field!=="school"} onChange={event=>setContact({...contact,[field]:event.target.value})}/></label>)}</div>
-        <label>Extrait professionnel sélectionné<textarea rows={4} maxLength={4000} required value={contact.evidence} onChange={event=>setContact({...contact,evidence:event.target.value})} placeholder="Recopie les lignes qui confirment le nom, le poste, l’entreprise, la localisation et éventuellement l’école."/></label>
+          ["location","Localisation (facultatif)"],["linkedin_url","Lien du profil LinkedIn"],["school","École / université (facultatif)"],
+        ] as const).map(([field,label])=><label key={field}>{label}<input value={contact[field]} type={field==="linkedin_url"?"url":"text"} maxLength={300} required={field!=="school"&&field!=="location"} onChange={event=>setContact({...contact,[field]:event.target.value})}/></label>)}</div>
+        <label>Extrait professionnel sélectionné<textarea rows={4} maxLength={4000} required value={contact.evidence} onChange={event=>setContact({...contact,evidence:event.target.value})} placeholder="Recopie les lignes qui confirment le nom, le poste et la banque ; ajoute le lieu ou l’école s’ils sont indiqués."/></label>
         <p><small>Import local sans appel IA. Les doublons sont écartés et les fiches existantes sont conservées. Aucun compte ou cookie LinkedIn n’est transmis à City.</small></p>
         <button type="submit" disabled={busy}>{busy?"Importation…":"Ajouter ce contact"}</button>
         {status&&<p role="status">{status}</p>}{error&&<p role="alert" className="network-warning">{error}</p>}

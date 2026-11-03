@@ -34,6 +34,14 @@ def test_selected_profile_is_private_deduplicated_and_never_fetches_linkedin(tmp
     assert network.list_contacts('bob')==[]
 
 
+def test_assisted_profile_without_sourced_location_is_kept_with_unknown_city(tmp_path, monkeypatch, contact):
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path / 'accounts.sqlite3')
+    contact['evidence'] = 'Alex Martin, Rates Sales at Bank A.'
+    contact['school'] = ''
+    assert network.import_assisted_contact('alice', contact)['imported'] == 1
+    assert network.list_contacts('alice')[0]['location'] == ''
+
+
 @pytest.mark.parametrize('changes',[
     {'linkedin_url':'https://linkedin.com.evil.invalid/in/alex'},
     {'linkedin_url':'javascript:alert(1)'},
