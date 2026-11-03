@@ -155,6 +155,11 @@ h1, h2, h3, p { margin-top: 0; }
 .network-assisted textarea { resize:vertical; }
 .network-assisted-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 14px; }
 .network-assisted form { margin-top:18px; border-top:1px solid #263e56; padding-top:12px; }
+.network-assisted-bulk { margin-top:16px; padding:12px 14px; border:1px solid #3c6b6a; border-radius:9px; background:#12302f; }
+.network-assisted-bulk h4 { margin:0 0 7px; color:#e5f5ef; }
+.network-assisted-preview { max-height:320px; overflow:auto; margin:12px 0; padding:10px 12px; border-radius:8px; background:#0b2227; }
+.network-assisted-preview ul { padding-left:18px; line-height:1.6; }
+.network-assisted-preview li { margin:5px 0; }
 @media(max-width:600px) { .network-assisted-fields { grid-template-columns:1fr; } }
 .network-directory small { color:#9eb2c7; line-height:1.5; font-size:11px; }
 .network-summary { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:16px; }

@@ -40,7 +40,7 @@ SEARCH_TERMS = ('sales taux credit actions derives','vente produits structures c
                 'negociateur gerant portefeuille structureur ingenieur financier',
                 'markets strategist investment specialist quant market risk',
                 'equipe biographie entretien interview nomination speaker auteur expert')
-MARKETS = re.compile(r"\b(sales|vendeur\w*|vente|distribution|trader|trading|structur\w*|portfolio|gestion de portefeuille|market risk|"
+MARKETS = re.compile(r"\b(sales|vendeur\w*|vente|distribution|trader|trading|structur\w*|portfolio|cross.?asset|gestion de portefeuille|market risk|"
                      r"quant\w*|broker|fixed income|global markets|capital markets|repo|stir|"
                      r"negociat\w* (?:de |en )?(?:taux|actions|derives|devises|change|credit|obligations|marche\w*)|courtier\w*|"
                      r"gerant\w* (?:de |du )?(?:portefeuille|obligataire|actions|fonds|multi.?actifs)|"
@@ -335,7 +335,7 @@ def validate_school_research(data: dict, targets: list[dict]) -> tuple[list[dict
 def enrich_schools(username: str) -> dict:
     """One small sourced batch; transactionally fill missing schools only."""
     contacts = state_store.load_user_data(username,'mail_contacts')
-    candidates = sorted(((key,c) for key,c in contacts.items() if c.get('origin') in {'lina_public_search','lina_assisted'} and not c.get('school')),
+    candidates = sorted(((key,c) for key,c in contacts.items() if c.get('origin') in {'lina_public_search','lina_assisted','lina_assisted_paste'} and not c.get('school')),
                         key=lambda pair:pair[1].get('school_checked_at',''))[:5]
     if not candidates:
         return {'title':'Lina · formations','text':'Aucune école manquante à rechercher.','school_count':0}
@@ -461,7 +461,8 @@ def _search_response(url: str, params: dict) -> str:
         return data.decode(response.encoding or "utf-8", errors="replace")
 
 
-def save_leads(username: str, leads: list[dict], limit: int = 10, *, sales_first: bool = False) -> tuple[list[dict], int]:
+def save_leads(username: str, leads: list[dict], limit: int = 10, *, sales_first: bool = False,
+               allow_pasted: bool = False) -> tuple[list[dict], int]:
     """Merge inside one transaction; never overwrite manual edits or existing contacts."""
     added, duplicates = [], 0
     with state_store._connect() as db:
@@ -477,7 +478,10 @@ def save_leads(username: str, leads: list[dict], limit: int = 10, *, sales_first
             url = linkedin_url(lead.get("linkedin_url", ""))
             identity = normalized(lead["name"]), normalized(lead.get("company", ""))
             evidence_url = source_url(lead.get("source_url", ""))
-            if (not url and not evidence_url) or (url and url in urls) or identity in identities:
+            pasted = (allow_pasted and lead.get('origin') == 'lina_assisted_paste' and
+                      all(lead.get(field) and normalized(str(lead[field])) in normalized(str(lead.get('source_excerpt') or ''))
+                          for field in ('name','role','company')))
+            if (not url and not evidence_url and not pasted) or (url and url in urls) or identity in identities:
                 duplicates += 1
                 continue
             focus = contact_focus(lead)
@@ -530,6 +534,59 @@ def import_assisted_contact(username: str, payload: dict) -> dict:
     added,duplicates = save_leads(username,[contact],sales_first=True)
     return {'imported':len(added),'duplicates':duplicates,
             'text':'Contact ajouté à ton dossier.' if added else 'Ce contact est déjà enregistré ; sa fiche est conservée.'}
+
+
+_PASTE_PROFILE = re.compile(r"(?m)^([^\n•]{3,100}?)\s*•\s*(?:1er|2e|3e|1st|2nd|3rd)\b")
+_PASTE_CURRENT = re.compile(r"^(?:Poste actuel|Current position)\s*:\s*(.+?)\s+chez\s+(.+)$", re.I)
+
+
+def import_assisted_page(username: str, payload: dict) -> dict:
+    """Preview or save manually pasted LinkedIn result cards, without visiting LinkedIn."""
+    from .marketdesk_city import CityError
+    raw = payload.get('text')
+    commit = payload.get('commit', False)
+    if not isinstance(raw, str) or not isinstance(commit, bool) or len(raw) > 30000:
+        raise CityError('Colle une page de résultats LinkedIn de 30 000 caractères maximum.')
+    matches = list(_PASTE_PROFILE.finditer(raw))
+    if not matches or len(matches) > 100:
+        raise CityError('Aucun profil reconnu ou trop de profils dans la copie (maximum 100).')
+    leads, excluded = [], []
+    for index, match in enumerate(matches):
+        name = ' '.join(match.group(1).split())
+        block = raw[match.end():matches[index+1].start() if index+1 < len(matches) else len(raw)]
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        headline = lines[0] if lines else ''
+        current = next((_PASTE_CURRENT.match(line) for line in lines if _PASTE_CURRENT.match(line)), None)
+        role, company = (current.group(1).strip(), current.group(2).strip()) if current else ('','')
+        headline_match = re.match(r"^(.+?)\s+(?:(?:chez|at)\s+|\|\s*|-\s*)(.+)$", headline, re.I)
+        if headline_match:
+            headline_role, headline_company = (part.strip() for part in headline_match.groups())
+            if not role:
+                role, company = headline_role, headline_company
+            elif company.endswith(('…','...')) and normalized(company.rstrip('….')) in normalized(headline_company):
+                company = headline_company
+        location = next((line for line in lines[1:4] if line == 'France' or
+                         (',' in line and not line.startswith(('Poste actuel', 'Current position')))), '')
+        if (not 2 <= len(name.split()) <= 7 or not role or not company or
+                len(role) > 200 or len(company) > 200 or company.endswith(('…','...'))):
+            excluded.append({'name':name[:100], 'reason':'Nom, poste ou banque incomplet'})
+            continue
+        excerpt = f'{name} · {role} chez {company}' + (f' · {location}' if location else '')
+        lead = {'name':name,'role':role,'company':company,'location':location,'school':'',
+                'linkedin_url':'','source_url':'','source_title':name+' · copie de résultats LinkedIn',
+                'source_excerpt':excerpt,'source_type':'Copie LinkedIn',
+                'employment_status':'Poste affiché dans une copie LinkedIn, actuel à confirmer',
+                'origin':'lina_assisted_paste','search_engine':'Navigation manuelle'}
+        focus = contact_focus(lead)
+        if focus['contact_segment'] not in {'sales','secondary'}:
+            excluded.append({'name':name[:100], 'reason':'Poste hors finance de marché ou à préciser'})
+            continue
+        leads.append({**lead, **focus})
+    added, duplicates = save_leads(username,leads,limit=100,allow_pasted=True) if commit and leads else ([],0)
+    return {'contacts':[{key:lead[key] for key in ('name','role','company','location','contact_segment')} for lead in leads],
+            'excluded':excluded,'imported':len(added),'duplicates':duplicates,
+            'text':f'{len(added)} contacts ajoutés ; {duplicates} doublons écartés.' if commit else
+                   f'{len(leads)} contacts de marché repérés ; {len(excluded)} profils écartés.'}
 
 
 def discover_contacts(username: str) -> dict:
@@ -594,4 +651,4 @@ def list_contacts(username: str) -> list[dict]:
               "conversation", "detected_at", "source_url", "source_title", "source_excerpt", "employment_status", "notes",
               "school", "school_source_url", "school_evidence", "source_type", "source_date", "location_source_url", "location_evidence")
     return [{"id": key, **{f: str(c.get(f) or "") for f in fields}, **contact_focus(c)}
-            for key, c in contacts.items() if c.get("origin") in {"lina_public_search","lina_assisted"}]
+            for key, c in contacts.items() if c.get("origin") in {"lina_public_search","lina_assisted","lina_assisted_paste"}]
