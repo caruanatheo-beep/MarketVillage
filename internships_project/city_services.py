@@ -93,6 +93,8 @@ def run_agent(agent_id: str, username: str, parameters: dict | None = None) -> d
     if agent_id in SPECIALISTS:
         return run_specialist(agent_id, username, parameters)
     if agent_id == "market_analyst":
+        if parameters.get("operation") not in (None, "collect_markets"):
+            raise CityError("Mira peut uniquement collecter les données Markets et produire un brief.")
         return market_brief()
     if agent_id == "networker":
         if parameters.get("discover_public"):
@@ -116,6 +118,8 @@ def market_brief() -> dict:
         from src.models import NewsItem
 
         points, status = load_snapshot()
+        if not any(getattr(point, "value", None) is not None for point in points):
+            raise CityError("Markets n'a retourné aucune observation exploitable. Vérifie l'accès réseau à FRED et DBnomics.")
         news, news_errors = load_news()
         events, calendar_error = load_calendar(days_ahead=14, limit=20)
         verified_news = [item for item in news if isinstance(item, NewsItem)]

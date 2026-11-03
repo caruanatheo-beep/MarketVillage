@@ -321,7 +321,8 @@ class CityStore:
         from .city_specialists import VERSION
         moment = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Paris"))
         day, week = moment.date().isoformat(), moment.strftime("%G-W%V")
-        schedules = [("job_hunter", "repository_audit", day, "Revue quotidienne du code City"),
+        schedules = [("market_analyst", "collect_markets", day, "Brief quotidien des marchés"),
+                     ("job_hunter", "repository_audit", day, "Revue quotidienne du code City"),
                      ("internship_scout", "refresh_internships", day, "Nouveaux stages détectés aujourd’hui"),
                      ("innovation_lab", "innovation_review", week + ("-Mon" if moment.weekday() < 3 else "-Thu"), "Deux innovations open source")]
         count = 0
@@ -360,6 +361,8 @@ class CityStore:
                         task_title = f"Rattrapage · {title} ({due[0][1].isoformat()} → {day})"
                     if agent_id == 'internship_scout':
                         payload.update(report_mode='detected_today', daily_digest=True)
+                    if agent_id == 'market_analyst':
+                        payload['daily_digest'] = True
                     parameters = json.dumps(payload)
                     db.execute("INSERT INTO city_tasks(id,username,agent_id,task_type,description,status,created_at,parameters_json) VALUES(?,?,?,?,?,'queued',?,?)",
                                (task_id, user[0], agent_id, 'agent:'+agent_id, task_title, _utc(), parameters))
@@ -1265,6 +1268,16 @@ class CityStore:
                 summary = str((result or {}).get("text") or (result or {}).get("title") or "Résultat disponible.")
                 message = summary[:250]
             self._event(db, task, status, message)
+            if task['agent_id'] == 'market_analyst' and json.loads(task['parameters_json'] or '{}').get('daily_digest'):
+                digest = ("Mira · brief quotidien indisponible : " + error if error else
+                          str((result or {}).get('text') or 'Mira · brief de marché disponible.'))
+                db.execute("INSERT OR IGNORE INTO city_chat_conversations(username,agent_id,conversation_id) VALUES(?,'desk_manager',?)",
+                           (task['username'], uuid.uuid4().hex))
+                conversation = db.execute("SELECT conversation_id FROM city_chat_conversations WHERE username=? AND agent_id='desk_manager'",
+                                          (task['username'],)).fetchone()[0]
+                db.execute("INSERT INTO city_chat_messages(username,agent_id,role,content,model,created_at,conversation_id,input_tokens,output_tokens,tool_calls_json) "
+                           "VALUES(?,'desk_manager','assistant',?,'',?,?,0,0,'[]')",
+                           (task['username'], digest[:12000], _utc(), conversation))
             if task['agent_id'] == 'internship_scout' and json.loads(task['parameters_json'] or '{}').get('daily_digest'):
                 digest = ("Hugo · actualisation quotidienne impossible : " + error if error else
                           str((result or {}).get('text') or 'Hugo · actualisation terminée.') + "\n\n" +

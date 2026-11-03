@@ -468,7 +468,7 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
         if not safe_post(request):
             return JSONResponse({"detail": "Requête refusée."}, status_code=403)
         collectors = {
-            "markets": ("finance_tutor", "Collecter les données Markets"),
+            "markets": ("market_analyst", "Collecter les données Markets et produire le brief"),
             "internships": ("internship_scout", "Chercher les stages publiés aujourd’hui"),
         }
         if kind not in collectors:

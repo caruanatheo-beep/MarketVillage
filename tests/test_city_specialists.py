@@ -52,21 +52,31 @@ def test_migration_archives_pending_keeps_history_and_is_idempotent(store):
 def test_scheduler_once_per_day_and_week_and_disabled_accounts(store):
     store.ensure_agents('alice')
     moment = datetime(2026, 11, 2, 9, tzinfo=timezone.utc)
-    assert store.enqueue_specialist_schedules(moment) == 3
+    assert store.enqueue_specialist_schedules(moment) == 4
     assert store.enqueue_specialist_schedules(moment) == 0
-    assert {task['agent_id'] for task in store.snapshot('alice')['tasks']} == {'job_hunter','internship_scout','innovation_lab'}
+    assert {task['agent_id'] for task in store.snapshot('alice')['tasks']} == {'market_analyst','job_hunter','internship_scout','innovation_lab'}
     with store.db() as db:
         db.execute("UPDATE city_tasks SET status='completed'")
     assert store.enqueue_specialist_schedules(moment) == 0
     # Thursday starts Nova's second weekly slot, alongside two daily missions.
     thursday = datetime(2026, 11, 5, 9, tzinfo=timezone.utc)
-    assert store.enqueue_specialist_schedules(thursday) == 3
+    assert store.enqueue_specialist_schedules(thursday) == 4
     assert store.enqueue_specialist_schedules(thursday) == 0
     store.ensure_agents('bob')
     settings = store.get_settings('bob')
     settings['auto_tasks'] = False
     store.save_settings('bob', settings)
     assert store.enqueue_specialist_schedules(thursday) == 0
+
+
+def test_mira_daily_brief_reaches_manager_chat(store):
+    store.ensure_agents('alice')
+    store.enqueue_specialist_schedules(datetime(2026, 11, 2, 9, tzinfo=timezone.utc))
+    task_id = store.claim_next()['id']
+    store.finish(task_id, result={'title': 'Brief de marché', 'text': 'Marchés vérifiés : 24 séries.'})
+    with store.db() as db:
+        messages = db.execute("SELECT content FROM city_chat_messages WHERE username='alice' AND agent_id='desk_manager'").fetchall()
+    assert any('Marchés vérifiés : 24 séries.' in row[0] for row in messages)
 
 
 def test_retired_automatic_tasks_cancel_but_manual_and_history_survive(store):
@@ -84,7 +94,7 @@ def test_old_weekly_nova_review_counts_as_first_slot(store):
     store.ensure_agents('alice')
     with store.db() as db:
         db.execute('INSERT INTO city_specialist_schedule VALUES(?,?,?,?)',('alice','innovation_review','2026-W45','old-nova'))
-    assert store.enqueue_specialist_schedules(datetime(2026,11,2,9,tzinfo=timezone.utc))==2
+    assert store.enqueue_specialist_schedules(datetime(2026,11,2,9,tzinfo=timezone.utc))==3
     assert not any(t['agent_id']=='innovation_lab' for t in store.snapshot('alice')['tasks'])
     assert store.enqueue_specialist_schedules(datetime(2026,11,5,9,tzinfo=timezone.utc))==1
 
@@ -93,16 +103,18 @@ def test_offline_periods_are_grouped_persisted_and_never_queued_twice(store):
     import json
     from concurrent.futures import ThreadPoolExecutor
     store.ensure_agents('alice')
-    assert store.enqueue_specialist_schedules(datetime(2026,11,2,9,tzinfo=timezone.utc))==3
+    assert store.enqueue_specialist_schedules(datetime(2026,11,2,9,tzinfo=timezone.utc))==4
     with store.db() as db:
         db.execute("UPDATE city_tasks SET status='completed'")
     restart=datetime(2026,11,16,9,tzinfo=timezone.utc)
     with ThreadPoolExecutor(max_workers=3) as pool:
-        assert sum(pool.map(lambda _:store.enqueue_specialist_schedules(restart),range(3)))==3
+        assert sum(pool.map(lambda _:store.enqueue_specialist_schedules(restart),range(3)))==4
     with store.db() as db:
         tasks=db.execute("SELECT agent_id,parameters_json FROM city_tasks WHERE status='queued'").fetchall()
     details={row[0]:json.loads(row[1]) for row in tasks}
     assert details['job_hunter']['catch_up']['periods']==14
+    assert details['market_analyst']['catch_up']['periods']==14
+    assert details['market_analyst']['daily_digest'] is True
     assert details['internship_scout']['catch_up']['periods']==14
     assert details['innovation_lab']['catch_up']['periods']==4
     assert details['innovation_lab']['catch_up']['from']=='2026-11-05'
@@ -308,7 +320,7 @@ def test_http_collectors_and_approval_remain_authenticated_and_origin_protected(
         headers = {'test-user':'alice', 'X-MarketDesk-City':'1'}
         assert client.post('/city/api/collect/markets', headers={**headers,'Origin':'https://evil.invalid'}).status_code == 403
         first = client.post('/city/api/collect/markets', headers=headers)
-        assert first.status_code == 201 and first.json()['task']['agent_id'] == 'finance_tutor'
+        assert first.status_code == 201 and first.json()['task']['agent_id'] == 'market_analyst'
         assert client.post('/city/api/collect/markets', headers=headers).json()['already_running']
         assert client.post('/city/api/collect/internships', headers=headers).json()['task']['agent_id'] == 'internship_scout'
         assert client.post('/city/api/proposals/missing/review', headers=headers, json={'approved':True}).status_code == 400
