@@ -254,6 +254,20 @@ def test_ai_results_require_real_search_sources_and_sourced_bank_role():
         network.validate_research(data)
 
 
+def test_reversed_full_name_is_valid_but_missing_identity_is_not():
+    url = 'https://bank.example.com/markets/team'
+    record = {'name':'Alex Martin', 'company':'Bank A', 'role':'Rates Sales',
+              'source_url':url, 'evidence':'Martin Alex, Rates Sales at Bank A'}
+    data = {'output':[{'type':'web_search_call','status':'completed',
+                       'action':{'sources':[{'url':url}]}},
+                      {'type':'message','content':[{'type':'output_text',
+                       'text':json.dumps({'contacts':[record]})}]}]}
+    assert len(network.validate_research(data)[0]) == 1
+    record['evidence'] = 'An unnamed Rates Sales professional at Bank A'
+    data['output'][1]['content'][0]['text'] = json.dumps({'contacts':[record]})
+    assert network.validate_research(data) == ([], 1)
+
+
 @pytest.mark.parametrize('role',['Négociateur de taux','Gérant de portefeuille obligataire','Ingénieur financier','Stratégiste marchés','Macro strategist','Investment Specialist Fixed Income'])
 def test_french_and_english_adjacent_markets_roles(role):
     assert network.contact_focus({'role':role})['contact_segment']=='secondary'
@@ -445,7 +459,7 @@ def test_ai_daily_mission_saves_contacts_and_attributes_cost_without_real_api(tm
     assert store.network_schedule('alice')['report']['count'] == 1
     assert len(network.list_contacts('alice')) == 1
     assert calls[0]['model'] == 'gpt-5.4-mini' and calls[0]['tools'][0]['type'] == 'web_search'
-    assert calls[0]['max_tool_calls'] == 2 and calls[0]['store'] is False
+    assert calls[0]['max_tool_calls'] == 3 and calls[0]['store'] is False
     assert calls[0]['tools'][0]['search_context_size']=='low'
     assert calls[0]['max_output_tokens']==4500
     plan=json.loads(calls[0]['input'])
@@ -460,7 +474,7 @@ def test_ai_daily_mission_saves_contacts_and_attributes_cost_without_real_api(tm
         task=db.execute("SELECT api_cost_usd FROM city_tasks WHERE agent_id='networker'").fetchone()
         assert float(task[0]) > 0.01
     assert store.enqueue_network_daily('alice') == 0 and len(calls) == 2
-    assert calls[1]['max_tool_calls']==1
+    assert calls[1]['max_tool_calls']==2
     assert json.loads(calls[1]['input'])['target_new_contacts']==9
     assert json.loads(calls[1]['input'])['priority_employers'] != plan['priority_employers']
 
