@@ -16,7 +16,7 @@ sont accessibles dans Réglages. Le chat du Manager et les contacts conservent l
 | Agent | Opérations serveur | Récurrence (Europe/Paris) | Livrable |
 |---|---|---|---|
 | Jules | `repository_audit`, `codex_review`, `code_change`, préparation de branche après validation humaine | Audit quotidien ; analyse Codex et développement sur demande | Audit AST ou mission Codex, diff, fichiers modifiés et vérifications dans un worktree isolé |
-| Noé | `quant_report`, `collect_markets` | Sur demande uniquement | Courbe de capital, rendement net, Sharpe à taux sans risque nul, volatilité, drawdown, hypothèses et limites |
+| Noé | `quant_report` | Sur demande uniquement | Courbe de capital, rendement net, Sharpe à taux sans risque nul, volatilité, drawdown, hypothèses et limites |
 | Axel | `daily_questions`, `mock_interview`, `evaluate_answer` | Sur demande uniquement | Questions Sales/S&T/Global Markets, HireVue, grille de couverture indicative et historique des réponses |
 | Nova | `innovation_review` | Deux fois par semaine : lundi et jeudi | Deux projets publics GitHub non déjà proposés par revue, licence, spécification de prototype isolé, complexité et coûts à mesurer |
 | Lina | Recherche de contacts existante + `refresh_internships` | Collecte quotidienne de contacts inchangée | Contacts ; collecte réelle des offres sur demande |

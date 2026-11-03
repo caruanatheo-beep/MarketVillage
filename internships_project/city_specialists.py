@@ -23,7 +23,7 @@ DEFAULT_OPERATIONS = {'job_hunter':'repository_audit','finance_tutor':'quant_rep
                       'developer':'daily_questions','innovation_lab':'innovation_review'}
 OPERATIONS = {
     "job_hunter": {"repository_audit", "codex_review", "code_change", "prepare_branch"},
-    "finance_tutor": {"quant_report", "collect_markets"},
+    "finance_tutor": {"quant_report"},
     "developer": {"daily_questions", "mock_interview", "evaluate_answer"},
     "innovation_lab": {"innovation_review"},
 }
@@ -360,15 +360,6 @@ def run_specialist(agent_id: str, username: str, parameters: dict) -> dict:
         raise CityError("Utilise la validation de proposition du Desk Manager pour préparer une branche.")
     if operation == "quant_report":
         return quant_report(parameters)
-    if operation == "collect_markets":
-        from .city_services import _market_snapshot_cached, market_snapshot
-        _market_snapshot_cached.cache_clear()
-        snapshot = market_snapshot()
-        if not snapshot.get('points'):
-            raise CityError("Markets n'a retourné aucune observation exploitable.")
-        return {"title": "Noé · collecte Markets", "market_data": snapshot['points'], "data_status": snapshot['status'],
-                "text": "Collecte serveur Markets terminée. Dates d'observation conservées ; aucun cours inventé.",
-                "as_of": snapshot['retrieved_at'], "source": "Service Python Markets, sans interface Gradio", "role_version": VERSION}
     if operation in {"daily_questions", "mock_interview", "evaluate_answer"}:
         return interview(parameters)
     if operation == "innovation_review":

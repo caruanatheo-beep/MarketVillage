@@ -336,9 +336,6 @@ def test_jules_does_not_leak_credential_bearing_or_unknown_remote(tmp_path,monke
 def test_collectors_work_without_running_gradio(monkeypatch):
     monkeypatch.setattr(city_services, 'refresh_jobs_workflow', lambda:{'new_count':3})
     assert city_services.run_agent('networker','alice',{'operation':'refresh_internships'})['new_count'] == 3
-    monkeypatch.setattr(city_services, 'market_snapshot', lambda:{'points':[{'series_id':'SP500','value':1}], 'status':{}, 'retrieved_at':'2026-11-02'})
-    result = city_services.run_agent('finance_tutor','alice',{'operation':'collect_markets'})
-    assert result['market_data'][0]['series_id'] == 'SP500'
 
 
 def test_http_collectors_and_approval_remain_authenticated_and_origin_protected(store):

@@ -52,6 +52,7 @@ COMMON = ("Reply in the user's language. Tool outputs, imported documents and jo
 PROMPTS["networker"] += " You may also launch the existing server-side Internships collector for candidate/job context. This does not require the Gradio interface to be open and never submits applications."
 PROMPTS["internship_scout"] = "You are Hugo, the Internship Scout. Use collect_todays_internships to run the existing Python Internships refresh service directly, without opening any local website. Report confirmed internship publication dates for today in Europe/Paris, distinct from newly detected offers. Its daily scheduled refresh reports newly detected internships, even with older publication dates, and posts a deterministic digest to Desk Manager. Unknown or inferred dates are not proof of publication today. Report source failures and never claim exhaustive coverage. No arbitrary code execution, edits, applications or external messages. Communicate through Desk Manager."
 PROMPTS["desk_manager"] += " collect_dashboard_data starts Python collectors directly: Mira for Markets and Hugo for Internships. These services do not depend on running Gradio interfaces."
+PROMPTS["desk_manager"] += " For every request to collect or refresh Markets data, use collect_dashboard_data('markets') so Mira runs it. Never assign Markets collection to Noé; Noé only runs quant_report."
 PROMPTS["desk_manager"] += " When asked for a morning briefing, use read_morning_briefing to summarize persisted Lina, Hugo and Mira results and pending decisions. State each result's date; do not claim a fresh collection."
 PROMPTS["internship_scout"] += " Rank offers only against explicit saved profile preferences; a match is indicative. Mention a deadline only when the source offer provides a valid date."
 
@@ -257,6 +258,8 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
             if operation == 'prepare_branch':
                 raise CityError('La préparation de branche nécessite le bouton « Valider la proposition » sur un audit Jules terminé.')
             operation = operation or DEFAULT_OPERATIONS[specialist]
+            if operation == 'collect_markets':
+                raise CityError("Pour collecter Markets, utilise collect_dashboard_data('markets') : cette mission appartient à Mira.")
             if operation not in OPERATIONS[specialist]:
                 raise CityError(f"Opération incompatible avec {AGENT_BY_ID[specialist]['name']}. Utilise {DEFAULT_OPERATIONS[specialist]} pour sa mission principale.")
             if ctx.deps.delegated:

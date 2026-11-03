@@ -66,6 +66,11 @@ def test_manager_routes_markets_collection_to_mira(tmp_path, monkeypatch):
     with store.db() as db:
         parameters = db.execute('SELECT parameters_json FROM city_tasks WHERE id=?', (task['id'],)).fetchone()[0]
     assert json.loads(parameters)['operation'] == 'collect_markets'
+    specialist_tool = build_agent('desk_manager', TestModel())._function_toolset.tools['start_specialist_mission'].function
+    with pytest.raises(CityError, match='Mira'):
+        asyncio.run(specialist_tool(SimpleNamespace(deps=ChatDeps('alice', store)), 'Noé', 'collect_markets'))
+    with pytest.raises(CityError):
+        store.create_task('alice', 'finance_tutor', 'Collecter les données Markets', {'operation': 'collect_markets'})
 
 
 def test_daily_hugo_reports_detection_not_publication_and_posts_once(tmp_path, monkeypatch):
