@@ -523,7 +523,8 @@ def matching_opportunities(jobs: list[Opportunity], category: str = "Toutes", qu
 
 
 def _is_paris(location: str) -> bool:
-    return any(place in location.casefold() for place in PARIS_AREA + (
+    text = _offer_search_text(location)
+    return any(_offer_search_text(place) in text for place in PARIS_AREA + (
         "montrouge", "levallois-perret", "boulogne-billancourt", "saint-denis",
         "saint-quentin-en-yvelines", "issy-les-moulineaux",
     ))
