@@ -467,6 +467,13 @@ def _recent_sort_key(job: Opportunity) -> tuple:
     return (-published, -job.score, job.company.casefold(), job.title.casefold(), job.url.casefold())
 
 
+def _offer_search_text(value: str) -> str:
+    """Normalize search text while preserving letters from non-Latin alphabets."""
+    text = unicodedata.normalize("NFKD", value.casefold())
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return re.sub(r"[\W_]+", " ", text).strip()
+
+
 def matching_opportunities(jobs: list[Opportunity], category: str = "Toutes", query: str = "",
                            family: str = "Tous métiers", earliest: str = "Toutes dates",
                            seen_urls: list[str] | None = None, tracking: dict | None = None,
@@ -474,7 +481,7 @@ def matching_opportunities(jobs: list[Opportunity], category: str = "Toutes", qu
                            weekly: bool = False, today: date | None = None,
                            daily: bool = False, sort_by: str = "pertinence") -> list[Opportunity]:
     """Return the full filtered and stably sorted result set before pagination."""
-    query = (query or "").strip().casefold()
+    query = _offer_search_text(query or "")
     today = today or datetime.now(timezone.utc).date()
     seen = set(seen_urls or [])
     dismissed = {url for url, entry in (tracking or {}).items()
@@ -487,7 +494,7 @@ def matching_opportunities(jobs: list[Opportunity], category: str = "Toutes", qu
         (category == "Graduate" and job.kind == "Graduate")
     ) and (family.startswith("Tous ") or job.family == family or (family == "Sales / Trading / Structuring" and job.family in {"Sales", "Trading / Structuring"}))
       and (earliest == "Toutes dates" or (start_month(job.start_period) and start_month(job.start_period) >= earliest))
-      and (not query or query in f"{job.title} {job.company} {job.location}".casefold())
+      and (not query or query in _offer_search_text(f"{job.title} {job.company} {job.location}"))
       and (not only_new or job.url not in seen)
       and (not hide_dismissed or job.url not in dismissed)
       and (not weekly or _published_this_week(job.published, today))
