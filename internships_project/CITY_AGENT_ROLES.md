@@ -34,7 +34,8 @@ missions quotidiennes. Le choix du changement concret lui appartient. Jusqu'à q
 missions de développement peuvent s'exécuter ensemble, une par agent et par compte,
 dans des worktrees Git distincts, avec Codex connecté à
 l'abonnement ChatGPT et `gpt-6.1-sol` en raisonnement moyen. Aucun appel API payant
-n'est utilisé pour ce développement. Avant chaque lancement, City lit l'utilisation
+n'est utilisé pour ce développement. Le réglage « Missions simultanées » de chaque
+compte s'applique aussi. Avant chaque lancement, City lit l'utilisation
 des fenêtres de quota Codex et reporte la mission si l'une atteint 70 % ou si la
 mesure est indisponible. Dans ces cas City reporte la mission d'une heure et réessaie.
 Ce seuil protège une réserve d'usage ; il ne représente
