@@ -368,23 +368,27 @@ def _integration_checks(root: Path, directory: Path, files: list[str], agent_id:
                  'tests/test_internships_location_filters.py',
                  'tests/test_internships_display_times.py'],
              'quality_engineer': ['tests/test_city_specialists.py']}
-    test_files = tests[agent_id]
+    test_files = [name for name in tests[agent_id] if (directory / name).is_file()]
     if agent_id == 'internships_engineer':
         test_files += [name for name in files if name.startswith('tests/test_') and name.endswith('.py')
                        and name not in test_files]
+    if not test_files:
+        raise CityError('Tests serveur indisponibles dans cette branche : intégration suspendue.')
     test_file = ', '.join(test_files)
-    args = test_files + ['-q', '--maxfail=1', '--tb=short',
-                         '--basetemp='+str(directory/'.city-pytest')]
-    script = ("import sys; sys.path[:0] = ["+repr(str(root/'.venv/Lib/site-packages'))+",'.']; "
-              "import pytest; raise SystemExit(pytest.main("+repr(args)+"))")
     try:
-        check = subprocess.run([sys.executable, '-c', script], cwd=directory, capture_output=True,
-                               text=True, encoding='utf-8', errors='replace', timeout=240)
+        # Git fixtures create nested repositories; a worktree-local pytest path exceeds MAX_PATH on Windows.
+        with tempfile.TemporaryDirectory(prefix='city-tests-') as temporary:
+            check_args = test_files + ['-q', '--maxfail=1', '--tb=short', '--basetemp='+temporary]
+            check_script = ("import sys; sys.path[:0] = ["+repr(str(root/'.venv/Lib/site-packages'))+",'.']; "
+                            "import pytest; raise SystemExit(pytest.main("+repr(check_args)+"))")
+            check = subprocess.run([sys.executable, '-c', check_script], cwd=directory, capture_output=True,
+                                   text=True, encoding='utf-8', errors='replace', timeout=240)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise CityError('Tests serveur indisponibles : intégration suspendue.') from exc
     if check.returncode:
-        failed = re.search(r'^(?:FAILED|ERROR) (tests/[\w./:-]+)', check.stdout, re.MULTILINE)
-        detail = failed.group(1) if failed else 'résultat non disponible'
+        failed = re.search(r'^(?:FAILED|ERROR) (tests[\\/][^\s]+)', check.stdout, re.MULTILINE)
+        missing = re.search(r'^ERROR: file or directory not found: (tests[\\/][^\s]+)', check.stdout, re.MULTILINE)
+        detail = (failed or missing).group(1) if (failed or missing) else 'résultat non disponible'
         raise CityError('Tests serveur en échec : '+detail+'. Intégration suspendue ; consulte la branche de travail.')
     if any(name.startswith('internships_project/city_frontend/src/') for name in files):
         frontend = directory/'internships_project/city_frontend'

@@ -1,8 +1,10 @@
 import asyncio
 import json
 import os
+import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -30,7 +32,9 @@ def repo(tmp_path,monkeypatch):
         return subprocess.run(['git','-c','core.hooksPath=NUL' if os.name=='nt' else 'core.hooksPath=/dev/null',*args],cwd=root,check=True,capture_output=True,text=True).stdout.strip()
     git('init');git('config','user.name','test');git('config','user.email','test@example.invalid')
     (root/'sample.py').write_text('value = 1\n')
-    git('add','sample.py');git('-c','commit.gpgsign=false','commit','-m','fixture')
+    (root/'tests').mkdir()
+    (root/'tests/test_internships_start_dates.py').write_text('def test_baseline():\n    assert True\n')
+    git('add','.');git('-c','commit.gpgsign=false','commit','-m','fixture')
     monkeypatch.setattr(coding,'repo_root',lambda:root)
     monkeypatch.setattr(coding,'codex_binary',lambda:'fixture-codex')
     monkeypatch.setattr(coding,'require_chatgpt',lambda *args:None)
@@ -154,8 +158,8 @@ def test_unavailable_codex_quota_defers_coding_without_losing_mission(store, mon
 
 def test_internships_gate_uses_offline_tests_and_names_a_failure(repo, monkeypatch):
     root, _ = repo
+    (root/'tests/test_internships_start_dates.py').write_text('def test_dates():\n    assert True\n')
     target = root/'tests/test_internships_weekly_dates.py'
-    target.parent.mkdir()
     target.write_text('def test_weekly():\n    assert True\n')
     original_run = subprocess.run
     commands = []
@@ -163,7 +167,7 @@ def test_internships_gate_uses_offline_tests_and_names_a_failure(repo, monkeypat
         if command[:2] == [sys.executable, '-c']:
             commands.append(command[2])
             return SimpleNamespace(returncode=1,
-                                   stdout='FAILED tests/test_internships_weekly_dates.py::test_weekly\n')
+                                   stdout='FAILED tests\\test_internships_weekly_dates.py::test_weekly\n')
         return original_run(command, **kwargs)
     monkeypatch.setattr(coding.subprocess, 'run', run)
     with pytest.raises(CityError, match='test_internships_weekly_dates.py::test_weekly'):
@@ -171,6 +175,10 @@ def test_internships_gate_uses_offline_tests_and_names_a_failure(repo, monkeypat
                                    'internships_engineer')
     assert 'tests/test_internships_weekly_dates.py' in commands[0]
     assert 'tests/test_internships.py' not in commands[0]
+    assert 'tests/test_internships_location_filters.py' not in commands[0]
+    basetemp = re.search(r"--basetemp=([^']+)", commands[0])
+    assert basetemp and Path(basetemp.group(1)).is_relative_to(tempfile.gettempdir())
+    assert not Path(basetemp.group(1)).is_relative_to(root)
 
 
 def test_autonomous_engineer_rebases_after_another_mission_integrates(repo, monkeypatch):
