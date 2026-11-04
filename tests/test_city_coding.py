@@ -152,6 +152,27 @@ def test_unavailable_codex_quota_defers_coding_without_losing_mission(store, mon
     assert store.claim_next() is None
 
 
+def test_internships_gate_uses_offline_tests_and_names_a_failure(repo, monkeypatch):
+    root, _ = repo
+    target = root/'tests/test_internships_weekly_dates.py'
+    target.parent.mkdir()
+    target.write_text('def test_weekly():\n    assert True\n')
+    original_run = subprocess.run
+    commands = []
+    def run(command, **kwargs):
+        if command[:2] == [sys.executable, '-c']:
+            commands.append(command[2])
+            return SimpleNamespace(returncode=1,
+                                   stdout='FAILED tests/test_internships_weekly_dates.py::test_weekly\n')
+        return original_run(command, **kwargs)
+    monkeypatch.setattr(coding.subprocess, 'run', run)
+    with pytest.raises(CityError, match='test_internships_weekly_dates.py::test_weekly'):
+        coding._integration_checks(root, root, ['tests/test_internships_weekly_dates.py'],
+                                   'internships_engineer')
+    assert 'tests/test_internships_weekly_dates.py' in commands[0]
+    assert 'tests/test_internships.py' not in commands[0]
+
+
 def test_autonomous_engineer_rebases_after_another_mission_integrates(repo, monkeypatch):
     root, git = repo
     monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 12)

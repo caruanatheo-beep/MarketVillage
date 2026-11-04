@@ -2850,11 +2850,10 @@ def render_opportunities(jobs: list[Opportunity], errors: list[str], updated: da
 
 def _published_this_week(published: str, today: date) -> bool:
     """Include publication dates from today and the preceding six calendar days."""
-    try:
-        published_date = date.fromisoformat(published)
-    except (TypeError, ValueError):
+    if not isinstance(published, str):
         return False
-    return today - timedelta(days=6) <= published_date <= today
+    published_ordinal = _publication_sort_value(published)
+    return 0 < published_ordinal and today.toordinal() - 6 <= published_ordinal <= today.toordinal()
 
 
 TRACKING_STATUSES = (
