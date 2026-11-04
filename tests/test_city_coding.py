@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -84,6 +85,31 @@ def test_coding_runs_only_after_human_approval_and_keeps_main_untouched(repo,sto
     assert done['result']['checks'][0]['exit_code']==0
     assert not done['result']['approval_required']
     assert git('status','--porcelain','--untracked-files=no')==''
+
+
+def test_autonomous_engineer_integrates_validated_code_without_approval(repo, monkeypatch):
+    root, git = repo
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 12)
+    original_run = subprocess.run
+    def run(command, **kwargs):
+        if command[:2] == [sys.executable, '-c']:
+            return SimpleNamespace(returncode=0)
+        return original_run(command, **kwargs)
+    monkeypatch.setattr(coding.subprocess, 'run', run)
+    def execute(command, directory, prompt, env):
+        assert '--model' in command and command[command.index('--model') + 1] == 'gpt-6.1-sol'
+        assert 'Sacha' in prompt
+        target = directory/'internships_project/city_sample.py'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('value = 2\n')
+        Path(command[command.index('--output-last-message') + 1]).write_text(json.dumps(
+            {'summary': 'Source corrigée', 'tests': 'Test ciblé passé', 'limitations': 'Aucune'}))
+        return [{'type': 'turn.completed', 'usage': {'input_tokens': 10, 'output_tokens': 5}}]
+    monkeypatch.setattr(coding, '_execute', execute)
+    result = coding.implement_change('c'*32, {'coding_request': ''},
+                                    agent_id='internships_engineer', auto_integrate=True)
+    assert result['integrated'] and result['commit'] == git('rev-parse', 'HEAD')
+    assert (root/'internships_project/city_sample.py').read_text() == 'value = 2\n'
 
 
 def test_coding_uses_approved_revision_despite_new_commits_and_dirty_main(repo,monkeypatch):
@@ -194,6 +220,12 @@ def test_coding_http_auth_payload_and_manager_preserve_user_request(store):
     headers={'x-user':'alice','X-MarketDesk-City':'1'}
     request='Ajoute un filtre aux stages affichés'
     with TestClient(app) as client:
+        assert client.post('/city/api/develop/city_ui_engineer', json={}).status_code == 401
+        assert client.post('/city/api/develop/city_ui_engineer', headers={'x-user':'alice'}, json={}).status_code == 403
+        assert client.post('/city/api/develop/unknown', headers=headers, json={}).status_code == 404
+        autonomous = client.post('/city/api/develop/city_ui_engineer', headers=headers, json={})
+        assert autonomous.status_code == 201
+        assert store.cancel_queued('alice', autonomous.json()['task']['id'])
         assert client.post('/city/api/jules/change',json={'request':request}).status_code==401
         assert client.post('/city/api/jules/change',headers={'x-user':'alice'},json={'request':request}).status_code==403
         assert client.post('/city/api/jules/change',headers=headers,json={'request':request,'shell':'test'}).status_code==400

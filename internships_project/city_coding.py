@@ -5,11 +5,13 @@ import difflib
 import json
 import os
 from pathlib import Path
+from queue import Empty, Queue
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 
 from .marketdesk_city import CityError
 from .city_specialists import VERSION, git, repo_root, approved_base, branch_context
@@ -43,6 +45,48 @@ def require_chatgpt(binary: str, env: dict) -> None:
         raise CityError('Impossible de vérifier la connexion Codex locale.') from exc
     if status.returncode or 'chatgpt' not in (status.stdout+status.stderr).lower():
         raise CityError('Connecte Codex avec ton abonnement ChatGPT : codex login. Aucun repli sur une clé API.')
+
+
+def codex_usage_percent(binary: str, env: dict) -> float:
+    """Read shared subscription windows; pause automated work if unavailable."""
+    try:
+        process = subprocess.Popen([binary, 'app-server', '--listen', 'stdio://'],
+                                   env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL, text=True, encoding='utf-8',
+                                   errors='replace', creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        output: Queue[str] = Queue()
+        threading.Thread(target=lambda: [output.put(line) for line in process.stdout], daemon=True).start()
+        for item in ({'method': 'initialize', 'id': 1, 'params': {'clientInfo': {
+                         'name': 'marketdesk_city', 'title': 'MarketDesk City', 'version': '1.0.0'}}},
+                     {'method': 'initialized'}, {'method': 'account/rateLimits/read', 'id': 2}):
+            process.stdin.write(json.dumps(item) + '\n')
+            process.stdin.flush()
+            if item.get('id') is None:
+                continue
+            while True:
+                reply = json.loads(output.get(timeout=15))
+                if reply.get('id') == item['id']:
+                    if reply.get('error'):
+                        raise CityError('Quota Codex indisponible : missions de développement suspendues.')
+                    break
+        limits = reply.get('result', {}).get('rateLimitsByLimitId') or {
+            'codex': reply.get('result', {}).get('rateLimits') or {}}
+        percentages = [window['usedPercent'] for bucket in limits.values() if isinstance(bucket, dict)
+                       for window in (bucket.get('primary'), bucket.get('secondary'))
+                       if isinstance(window, dict) and isinstance(window.get('usedPercent'), (int, float))]
+        if not percentages:
+            raise CityError('Quota Codex indisponible : missions de développement suspendues.')
+        return max(percentages)
+    except (OSError, Empty, ValueError, TypeError, BrokenPipeError) as exc:
+        raise CityError('Quota Codex indisponible : missions de développement suspendues.') from exc
+    finally:
+        if 'process' in locals():
+            if process.poll() is None:
+                process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
 
 
 def change_proposal(request: str) -> dict:
@@ -166,17 +210,26 @@ def _execute(command: list[str], directory: Path, prompt: str, env: dict) -> lis
     return events
 
 
-def implement_change(task_id: str, proposal: dict) -> dict:
+def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunter',
+                     auto_integrate: bool = False) -> dict:
     root = repo_root()
     request = str(proposal.get('coding_request') or '').strip()
-    if not re.fullmatch(r'[a-f0-9]{32}', task_id) or not 10 <= len(request) <= 3000:
+    if not re.fullmatch(r'[a-f0-9]{32}', task_id) or len(request) > 3000 or (request and len(request) < 10) or (not request and not auto_integrate):
         raise CityError('Demande de développement invalide.')
-    revision = approved_base(root,proposal)
+    if auto_integrate and not request:
+        request = ('Analyse ton périmètre dans le dépôt actuel, choisis toi-même un défaut ou une amélioration '
+                   'utile et circonscrite, puis implémente-la avec une vérification adaptée. '
+                   'Si aucun changement fiable ne se justifie, explique pourquoi sans modifier de fichier.')
+    revision = git(root, 'rev-parse', 'HEAD') if auto_integrate else approved_base(root, proposal)
+    if auto_integrate and git(root, 'status', '--porcelain', '--untracked-files=no'):
+        raise CityError('Développement suspendu : le dépôt courant contient des modifications locales suivies.')
     binary, env = codex_binary(), codex_environment()
     env['PATH'] = str(Path(sys.executable).parent)+os.pathsep+env.get('PATH','')
     require_chatgpt(binary, env)
+    if auto_integrate and codex_usage_percent(binary, env) >= 70:
+        raise CityError('Développement reporté : plus de 70 % d’une fenêtre de quota Codex est utilisé.')
     directory = root/'.city-worktrees'/task_id
-    branch = 'marketdesk/jules-'+task_id[:12]
+    branch = 'marketdesk/'+('jules' if agent_id == 'job_hunter' else agent_id.replace('_', '-'))+'-'+task_id[:12]
     if directory.exists():
         raise CityError('Un espace existe déjà pour cette mission. Consulte-le ou soumets une nouvelle demande.')
     directory.parent.mkdir(exist_ok=True)
@@ -186,13 +239,20 @@ def implement_change(task_id: str, proposal: dict) -> dict:
     schema.write_text(json.dumps({'type':'object','additionalProperties':False,
         'properties':{name:{'type':'string'} for name in ('summary','tests','limitations')},
         'required':['summary','tests','limitations']}),encoding='utf-8')
-    command = [binary,'--sandbox','workspace-write','exec','--approve-for-me',
+    command = [binary,'--sandbox','workspace-write','--model','gpt-6.1-sol',
+               '-c','model_reasoning_effort="medium"','exec','--approve-for-me',
                '--ignore-user-config','--ephemeral','--disable','apps','--disable','plugins',
                '-C',str(directory),'-c','web_search="disabled"',
                '-c','default_permissions=":workspace"','-c','forced_login_method="chatgpt"',
                '-c','sandbox_workspace_write.network_access=false','--json',
                '--output-schema',str(schema),'--output-last-message',str(report),'-']
-    prompt = ('Tu es Jules, développeur MarketDesk. Réalise la demande ci-dessous dans cet espace Git séparé. '
+    actor = {'job_hunter':'Jules, développeur City',
+             'city_ui_engineer':'Camille, développeuse des interfaces City et Internships',
+             'internships_engineer':'Sacha, développeur des sources Internships',
+             'quality_engineer':'Maël, responsable des tests et de la fiabilité'}.get(agent_id)
+    if not actor:
+        raise CityError('Agent de développement inconnu.')
+    prompt = ('Tu es '+actor+'. Réalise la demande ci-dessous dans cet espace Git séparé. '
               'Lis les fichiers utiles, corrige/développe réellement, ajoute les tests nécessaires et lance '
               'les vérifications ciblées disponibles. Tu peux utiliser les outils de code locaux. '
               'Préserve les applications distinctes Markets, Internships et City, les interfaces et données. '
@@ -221,6 +281,10 @@ def implement_change(task_id: str, proposal: dict) -> dict:
     added = git(directory,'ls-files','--others','--exclude-standard').splitlines()
     files = sorted(set(tracked+added))
     if not files:
+        if auto_integrate:
+            return {'title': 'Analyse sans changement', 'branch': branch, 'files': [], 'integrated': False,
+                    'text': result['summary']+'\n\n'+result['limitations'], 'codex_usage': {},
+                    'provider': 'Codex · connexion ChatGPT locale', 'model': 'gpt-6.1-sol', 'role_version': VERSION}
         raise CityError('Codex n’a produit aucun changement. '+result['limitations'][:600])
     diff = git(directory,'diff','--no-ext-diff','--no-textconv','--no-renames','HEAD','--','.')
     for name in added:
@@ -238,11 +302,69 @@ def implement_change(task_id: str, proposal: dict) -> dict:
               for item in commands][-25:]
     usage = next((event.get('usage',{}) for event in reversed(events) if event.get('type')=='turn.completed'),{})
     context = branch_context(root,revision)
-    return {'title':'Jules · développement prêt à examiner','branch':branch,**context,
+    integration = _auto_integrate(root, directory, branch, revision, files, agent_id) if auto_integrate else {}
+    return {'title':'Développement intégré' if integration else 'Jules · développement prêt à examiner',
+            'branch':branch,**context,**integration,
             'file':str(directory.relative_to(root)), 'files':files, 'diff':diff[:120_000],
             'diff_truncated':len(diff)>120_000, 'checks':checks,'codex_usage':usage,
-            'provider':'Codex · connexion ChatGPT locale','role_version':VERSION,'approval_required':False,
+            'provider':'Codex · connexion ChatGPT locale','model':'gpt-6.1-sol',
+            'role_version':VERSION,'approval_required':False,
             'text':result['summary']+'\n\nVérifications rapportées par Codex :\n'+result['tests']+
                    '\n\nLimites :\n'+result['limitations']+
-                   f'\n\n{len(files)} fichier(s) modifié(s) dans {branch}. '
-                   'Modifications locales à examiner ; aucun commit, push ou merge effectué par City.\n\n'+context['base_note']}
+                   f'\n\n{len(files)} fichier(s) modifié(s) dans {branch}. '+
+                   ('Tests serveur validés ; commit intégré au dépôt local. Aucun push ou déploiement.' if integration else
+                    'Modifications locales à examiner ; aucun commit, push ou merge effectué par City.')+'\n\n'+context['base_note']}
+
+
+def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
+                    files: list[str], agent_id: str) -> dict:
+    """Integrate only validated code onto the unchanged local HEAD."""
+    allowed = ('internships_project/', 'tests/', 'scripts/', '.github/workflows/')
+    for name in files:
+        path = directory / name
+        if (not name.startswith(allowed) or '/vendor/' in name or name.endswith(('.env', '.db', '.sqlite3'))
+                or not path.exists() or path.is_symlink() or not path.resolve().is_relative_to(directory.resolve())):
+            raise CityError('Intégration suspendue : fichier hors du code autorisé. La branche reste disponible.')
+        if path.stat().st_size > 2_000_000:
+            raise CityError('Intégration suspendue : fichier trop volumineux. La branche reste disponible.')
+    git(directory, '-c', 'core.whitespace=cr-at-eol', 'diff', '--check')
+    for name in files:
+        if name.endswith('.py'):
+            import ast
+            ast.parse((directory / name).read_text(encoding='utf-8-sig'), filename=name)
+    tests = {'job_hunter': 'tests/test_city_coding.py',
+             'city_ui_engineer': 'tests/test_city_notifications.py',
+             'internships_engineer': 'tests/test_internships.py',
+             'quality_engineer': 'tests/test_city_specialists.py'}
+    test_file = tests[agent_id]
+    script = ("import sys; sys.path[:0] = ["+repr(str(root/'.venv/Lib/site-packages'))+",'.']; "
+              "import pytest; raise SystemExit(pytest.main(["+repr(test_file)+",'-q',"+
+              repr('--basetemp='+str(directory/'.city-pytest'))+"]))")
+    try:
+        check = subprocess.run([sys.executable, '-c', script], cwd=directory, capture_output=True,
+                               text=True, encoding='utf-8', errors='replace', timeout=240)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise CityError('Tests serveur indisponibles : intégration suspendue.') from exc
+    if check.returncode:
+        raise CityError('Tests serveur en échec : intégration suspendue. Consulte la branche de travail.')
+    if any(name.startswith('internships_project/city_frontend/src/') for name in files):
+        frontend = directory/'internships_project/city_frontend'
+        npm = shutil.which('npm.cmd' if os.name == 'nt' else 'npm')
+        if not npm:
+            raise CityError('Build frontend indisponible : intégration suspendue.')
+        if not (frontend/'node_modules').exists():
+            install = subprocess.run([npm, 'ci', '--offline', '--no-audit'], cwd=frontend,
+                                     capture_output=True, timeout=180)
+            if install.returncode:
+                raise CityError('Dépendances frontend indisponibles hors ligne : intégration suspendue.')
+        build = subprocess.run([npm, 'run', 'build'], cwd=frontend, capture_output=True, timeout=180)
+        if build.returncode:
+            raise CityError('Build frontend en échec : intégration suspendue.')
+    if git(root, 'rev-parse', 'HEAD') != revision or git(root, 'status', '--porcelain', '--untracked-files=no'):
+        raise CityError('Le dépôt a changé pendant la mission : intégration suspendue. La branche reste disponible.')
+    git(directory, 'add', '--', *files)
+    git(directory, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Improve MarketDesk with '+agent_id)
+    commit = git(directory, 'rev-parse', 'HEAD')
+    git(root, 'merge', '--ff-only', branch)
+    return {'integrated': True, 'commit': commit, 'server_checks': [test_file, 'frontend build' if any(
+            name.startswith('internships_project/city_frontend/src/') for name in files) else 'Python syntax']}

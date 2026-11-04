@@ -906,6 +906,9 @@ body { overflow:hidden; }
 .game-app .pixel-agent-avatar.market_analyst .agent-sprite { background-image:url("/city/pixel-assets/characters/char_0.png"); }
 .game-app .pixel-agent-avatar.finance_tutor .agent-sprite { background-image:url("/city/pixel-assets/characters/char_1.png"); }
 .game-app .pixel-agent-avatar.job_hunter .agent-sprite { background-image:url("/city/pixel-assets/characters/char_2.png"); }
+.game-app .pixel-agent-avatar.city_ui_engineer .agent-sprite { background-image:url("/city/pixel-assets/characters/char_4.png"); filter:hue-rotate(160deg); }
+.game-app .pixel-agent-avatar.internships_engineer .agent-sprite { background-image:url("/city/pixel-assets/characters/char_2.png"); filter:hue-rotate(55deg); }
+.game-app .pixel-agent-avatar.quality_engineer .agent-sprite { background-image:url("/city/pixel-assets/characters/char_0.png"); filter:hue-rotate(290deg); }
 .game-app .pixel-agent-avatar.networker .agent-sprite { background-image:url("/city/pixel-assets/characters/char_3.png"); }
 .game-app .pixel-agent-avatar.outreach_agent .agent-sprite { background-image:url("/city/pixel-assets/characters/char_4.png"); }
 .game-app .pixel-agent-avatar.developer .agent-sprite { background-image:url("/city/pixel-assets/characters/char_5.png"); }

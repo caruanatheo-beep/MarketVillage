@@ -28,7 +28,7 @@ def test_roles_reject_legacy_and_cross_role_tools(store, agent, legacy):
 def test_registry_tools_and_prompts():
     from pydantic_ai.models.test import TestModel
     from internships_project.city_agents import build_agent, PROMPTS
-    assert len(AGENT_BY_ID) == 9
+    assert len(AGENT_BY_ID) == 12
     for agent in specialists.SPECIALISTS:
         tools = build_agent(agent, TestModel())._function_toolset.tools
         assert 'execute_specialist_operation' in tools
@@ -58,10 +58,14 @@ def test_scheduler_once_per_day_and_week_and_disabled_accounts(store):
     with store.db() as db:
         db.execute("UPDATE city_tasks SET status='completed'")
     assert store.enqueue_specialist_schedules(moment) == 0
-    # Thursday starts Nova's second weekly slot, alongside two daily missions.
+    # Thursday starts Nova's second weekly slot and two development runs per engineer.
     thursday = datetime(2026, 11, 5, 9, tzinfo=timezone.utc)
-    assert store.enqueue_specialist_schedules(thursday) == 4
+    assert store.enqueue_specialist_schedules(thursday) == 12
     assert store.enqueue_specialist_schedules(thursday) == 0
+    with store.db() as db:
+        development = db.execute("SELECT agent_id,COUNT(*) FROM city_tasks WHERE json_extract(parameters_json,'$.operation')='develop' GROUP BY agent_id").fetchall()
+    assert {agent: count for agent, count in development} == {
+        'job_hunter': 2, 'city_ui_engineer': 2, 'internships_engineer': 2, 'quality_engineer': 2}
     store.ensure_agents('bob')
     settings = store.get_settings('bob')
     settings['auto_tasks'] = False
@@ -73,16 +77,20 @@ def test_one_manager_digest_after_scheduled_work(store):
     from concurrent.futures import ThreadPoolExecutor
     store.ensure_agents('alice')
     store.network_schedule('alice', False)
-    moment = datetime.now(timezone.utc).replace(hour=9, minute=0)
+    from zoneinfo import ZoneInfo
+    moment = datetime.now(ZoneInfo('Europe/Paris')).replace(hour=9, minute=0).astimezone(timezone.utc)
     store.enqueue_specialist_schedules(moment)
     assert store.enqueue_daily_digest(moment) == 0
 
 
     with store.db() as db:
-        rows = db.execute("SELECT id,agent_id FROM city_tasks WHERE agent_id IN ('market_analyst','internship_scout','job_hunter')").fetchall()
-        db.execute("UPDATE city_tasks SET status='running' WHERE agent_id IN ('market_analyst','internship_scout','job_hunter')")
+        rows = db.execute("SELECT id,agent_id,parameters_json FROM city_tasks WHERE agent_id IN ('market_analyst','internship_scout','job_hunter') OR json_extract(parameters_json,'$.operation')='develop'").fetchall()
+        db.execute("UPDATE city_tasks SET status='running' WHERE agent_id IN ('market_analyst','internship_scout','job_hunter') OR json_extract(parameters_json,'$.operation')='develop'")
     for row in rows:
-        result = ({'title': 'Brief de marché', 'text': 'Marchés vérifiés : 24 séries.'}
+        result = ({'title': 'Code amélioré', 'text': 'Navigation simplifiée.', 'integrated': True,
+                   'commit': 'a'*40, 'files': ['internships_project/city_routes.py']}
+                  if json.loads(row['parameters_json'] or '{}').get('operation') == 'develop' else
+                  {'title': 'Brief de marché', 'text': 'Marchés vérifiés : 24 séries.'}
                   if row['agent_id'] == 'market_analyst' else
                   {'text': 'Deux nouveaux stages détectés.', 'offers': [{'title': 'Sales', 'company': 'Bank', 'url': 'https://example.test/job'}]}
                   if row['agent_id'] == 'internship_scout' else
@@ -96,20 +104,23 @@ def test_one_manager_digest_after_scheduled_work(store):
     assert digests == 1 and len(messages) == 1
     assert 'Marchés vérifiés : 24 séries.' in messages[0][0]
     assert 'https://example.test/job' in messages[0][0]
-    assert 'Proposition prête' in messages[0][0]
+    assert 'Développement du jour' in messages[0][0] and 'Navigation simplifiée.' in messages[0][0]
     assert store.enqueue_daily_digest(moment) == 0
 
 
 def test_manager_digest_reports_failed_collection(store):
     store.ensure_agents('alice')
     store.network_schedule('alice', False)
-    moment = datetime.now(timezone.utc).replace(hour=9, minute=0)
+    from zoneinfo import ZoneInfo
+    moment = datetime.now(ZoneInfo('Europe/Paris')).replace(hour=9, minute=0).astimezone(timezone.utc)
     store.enqueue_specialist_schedules(moment)
     with store.db() as db:
         db.execute("UPDATE city_tasks SET status='completed',finished_at=? "
                    "WHERE agent_id IN ('market_analyst','job_hunter')", (datetime.now(timezone.utc).isoformat(),))
         db.execute("UPDATE city_tasks SET status='failed',finished_at=?,error='Source unavailable' "
                    "WHERE agent_id='internship_scout'", (datetime.now(timezone.utc).isoformat(),))
+        db.execute("UPDATE city_tasks SET status='failed',finished_at=?,error='Quota Codex atteint' "
+                   "WHERE json_extract(parameters_json,'$.operation')='develop'", (datetime.now(timezone.utc).isoformat(),))
     assert store.enqueue_daily_digest(moment) == 1
     assert 'Source unavailable' in store.chat_history('alice', 'desk_manager')[0]['content']
 
@@ -131,7 +142,7 @@ def test_old_weekly_nova_review_counts_as_first_slot(store):
         db.execute('INSERT INTO city_specialist_schedule VALUES(?,?,?,?)',('alice','innovation_review','2026-W45','old-nova'))
     assert store.enqueue_specialist_schedules(datetime(2026,11,2,9,tzinfo=timezone.utc))==3
     assert not any(t['agent_id']=='innovation_lab' for t in store.snapshot('alice')['tasks'])
-    assert store.enqueue_specialist_schedules(datetime(2026,11,5,9,tzinfo=timezone.utc))==1
+    assert store.enqueue_specialist_schedules(datetime(2026,11,5,9,tzinfo=timezone.utc))==9
 
 
 def test_offline_periods_are_grouped_persisted_and_never_queued_twice(store):
@@ -143,10 +154,11 @@ def test_offline_periods_are_grouped_persisted_and_never_queued_twice(store):
         db.execute("UPDATE city_tasks SET status='completed'")
     restart=datetime(2026,11,16,9,tzinfo=timezone.utc)
     with ThreadPoolExecutor(max_workers=3) as pool:
-        assert sum(pool.map(lambda _:store.enqueue_specialist_schedules(restart),range(3)))==4
+        assert sum(pool.map(lambda _:store.enqueue_specialist_schedules(restart),range(3)))==12
     with store.db() as db:
         tasks=db.execute("SELECT agent_id,parameters_json FROM city_tasks WHERE status='queued'").fetchall()
-    details={row[0]:json.loads(row[1]) for row in tasks}
+    details={row[0]:json.loads(row[1]) for row in tasks
+             if json.loads(row[1]).get('operation') != 'develop'}
     assert details['job_hunter']['catch_up']['periods']==14
     assert details['market_analyst']['catch_up']['periods']==14
     assert details['market_analyst']['daily_digest'] is True
@@ -154,6 +166,8 @@ def test_offline_periods_are_grouped_persisted_and_never_queued_twice(store):
     assert details['innovation_lab']['catch_up']['periods']==4
     assert details['innovation_lab']['catch_up']['from']=='2026-11-05'
     assert CityStore(store.path).enqueue_specialist_schedules(restart)==0
+    with store.db() as db:
+        db.execute("UPDATE city_tasks SET status='cancelled' WHERE json_extract(parameters_json,'$.operation')='develop'")
     task=store.claim_next()
     store.finish(task['id'],result={'title':'Current result','text':'Current sources'})
     completed=next(t for t in store.snapshot('alice')['tasks'] if t['id']==task['id'])
@@ -165,7 +179,7 @@ def test_offline_periods_are_grouped_persisted_and_never_queued_twice(store):
 def test_catchup_waits_for_active_task_and_respects_pause(store):
     store.ensure_agents('alice')
     store.enqueue_specialist_schedules(datetime(2026,11,2,9,tzinfo=timezone.utc))
-    assert store.enqueue_specialist_schedules(datetime(2026,11,16,9,tzinfo=timezone.utc))==0
+    assert store.enqueue_specialist_schedules(datetime(2026,11,16,9,tzinfo=timezone.utc))==8
     with store.db() as db:
         db.execute("UPDATE city_tasks SET status='completed'")
     store.save_settings('alice',{'auto_tasks':False})

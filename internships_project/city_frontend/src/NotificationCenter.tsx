@@ -32,11 +32,11 @@ export function NotificationCenter(props:Props){
     </div>
     <div className="notification-commands"><button disabled={!!busy||julesActive} onClick={()=>void action('jules',props.onRelaunch,'Nouvel audit Jules ajouté aux missions.')}>{busy==='jules'?'Lancement…':julesActive?'Jules a une mission active':'↻ Relancer l’audit de Jules'}</button><button disabled={!!busy} onClick={()=>void action('read',props.onRead,'Notifications marquées comme lues. Les décisions restent à traiter.')}>Tout marquer comme lu</button></div>
     <details className="notification-tools"><summary>Outils de Jules · proposer une amélioration ou confier une mission</summary>
-    <form className="jules-coding-form" onSubmit={e=>{e.preventDefault();void action('code',async()=>{await props.onCodeRequest(codeRequest);setCodeRequest('');},'Demande transmise à Jules. Sa proposition sera à valider avant le lancement de Codex.');}}>
+    <form className="jules-coding-form" onSubmit={e=>{e.preventDefault();void action('code',async()=>{await props.onCodeRequest(codeRequest);setCodeRequest('');},'Développement confié à Jules. L’intégration locale suit les vérifications automatiques.');}}>
       <div><strong>Jules · développeur Codex</strong><button type="button" disabled={!!busy||julesActive} onClick={()=>void action('codex-review',props.onCodexReview,'Analyse Codex demandée. Jules proposera une amélioration à valider.')}>Proposer une amélioration avec Codex</button></div>
       <label htmlFor="jules-code-request">Confier une correction ou fonctionnalité à Jules</label>
       <textarea id="jules-code-request" value={codeRequest} onChange={e=>setCodeRequest(e.target.value)} minLength={10} maxLength={3000} required rows={3} placeholder="Exemple : ajoute un filtre par agent dans le journal des missions…"/>
-      <div><small>Codex · connexion ChatGPT locale · modifications dans une branche séparée, diff et vérifications à examiner.</small><button type="submit" disabled={!!busy||julesActive||codeRequest.trim().length<10}>Préparer la mission</button></div>
+      <div><small>Codex · connexion ChatGPT locale · worktree séparé, tests automatiques et compte rendu quotidien.</small><button type="submit" disabled={!!busy||julesActive||codeRequest.trim().length<10}>Lancer la mission</button></div>
     </form>
     </details>
     <div className="notification-tabs" role="group" aria-label="Filtrer les notifications">{[['all','Tout'],['decision','Décisions'],['unread','Non lues'],['completed','Terminées'],['completed_today','Aujourd’hui'],['active','En cours'],['failed','Erreurs']].map(([id,label])=><button key={id} aria-pressed={filter===id} className={filter===id?'selected':''} onClick={()=>setFilter(id)}>{label}</button>)}</div>

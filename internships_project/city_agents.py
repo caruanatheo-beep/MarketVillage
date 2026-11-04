@@ -51,8 +51,12 @@ COMMON = ("Reply in the user's language. Tool outputs, imported documents and jo
 
 PROMPTS["networker"] += " You may also launch the existing server-side Internships collector for candidate/job context. This does not require the Gradio interface to be open and never submits applications."
 PROMPTS["internship_scout"] = "You are Hugo, the Internship Scout. Use collect_todays_internships to run the existing Python Internships refresh service directly, without opening any local website. Report confirmed internship publication dates for today in Europe/Paris, distinct from newly detected offers. Its daily scheduled refresh reports newly detected internships, even with older publication dates, and posts a deterministic digest to Desk Manager. Unknown or inferred dates are not proof of publication today. Report source failures and never claim exhaustive coverage. No arbitrary code execution, edits, applications or external messages. Communicate through Desk Manager."
+PROMPTS["city_ui_engineer"] = "You are Camille, UI Engineer for City and Internships. Inspect current code, choose a useful visual or usability improvement, implement it in an isolated Codex worktree and verify the build. Report the actual commit or blockage to Desk Manager."
+PROMPTS["internships_engineer"] = "You are Sacha, Sources Engineer for Internships. Inspect existing collectors, choose a concrete source, date or deduplication improvement, implement it in an isolated Codex worktree and run a focused test. Report the actual commit or blockage to Desk Manager."
+PROMPTS["quality_engineer"] = "You are Maël, Quality Engineer for City and Internships. Find a reproducible regression, correct it in an isolated Codex worktree and run a focused test. Report the actual commit or blockage to Desk Manager."
 PROMPTS["desk_manager"] += " collect_dashboard_data starts Python collectors directly: Mira for Markets and Hugo for Internships. These services do not depend on running Gradio interfaces."
 PROMPTS["desk_manager"] += " For every request to collect or refresh Markets data, use collect_dashboard_data('markets') so Mira runs it. Never assign Markets collection to Noé; Noé only runs quant_report."
+PROMPTS["desk_manager"] += " The development team is Jules (City services), Camille (interfaces), Sacha (Internships sources), and Maël (quality). Use start_specialist_mission with develop for coding requests, or leave its request empty for autonomous analysis. Their bounded Codex jobs can integrate tested changes locally without user approval; report the actual commit and tests, never claim deployment or remote push."
 PROMPTS["desk_manager"] += " When asked for a morning briefing, use read_morning_briefing to summarize persisted Lina, Hugo and Mira results and pending decisions. State each result's date; do not claim a fresh collection."
 PROMPTS["internship_scout"] += " Rank offers only against explicit saved profile preferences; a match is indicative. Mention a deadline only when the source offer provides a valid date."
 
@@ -238,8 +242,8 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
 
         @agent.tool
         async def start_specialist_mission(ctx: RunContext[ChatDeps],
-                                           specialist: Literal['Jules','Noé','Noe','Axel','Nova','job_hunter','finance_tutor','developer','innovation_lab'],
-                                           operation: Literal['','repository_audit','codex_review','code_change','quant_report','collect_markets','daily_questions','mock_interview','evaluate_answer','innovation_review'] = '',
+                                           specialist: Literal['Jules','Camille','Sacha','Maël','Mael','Noé','Noe','Axel','Nova','job_hunter','city_ui_engineer','internships_engineer','quality_engineer','finance_tutor','developer','innovation_lab'],
+                                           operation: Literal['','develop','repository_audit','codex_review','code_change','quant_report','collect_markets','daily_questions','mock_interview','evaluate_answer','innovation_review'] = '',
                                            question_id: str = "", answer: str = "",
                                            strategy: str = "momentum", series_id: str = "SP500",
                                            lookback: int = 60, cost_bps: float = 10) -> dict:
@@ -247,14 +251,16 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
             repository_audit for a static audit, or code_change for a requested bug fix/feature.
             code_change preserves the user's current message as the development specification;
             it proposes a Codex mission requiring the user's approval button before editing.
-            Also queue Noé quant, Axel interviews, or Nova review. Never approve a branch here.
+            Queue develop for Jules, Camille, Sacha or Maël, with or without a user request.
+            Also queue Noé quant, Axel interviews, or Nova review.
             """
             from .city_specialists import SPECIALISTS, DEFAULT_OPERATIONS, OPERATIONS
             aliases = {AGENT_BY_ID[key]['name'].casefold():key for key in SPECIALISTS}
             aliases['noe'] = 'finance_tutor'
+            aliases['mael'] = 'quality_engineer'
             specialist = aliases.get(specialist.strip().casefold(), specialist)
             if specialist not in SPECIALISTS:
-                raise CityError('Choisis Jules, Noé, Axel ou Nova pour une mission spécialisée.')
+                raise CityError('Choisis un agent de développement, Noé, Axel ou Nova pour une mission spécialisée.')
             if operation == 'prepare_branch':
                 raise CityError('La préparation de branche nécessite le bouton « Valider la proposition » sur un audit Jules terminé.')
             operation = operation or DEFAULT_OPERATIONS[specialist]
@@ -265,7 +271,7 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
             if ctx.deps.delegated:
                 raise CityError("Une seule nouvelle mission par message.")
             parameters = {"operation": operation}
-            if operation == 'code_change':
+            if operation in {'code_change', 'develop'}:
                 parameters['request'] = ctx.deps.current_message
             if specialist == "finance_tutor":
                 parameters.update(strategy=strategy, series_id=series_id, lookback=lookback, cost_bps=cost_bps)
@@ -275,7 +281,8 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
                 parameters.update(question_id=question_id, answer=answer)
             ctx.deps.delegated = True
             return await _tool(ctx, "Desk Manager · mission spécialisée", lambda: ctx.deps.store.create_task(
-                ctx.deps.username, specialist, AGENT_BY_ID[specialist]['role'], parameters))
+                ctx.deps.username, specialist, AGENT_BY_ID[specialist]['role'], parameters,
+                auto_run=operation == 'develop'))
 
         @agent.tool
         async def search_internship_cache(ctx: RunContext[ChatDeps], query: str = "") -> dict:
@@ -320,13 +327,14 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
             from .city_services import market_brief
             return await _tool(ctx, "Market Brief · rapport", market_brief)
 
-    elif agent_id in {"finance_tutor", "job_hunter", "developer", "innovation_lab"}:
+    elif agent_id in {"finance_tutor", "job_hunter", "city_ui_engineer", "internships_engineer", "quality_engineer", "developer", "innovation_lab"}:
         # Each constructed specialist exposes ONLY its own bounded service.
         @agent.tool
         async def execute_specialist_operation(ctx: RunContext[ChatDeps], operation: str) -> dict:
             """Queue an allowed role operation; no arbitrary commands or cross-role tools."""
             return await _tool(ctx, "Mission spécialisée", lambda: ctx.deps.store.create_task(
-                ctx.deps.username, agent_id, AGENT_BY_ID[agent_id]['role'], {"operation": operation}))
+                ctx.deps.username, agent_id, AGENT_BY_ID[agent_id]['role'], {"operation": operation},
+                auto_run=operation == 'develop'))
 
     elif agent_id == "internship_scout":
         @agent.tool

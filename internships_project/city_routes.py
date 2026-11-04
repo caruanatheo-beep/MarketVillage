@@ -167,10 +167,31 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
             if set(payload) != {'request'} or not isinstance(payload['request'],str):
                 raise CityError('Fournis uniquement la consigne de développement.')
             task=store.create_task(username,'job_hunter','Développement · '+payload['request'].strip()[:200],
-                                   {'operation':'code_change','request':payload['request']})
+                                   {'operation':'develop','request':payload['request']}, auto_run=True)
             return JSONResponse({'task':task},status_code=201)
         except (ValueError,TypeError) as exc:
             return JSONResponse({'detail':str(exc)},status_code=400)
+
+    @server.post('/city/api/develop/{agent_id}')
+    async def request_autonomous_development(agent_id: str, request: Request):
+        username = owner(request)
+        if not username:
+            return denied()
+        if not safe_post(request):
+            return JSONResponse({'detail':'Requête refusée.'}, status_code=403)
+        from .city_specialists import CODING_AGENTS
+        if agent_id not in CODING_AGENTS:
+            return JSONResponse({'detail':'Agent de développement inconnu.'}, status_code=404)
+        try:
+            payload = await bounded_json(request, 4000)
+            if set(payload) - {'request'} or not isinstance(payload.get('request', ''), str):
+                raise CityError('Fournis uniquement une consigne facultative.')
+            task = store.create_task(username, agent_id,
+                                     'Développement autonome · '+AGENT_BY_ID[agent_id]['name'],
+                                     {'operation':'develop', 'request':payload.get('request', '')}, auto_run=True)
+            return JSONResponse({'task':task}, status_code=201)
+        except (ValueError, TypeError) as exc:
+            return JSONResponse({'detail':str(exc)}, status_code=400)
 
     @server.post('/city/api/agents/{agent_id}/run')
     async def run_specialist(agent_id: str, request: Request):
@@ -187,7 +208,8 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
             if payload:
                 raise CityError('Cette action lance uniquement la mission principale de cet agent.')
             task=store.create_task(username,agent_id,'Nouvelle mission · '+AGENT_BY_ID[agent_id]['name'],
-                                   {'operation':DEFAULT_OPERATIONS[agent_id]})
+                                   {'operation':DEFAULT_OPERATIONS[agent_id]},
+                                   auto_run=DEFAULT_OPERATIONS[agent_id]=='develop')
             return JSONResponse({'task':task},status_code=201)
         except (ValueError,TypeError) as exc:
             return JSONResponse({'detail':str(exc)},status_code=400)

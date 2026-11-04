@@ -42,6 +42,12 @@ AGENTS = (
      "description": "Veille open source le lundi et le jeudi, avec deux propositions documentées soumises au Desk Manager.", "available": True},
     {"id": "internship_scout", "name": "Hugo", "role": "Internship Scout", "area": "Internships",
      "description": "Actualise Internships chaque jour et transmet les nouveaux stages détectés au Desk Manager. Recherche aussi sur demande.", "available": True},
+    {"id": "city_ui_engineer", "name": "Camille", "role": "UI Engineer", "area": "Engineering",
+     "description": "Développe les interfaces City et Internships dans un worktree Codex isolé.", "available": True},
+    {"id": "internships_engineer", "name": "Sacha", "role": "Sources Engineer", "area": "Engineering",
+     "description": "Améliore les sources, dates et doublons d'Internships dans un worktree Codex isolé.", "available": True},
+    {"id": "quality_engineer", "name": "Maël", "role": "Quality Engineer", "area": "Engineering",
+     "description": "Corrige les régressions et fiabilise les tests dans un worktree Codex isolé.", "available": True},
 )
 AGENT_BY_ID = {agent["id"]: agent for agent in AGENTS}
 TASK_REFRESH = "refresh_opportunities"
@@ -318,13 +324,17 @@ class CityStore:
 
     def enqueue_specialist_schedules(self, now: datetime | None = None) -> int:
         from zoneinfo import ZoneInfo
-        from .city_specialists import VERSION
+        from .city_specialists import VERSION, CODING_AGENTS
         moment = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Paris"))
         day, week = moment.date().isoformat(), moment.strftime("%G-W%V")
         schedules = [("market_analyst", "collect_markets", day, "Brief quotidien des marchés"),
                      ("job_hunter", "repository_audit", day, "Revue quotidienne du code City"),
                      ("internship_scout", "refresh_internships", day, "Nouveaux stages détectés aujourd’hui"),
                      ("innovation_lab", "innovation_review", week + ("-Mon" if moment.weekday() < 3 else "-Thu"), "Deux innovations open source")]
+        if date(2026, 11, 4) <= moment.date() < date(2026, 12, 4):
+            schedules.extend((agent_id, f'develop:{agent_id}:{slot}', day,
+                              f'Développement autonome {slot}/2 · {AGENT_BY_ID[agent_id]["name"]}')
+                             for agent_id in CODING_AGENTS for slot in (1, 2))
         count = 0
         with self.db() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -345,7 +355,7 @@ class CityStore:
                 if saved and not json.loads(saved[0]).get('auto_tasks', True):
                     continue
                 for agent_id, operation, period, title in schedules:
-                    if db.execute("SELECT 1 FROM city_tasks WHERE username=? AND agent_id=? AND status IN ('queued','running','waiting_approval')", (user[0], agent_id)).fetchone():
+                    if not operation.startswith('develop:') and db.execute("SELECT 1 FROM city_tasks WHERE username=? AND agent_id=? AND status IN ('queued','running','waiting_approval')", (user[0], agent_id)).fetchone():
                         continue
                     task_id = uuid.uuid4().hex
                     known = [row[0] for row in db.execute("SELECT period FROM city_specialist_schedule WHERE username=? AND operation=?", (user[0],operation))]
@@ -354,7 +364,8 @@ class CityStore:
                         continue
                     db.executemany("INSERT INTO city_specialist_schedule VALUES(?,?,?,?)",
                                    [(user[0], operation, missed, task_id) for missed,_ in due])
-                    payload = dict(operation=operation, period=period, role_version=VERSION)
+                    payload = dict(operation='develop' if operation.startswith('develop:') else operation,
+                                   period=period, role_version=VERSION)
                     task_title = title
                     if len(due) > 1:
                         payload['catch_up'] = {'from':due[0][1].isoformat(), 'to':day, 'periods':len(due)}
@@ -543,6 +554,7 @@ class CityStore:
     def morning_briefing(self, username: str, now: datetime | None = None) -> str:
         """Summarize persisted work for one account; no model call or new collection."""
         from zoneinfo import ZoneInfo
+        from .city_specialists import CODING_AGENTS
         moment = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Paris"))
         names = {"market_analyst": "Mira", "internship_scout": "Hugo", "networker": "Lina", "job_hunter": "Jules"}
         day_start = moment.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
@@ -569,6 +581,11 @@ class CityStore:
             failures = db.execute(
                 "SELECT COUNT(*) FROM city_tasks WHERE username=? AND status='failed' AND finished_at>=?",
                 (username, (moment - timedelta(days=7)).astimezone(timezone.utc).isoformat())).fetchone()[0]
+            marks = ','.join('?' for _ in CODING_AGENTS)
+            development = db.execute(
+                f"SELECT agent_id,status,result_json,error FROM city_tasks WHERE username=? AND agent_id IN ({marks}) "
+                "AND json_extract(parameters_json,'$.operation')='develop' AND finished_at>=? "
+                "ORDER BY finished_at LIMIT 16", (username, *CODING_AGENTS, day_start)).fetchall()
         lines = [f"### Briefing du {moment:%d/%m/%Y} · Desk Manager", "", "**Derniers résultats enregistrés**"]
         for agent, label in names.items():
             row = latest[agent]
@@ -599,6 +616,20 @@ class CityStore:
                     lines.append("**Contacts ajoutés**")
                     lines.extend(f"- {contact['name']} · {contact['role']} · {contact['company']}"
                                  for contact in contacts[:10])
+        lines.extend(["", "**Développement du jour**"])
+        integrated = 0
+        for row in development:
+            result = json.loads(row['result_json'] or '{}')
+            if result.get('integrated'):
+                integrated += 1
+                name = AGENT_BY_ID[row['agent_id']]['name']
+                summary = str(result.get('text') or '').splitlines()[0][:180]
+                lines.append(f"- {name} · {result['commit'][:12]} : {summary} ({len(result.get('files') or [])} fichier(s))")
+        if not integrated:
+            lines.append('- Aucun changement intégré aujourd’hui.')
+        blocked = [row for row in development if row['status'] == 'failed']
+        if blocked:
+            lines.append(f"- {len(blocked)} mission(s) non intégrée(s) : détails dans Notifications.")
         decisions = [row["description"] for row in [*proposals, *waiting]]
         lines.extend(["", "**À décider**"])
         lines.extend(f"- {item[:180]}" for item in decisions[:5])
@@ -637,6 +668,13 @@ class CityStore:
                 if any(states.get(operation) not in FINAL for operation in
                        ("collect_markets", "refresh_internships", "repository_audit")):
                     continue
+                if date(2026, 11, 4) <= moment.date() < date(2026, 12, 4):
+                    development = db.execute("SELECT t.status FROM city_specialist_schedule s "
+                                             "JOIN city_tasks t ON t.id=s.task_id AND t.username=s.username "
+                                             "WHERE s.username=? AND s.period=? AND s.operation LIKE 'develop:%'",
+                                             (username, day)).fetchall()
+                    if len(development) < 8 or any(row[0] not in FINAL for row in development):
+                        continue
                 lina = db.execute("SELECT enabled,last_day,last_task_id FROM city_network_schedule WHERE username=?",
                                   (username,)).fetchone()
                 if lina and lina['enabled']:
@@ -1164,7 +1202,7 @@ class CityStore:
                               (_utc(),)).fetchall()
             task = None
             for row in rows:
-                from .city_specialists import SPECIALISTS, VERSION, validate_mission
+                from .city_specialists import SPECIALISTS, CODING_AGENTS, VERSION, validate_mission
                 try:
                     params = json.loads(row['parameters_json'] or '{}')
                     if row['agent_id'] in SPECIALISTS and params.get('role_version') != VERSION:
@@ -1196,6 +1234,12 @@ class CityStore:
                 concurrency = json.loads(saved[0]).get("max_concurrent_tasks", 2) if saved else 2
                 if running >= concurrency:
                     continue
+                if row['agent_id'] in CODING_AGENTS:
+                    marks = ','.join('?' for _ in CODING_AGENTS)
+                    active_code = db.execute(f"SELECT 1 FROM city_tasks WHERE status='running' AND agent_id IN ({marks}) LIMIT 1",
+                                             CODING_AGENTS).fetchone()
+                    if active_code:
+                        continue
                 task = dict(row)
                 break
             if task is None:
@@ -1739,6 +1783,13 @@ class CityWorker:
                     source = db.execute("SELECT result_json FROM city_tasks WHERE id=? AND username=? AND status='completed'",
                                         (parameters.get('source_task_id'), task['username'])).fetchone()
                 result = prepare_branch(task['id'], json.loads(source[0]) if source else {}, bool(approval and approval[0]))
+                self.store.finish(task['id'], result=result)
+                return True
+            from .city_specialists import CODING_AGENTS
+            if task['agent_id'] in CODING_AGENTS and parameters.get('operation') == 'develop':
+                from .city_coding import implement_change
+                result = implement_change(task['id'], {'coding_request': parameters.get('request', '')},
+                                          agent_id=task['agent_id'], auto_integrate=True)
                 self.store.finish(task['id'], result=result)
                 return True
             if task["agent_id"] == "outreach_agent" and task.get("workflow_id"):

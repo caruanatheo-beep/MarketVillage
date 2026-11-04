@@ -15,7 +15,10 @@ sont accessibles dans Réglages. Le chat du Manager et les contacts conservent l
 
 | Agent | Opérations serveur | Récurrence (Europe/Paris) | Livrable |
 |---|---|---|---|
-| Jules | `repository_audit`, `codex_review`, `code_change`, préparation de branche après validation humaine | Audit quotidien ; analyse Codex et développement sur demande | Audit AST ou mission Codex, diff, fichiers modifiés et vérifications dans un worktree isolé |
+| Jules | `repository_audit`, `codex_review`, `develop`, préparation de branche historique | Audit quotidien et deux missions de développement autonomes par jour pendant un mois | Correction City, commit local et vérifications dans un worktree isolé |
+| Camille | `develop` | Deux missions autonomes par jour pendant un mois | Amélioration des interfaces City ou Internships, build et commit local |
+| Sacha | `develop` | Deux missions autonomes par jour pendant un mois | Amélioration des sources, dates ou doublons Internships, test et commit local |
+| Maël | `develop` | Deux missions autonomes par jour pendant un mois | Correction de régression ou fiabilisation, test et commit local |
 | Noé | `quant_report` | Sur demande uniquement | Courbe de capital, rendement net, Sharpe à taux sans risque nul, volatilité, drawdown, hypothèses et limites |
 | Axel | `daily_questions`, `mock_interview`, `evaluate_answer` | Sur demande uniquement | Questions Sales/S&T/Global Markets, HireVue, grille de couverture indicative et historique des réponses |
 | Nova | `innovation_review` | Deux fois par semaine : lundi et jeudi | Deux projets publics GitHub non déjà proposés par revue, licence, spécification de prototype isolé, complexité et coûts à mesurer |
@@ -24,6 +27,23 @@ sont accessibles dans Réglages. Le chat du Manager et les contacts conservent l
 | Mira | `collect_markets` via le service Python Markets | Chaque jour + sur demande | Brief de marché et sentiment sourcé dans la synthèse quotidienne |
 
 Iris et le Desk Manager conservent leurs autres responsabilités.
+
+Du 4 novembre au 3 décembre 2026 inclus, chaque agent de développement reçoit deux
+missions quotidiennes. Le choix du changement concret lui appartient. Les missions
+s'exécutent une par une, dans des worktrees Git distincts, avec Codex connecté à
+l'abonnement ChatGPT et `gpt-6.1-sol` en raisonnement moyen. Aucun appel API payant
+n'est utilisé pour ce développement. Avant chaque lancement, City lit l'utilisation
+des fenêtres de quota Codex et reporte la mission si l'une atteint 70 % ou si la
+mesure est indisponible. Ce seuil protège une réserve d'usage ; il ne représente
+pas un pourcentage garanti de consommation quotidienne.
+
+City contrôle le périmètre des fichiers, la syntaxe Python, un test ciblé et le build
+frontend lorsque nécessaire. Si ces contrôles passent et que le dépôt local n'a pas
+changé entre-temps, City crée un commit et l'intègre localement sans validation humaine.
+Il n'y a ni push GitHub ni déploiement automatique. Une mission qui échoue conserve
+son worktree pour examen. Le bilan quotidien du Desk Manager liste les commits
+intégrés et les missions non intégrées. Les anciennes propositions Jules qui attendent
+une validation suivent leur circuit historique.
 
 Le Desk Manager propose un bouton « Briefing du matin » dans son chat et un outil
 de lecture sur demande. Il rassemble les derniers résultats enregistrés de Lina,

@@ -18,17 +18,24 @@ from datetime import datetime, timezone
 from .marketdesk_city import CityError
 
 VERSION = 2
-SPECIALISTS = {"job_hunter", "finance_tutor", "developer", "innovation_lab"}
+CODING_AGENTS = ("job_hunter", "city_ui_engineer", "internships_engineer", "quality_engineer")
+SPECIALISTS = {"job_hunter", "finance_tutor", "developer", "innovation_lab", *CODING_AGENTS}
 DEFAULT_OPERATIONS = {'job_hunter':'repository_audit','finance_tutor':'quant_report',
-                      'developer':'daily_questions','innovation_lab':'innovation_review'}
+                      'developer':'daily_questions','innovation_lab':'innovation_review',
+                      'city_ui_engineer':'develop','internships_engineer':'develop','quality_engineer':'develop'}
 OPERATIONS = {
-    "job_hunter": {"repository_audit", "codex_review", "code_change", "prepare_branch"},
+    "job_hunter": {"repository_audit", "codex_review", "code_change", "prepare_branch", "develop"},
+    "city_ui_engineer": {"develop"},
+    "internships_engineer": {"develop"},
+    "quality_engineer": {"develop"},
     "finance_tutor": {"quant_report"},
     "developer": {"daily_questions", "mock_interview", "evaluate_answer"},
     "innovation_lab": {"innovation_review"},
 }
 ROLE_NAMES = {"job_hunter": "Software Engineer", "finance_tutor": "Quant Research",
-              "developer": "Interview Coach", "innovation_lab": "Innovation Lab"}
+              "developer": "Interview Coach", "innovation_lab": "Innovation Lab",
+              "city_ui_engineer": "UI Engineer", "internships_engineer": "Sources Engineer",
+              "quality_engineer": "Quality Engineer"}
 
 
 def validate_mission(agent_id: str, parameters: dict, description: str = "") -> dict:
@@ -52,13 +59,21 @@ def validate_mission(agent_id: str, parameters: dict, description: str = "") -> 
         'finance_tutor': r'\b(quiz|entretien|interview|tutorat|hirevue)\b',
         'developer': r'\b(debug|deploy|déploiement|diagnostic|logs?|dépôt|repository)\b',
         'innovation_lab': r'\b(postuler|candidatures?|envoyer|déployer|merge)\b',
+        'city_ui_engineer': r'\b(postuler|candidatures?|envoyer|déployer|merge)\b',
+        'internships_engineer': r'\b(postuler|candidatures?|envoyer|déployer|merge)\b',
+        'quality_engineer': r'\b(postuler|candidatures?|envoyer|déployer|merge)\b',
     }
+    if operation == 'develop':
+        request = str(payload.get('request') or '').strip()
+        if agent_id not in CODING_AGENTS or len(request) > 3000 or (request and len(request) < 10):
+            raise CityError('Décris le développement souhaité en 10 à 3 000 caractères, ou laisse vide pour une analyse autonome.')
+        payload['request'] = request
     if operation == 'code_change':
         request = str(payload.get('request') or '').strip()
         if agent_id != 'job_hunter' or not 10 <= len(request) <= 3000:
             raise CityError('Décris la correction ou fonctionnalité souhaitée (10 à 3 000 caractères).')
         payload['request'] = request
-    if operation != 'code_change' and re.search(contradictions[agent_id], description, re.IGNORECASE):
+    if operation not in {'code_change', 'develop'} and re.search(contradictions[agent_id], description, re.IGNORECASE):
         raise CityError(f"Cette consigne contredit la mission exclusive {ROLE_NAMES[agent_id]}.")
     payload["role_version"] = VERSION
     return payload
@@ -355,6 +370,8 @@ def run_specialist(agent_id: str, username: str, parameters: dict) -> dict:
     if operation == 'code_change':
         from .city_coding import change_proposal
         return change_proposal(parameters['request'])
+    if operation == 'develop':
+        raise CityError('Le développement Codex doit être lancé par le worker City dans un worktree isolé.')
     if operation == "prepare_branch":
         # Only the approval-specific store method may supply these server-owned values.
         raise CityError("Utilise la validation de proposition du Desk Manager pour préparer une branche.")

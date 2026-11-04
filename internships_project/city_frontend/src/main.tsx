@@ -64,8 +64,8 @@ const LABELS: Record<string, string> = {
   idle: "Disponible", queued: "En attente", running: "Au travail", waiting_approval: "Validation requise",
   completed: "Terminée", failed: "Échec", cancelled: "Annulée",
 };
-const SPECIALIST_OPERATIONS:Record<string,string> = {job_hunter:"repository_audit",finance_tutor:"quant_report",developer:"daily_questions",innovation_lab:"innovation_review",internship_scout:"refresh_internships"};
-const INITIAL_IDS = ["desk_manager", "market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout"];
+const SPECIALIST_OPERATIONS:Record<string,string> = {job_hunter:"repository_audit",city_ui_engineer:"develop",internships_engineer:"develop",quality_engineer:"develop",finance_tutor:"quant_report",developer:"daily_questions",innovation_lab:"innovation_review",internship_scout:"refresh_internships"};
+const INITIAL_IDS = ["desk_manager", "market_analyst", "finance_tutor", "job_hunter", "city_ui_engineer", "internships_engineer", "quality_engineer", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout"];
 
 function MarkdownText({text}: {text:string}): React.ReactElement {
   const inline = (value:string) => value
@@ -728,7 +728,7 @@ function App(): React.ReactElement {
           onNotifications={openNotifications} onOpen={inspectCockpitTask}
           onChat={message=>{if(message)setChatInput(message);openAgent("desk_manager","chat");}}
           onContacts={()=>setWindowMode("contacts")} onCancel={id=>api(`/city/api/tasks/${id}/cancel`,{})}
-          onLaunch={id=>id==="internship_scout"?api('/city/api/collect/internships',{}):id==="market_analyst"?api('/city/api/collect/markets',{}):api(`/city/api/agents/${id}/run`,{})}
+          onLaunch={id=>id==="internship_scout"?api('/city/api/collect/internships',{}):id==="market_analyst"?api('/city/api/collect/markets',{}):id==="job_hunter"?api('/city/api/develop/job_hunter',{}):api(`/city/api/agents/${id}/run`,{})}
           onReview={()=>api('/city/api/jules/review',{})} onCode={request=>api('/city/api/jules/change',{request})} onRefresh={refresh}
           onSite={kind=>void openLocalSite(kind)} siteBusy={!!launchingSite} siteError={siteError}/>
 
