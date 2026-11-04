@@ -30,8 +30,9 @@ sont accessibles dans Réglages. Le chat du Manager et les contacts conservent l
 Iris et le Desk Manager conservent leurs autres responsabilités.
 
 Du 4 novembre au 3 décembre 2026 inclus, chaque agent de développement reçoit deux
-missions quotidiennes. Le choix du changement concret lui appartient. Les missions
-s'exécutent une par une, dans des worktrees Git distincts, avec Codex connecté à
+missions quotidiennes. Le choix du changement concret lui appartient. Jusqu'à quatre
+missions de développement peuvent s'exécuter ensemble, une par agent et par compte,
+dans des worktrees Git distincts, avec Codex connecté à
 l'abonnement ChatGPT et `gpt-6.1-sol` en raisonnement moyen. Aucun appel API payant
 n'est utilisé pour ce développement. Avant chaque lancement, City lit l'utilisation
 des fenêtres de quota Codex et reporte la mission si l'une atteint 70 % ou si la
@@ -39,8 +40,9 @@ mesure est indisponible. Ce seuil protège une réserve d'usage ; il ne représe
 pas un pourcentage garanti de consommation quotidienne.
 
 City contrôle le périmètre des fichiers, la syntaxe Python, un test ciblé et le build
-frontend lorsque nécessaire. Si ces contrôles passent et que le dépôt local n'a pas
-changé entre-temps, City crée un commit et l'intègre localement sans validation humaine.
+frontend lorsque nécessaire. Les intégrations sont successives : si une autre mission
+a avancé le dépôt, City rebase la branche et relance les vérifications avant de l'intégrer.
+Un conflit laisse la branche disponible pour examen.
 Il n'y a ni push GitHub ni déploiement automatique. Une mission qui échoue conserve
 son worktree pour examen. Le bilan quotidien du Desk Manager liste les commits
 intégrés et les missions non intégrées. Les anciennes propositions Jules qui attendent

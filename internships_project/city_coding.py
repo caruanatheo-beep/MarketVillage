@@ -16,6 +16,8 @@ import threading
 from .marketdesk_city import CityError
 from .city_specialists import VERSION, git, repo_root, approved_base, branch_context
 
+_integration_lock = threading.Lock()
+
 
 def codex_binary() -> str:
     configured = os.getenv('MARKETDESK_CODEX_BIN', '').strip()
@@ -318,7 +320,7 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
 
 def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
                     files: list[str], agent_id: str) -> dict:
-    """Integrate only validated code onto the unchanged local HEAD."""
+    """Validate in the worktree, then integrate one completed branch at a time."""
     allowed = ('internships_project/', 'tests/', 'scripts/', '.github/workflows/')
     for name in files:
         path = directory / name
@@ -327,7 +329,32 @@ def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
             raise CityError('Intégration suspendue : fichier hors du code autorisé. La branche reste disponible.')
         if path.stat().st_size > 2_000_000:
             raise CityError('Intégration suspendue : fichier trop volumineux. La branche reste disponible.')
-    git(directory, '-c', 'core.whitespace=cr-at-eol', 'diff', '--check')
+    test_file = _integration_checks(root, directory, files, agent_id)
+    with _integration_lock:
+        if git(root, 'status', '--porcelain', '--untracked-files=no'):
+            raise CityError('Intégration suspendue : le dépôt courant contient des modifications locales suivies.')
+        git(directory, 'add', '--', *files)
+        git(directory, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Improve MarketDesk with '+agent_id)
+        current = git(root, 'rev-parse', 'HEAD')
+        if current != revision:
+            try:
+                git(directory, 'rebase', current)
+            except CityError as exc:
+                git(directory, 'rebase', '--abort')
+                raise CityError('Intégration suspendue : conflit avec une autre mission. La branche reste disponible.') from exc
+            _integration_checks(root, directory, files, agent_id, committed=True)
+        if git(root, 'rev-parse', 'HEAD') != current or git(root, 'status', '--porcelain', '--untracked-files=no'):
+            raise CityError('Le dépôt a changé pendant les vérifications : intégration suspendue. La branche reste disponible.')
+        commit = git(directory, 'rev-parse', 'HEAD')
+        git(root, 'merge', '--ff-only', branch)
+    return {'integrated': True, 'commit': commit, 'server_checks': [test_file, 'frontend build' if any(
+            name.startswith('internships_project/city_frontend/src/') for name in files) else 'Python syntax']}
+
+
+def _integration_checks(root: Path, directory: Path, files: list[str], agent_id: str,
+                        *, committed: bool = False) -> str:
+    git(directory, '-c', 'core.whitespace=cr-at-eol', 'show' if committed else 'diff',
+        '--check', *(['HEAD'] if committed else []))
     for name in files:
         if name.endswith('.py'):
             import ast
@@ -360,11 +387,4 @@ def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
         build = subprocess.run([npm, 'run', 'build'], cwd=frontend, capture_output=True, timeout=180)
         if build.returncode:
             raise CityError('Build frontend en échec : intégration suspendue.')
-    if git(root, 'rev-parse', 'HEAD') != revision or git(root, 'status', '--porcelain', '--untracked-files=no'):
-        raise CityError('Le dépôt a changé pendant la mission : intégration suspendue. La branche reste disponible.')
-    git(directory, 'add', '--', *files)
-    git(directory, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Improve MarketDesk with '+agent_id)
-    commit = git(directory, 'rev-parse', 'HEAD')
-    git(root, 'merge', '--ff-only', branch)
-    return {'integrated': True, 'commit': commit, 'server_checks': [test_file, 'frontend build' if any(
-            name.startswith('internships_project/city_frontend/src/') for name in files) else 'Python syntax']}
+    return test_file

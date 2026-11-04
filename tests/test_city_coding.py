@@ -112,6 +112,58 @@ def test_autonomous_engineer_integrates_validated_code_without_approval(repo, mo
     assert (root/'internships_project/city_sample.py').read_text() == 'value = 2\n'
 
 
+def test_parallel_coding_claims_are_bounded_per_agent_and_globally(store):
+    from internships_project.city_specialists import VERSION
+    for user in ('alice', 'bob'):
+        store.ensure_agents(user)
+        with store.db() as db:
+            db.execute('INSERT INTO city_settings(username,settings_json,updated_at) VALUES(?,?,?)',
+                       (user, json.dumps({'max_concurrent_tasks': 4, 'auto_tasks': True}),
+                        '2026-11-04T00:00:00+00:00'))
+    jobs = [('alice', 'job_hunter'), ('alice', 'city_ui_engineer'),
+            ('alice', 'job_hunter'), ('bob', 'quality_engineer'),
+            ('bob', 'internships_engineer'), ('bob', 'city_ui_engineer')]
+    with store.db() as db:
+        for index, (user, agent) in enumerate(jobs):
+            db.execute("INSERT INTO city_tasks(id,username,agent_id,task_type,description,status,created_at,parameters_json) "
+                       "VALUES(?,?,?,?,?,'queued',?,?)",
+                       (format(index + 1, '032x'), user, agent, 'agent:'+agent,
+                        'Développement autonome', f'2026-11-04T00:00:0{index}+00:00',
+                        json.dumps({'operation': 'develop', 'role_version': VERSION})))
+    claimed = [store.claim_next() for _ in range(4)]
+    assert [job['agent_id'] for job in claimed] == [
+        'job_hunter', 'city_ui_engineer', 'quality_engineer', 'internships_engineer']
+    assert store.claim_next() is None
+    store.finish(claimed[0]['id'], result={'title': 'Done', 'text': 'Done'})
+    assert store.claim_next()['id'] == format(3, '032x')
+
+
+def test_autonomous_engineer_rebases_after_another_mission_integrates(repo, monkeypatch):
+    root, git = repo
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 12)
+    original_run = subprocess.run
+    def run(command, **kwargs):
+        if command[:2] == [sys.executable, '-c']:
+            return SimpleNamespace(returncode=0)
+        return original_run(command, **kwargs)
+    monkeypatch.setattr(coding.subprocess, 'run', run)
+    def execute(command, directory, prompt, env):
+        (root/'other.py').write_text('other = True\n')
+        git('add', 'other.py')
+        git('-c', 'commit.gpgsign=false', 'commit', '-m', 'Other agent')
+        target = directory/'internships_project/city_sample.py'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('value = 2\n')
+        Path(command[command.index('--output-last-message') + 1]).write_text(json.dumps(
+            {'summary': 'Source corrigée', 'tests': 'Test ciblé passé', 'limitations': 'Aucune'}))
+        return [{'type': 'turn.completed'}]
+    monkeypatch.setattr(coding, '_execute', execute)
+    result = coding.implement_change('d'*32, {'coding_request': ''},
+                                    agent_id='internships_engineer', auto_integrate=True)
+    assert result['integrated'] and result['commit'] == git('rev-parse', 'HEAD')
+    assert (root/'other.py').exists() and (root/'internships_project/city_sample.py').exists()
+
+
 def test_coding_uses_approved_revision_despite_new_commits_and_dirty_main(repo,monkeypatch):
     root,git=repo
     proposal=coding.change_proposal('Corrige sample pour renvoyer deux')
