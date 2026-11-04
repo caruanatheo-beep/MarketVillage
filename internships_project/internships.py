@@ -500,7 +500,7 @@ def matching_opportunities(jobs: list[Opportunity], category: str = "Toutes", qu
                            weekly: bool = False, today: date | None = None,
                            daily: bool = False, sort_by: str = "pertinence") -> list[Opportunity]:
     """Return the full filtered and stably sorted result set before pagination."""
-    query = _offer_search_text(query or "")
+    query_terms = _offer_search_text(query or "").split()
     today = today or datetime.now(timezone.utc).date()
     seen = set(seen_urls or [])
     dismissed = {url for url, entry in (tracking or {}).items()
@@ -513,7 +513,8 @@ def matching_opportunities(jobs: list[Opportunity], category: str = "Toutes", qu
         (category == "Graduate" and job.kind == "Graduate")
     ) and (family.startswith("Tous ") or job.family == family or (family == "Sales / Trading / Structuring" and job.family in {"Sales", "Trading / Structuring"}))
       and (earliest == "Toutes dates" or (start_month(job.start_period) and start_month(job.start_period) >= earliest))
-      and (not query or query in _offer_search_text(f"{job.title} {job.company} {job.location}"))
+      and all(term in _offer_search_text(f"{job.title} {job.company} {job.location}")
+              for term in query_terms)
       and (not only_new or job.url not in seen)
       and (not hide_dismissed or job.url not in dismissed)
       and (not weekly or _published_this_week(job.published, today))

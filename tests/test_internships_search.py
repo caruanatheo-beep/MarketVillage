@@ -28,6 +28,14 @@ class OfferSearchTests(unittest.TestCase):
                 self.assertEqual(matching_opportunities([self.offer], query=query), [self.offer])
         self.assertEqual(matching_opportunities([self.offer], query="obligations"), [])
 
+    def test_search_combines_all_terms_across_fields_in_any_order(self):
+        for query in ["societe evry marches", "marches evry societe",
+                      "  ÉVRY,   SOCIÉTÉ — actions  "]:
+            with self.subTest(query=query):
+                self.assertEqual(matching_opportunities([self.offer], query=query), [self.offer])
+        self.assertEqual(matching_opportunities([self.offer], query="societe obligations"), [])
+        self.assertEqual(matching_opportunities([self.offer], query="societe paris"), [])
+
     def test_search_preserves_non_latin_letters_and_digits(self):
         offer = Opportunity("Trading 東京 2027", "Synthetic", "Paris", "Stage",
                             "https://example.invalid/tokyo", "2026-11-04", 10)
@@ -36,15 +44,15 @@ class OfferSearchTests(unittest.TestCase):
         self.assertEqual(matching_opportunities([offer], query="2027"), [offer])
 
     def test_search_keeps_contract_filters_and_dismissed_status(self):
-        self.assertEqual(matching_opportunities([self.offer], query="societe", category="VIE"), [])
+        self.assertEqual(matching_opportunities([self.offer], query="evry societe", category="VIE"), [])
         self.assertEqual(matching_opportunities(
-            [self.offer], query="societe", tracking={self.offer.url: {"status": "Écartée"}},
+            [self.offer], query="evry societe", tracking={self.offer.url: {"status": "Écartée"}},
         ), [])
 
     def test_render_uses_same_search_and_preserves_display_text(self):
         board = render_opportunities(
             [self.offer], [], datetime(2026, 11, 4, tzinfo=timezone.utc),
-            query="societe generale", delayed_updates=True,
+            query="evry marches generale", delayed_updates=True,
         )
         self.assertIn('data-offer-url="https://example.invalid/offer"', board)
         self.assertIn("Société Générale", board)
