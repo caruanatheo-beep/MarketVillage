@@ -465,14 +465,24 @@ def _priority_start(job: Opportunity) -> bool:
     return "2027-04" <= start_month(job.start_period) <= "2027-09"
 
 
+def _publication_sort_value(published: str) -> int:
+    """Sort unknown or impossible publication dates after valid dates."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", published):
+        return 0
+    try:
+        return date.fromisoformat(published).toordinal()
+    except ValueError:
+        return 0
+
+
 def _opportunity_sort_key(job: Opportunity) -> tuple:
-    published = int(job.published.replace("-", "")) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", job.published) else 0
+    published = _publication_sort_value(job.published)
     return (-int(_priority_start(job)), -job.score, -published, job.company.casefold(),
             job.title.casefold(), job.url.casefold())
 
 
 def _recent_sort_key(job: Opportunity) -> tuple:
-    published = int(job.published.replace("-", "")) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", job.published) else 0
+    published = _publication_sort_value(job.published)
     return (-published, -job.score, job.company.casefold(), job.title.casefold(), job.url.casefold())
 
 
