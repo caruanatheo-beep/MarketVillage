@@ -2655,6 +2655,13 @@ def start_hourly_refresh() -> None:
         _hourly_worker.start()
 
 
+def _utc_display_stamp(value: datetime) -> str:
+    # Legacy timestamps without an offset already represent UTC.
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
+
+
 def render_opportunities(jobs: list[Opportunity], errors: list[str], updated: datetime,
                          category: str = "Toutes", query: str = "", family: str = "Tous métiers",
                          earliest: str = "Toutes dates", seen_urls: list[str] | None = None,
@@ -2675,7 +2682,7 @@ def render_opportunities(jobs: list[Opportunity], errors: list[str], updated: da
         jobs, category, query, family, earliest, seen_urls, tracking, only_new,
         hide_dismissed, weekly, today, daily, sort_by,
     )
-    stamp = updated.strftime("%d/%m/%Y %H:%M UTC")
+    stamp = _utc_display_stamp(updated)
     total = len(ordered)
     page_size = max(1, min(int(page_size), 100))
     page_count = max(1, (total + page_size - 1) // page_size)
@@ -2767,7 +2774,7 @@ def render_opportunities(jobs: list[Opportunity], errors: list[str], updated: da
         label = ("Disponible" if state == "ok" else
                  "Aucune offre remontée" if state == "empty" else "Vérification impossible")
         try:
-            checked = datetime.fromisoformat(str(check.get("checked_at") or "")).strftime("%d/%m/%Y %H:%M UTC")
+            checked = _utc_display_stamp(datetime.fromisoformat(str(check.get("checked_at") or "")))
         except ValueError:
             checked = "Inconnue"
         count_label = str(count) if state in {"ok", "empty"} and isinstance(count, int) else "—"
