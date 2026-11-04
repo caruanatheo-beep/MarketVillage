@@ -164,6 +164,37 @@ def test_autonomous_engineer_rebases_after_another_mission_integrates(repo, monk
     assert (root/'other.py').exists() and (root/'internships_project/city_sample.py').exists()
 
 
+def test_parallel_conflict_keeps_main_and_branch_for_review(repo, monkeypatch):
+    root, git = repo
+    target = root/'internships_project/city_sample.py'
+    target.parent.mkdir(parents=True)
+    target.write_text('value = 1\n')
+    git('add', 'internships_project/city_sample.py')
+    git('-c', 'commit.gpgsign=false', 'commit', '-m', 'Baseline')
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 12)
+    original_run = subprocess.run
+    def run(command, **kwargs):
+        if command[:2] == [sys.executable, '-c']:
+            return SimpleNamespace(returncode=0)
+        return original_run(command, **kwargs)
+    monkeypatch.setattr(coding.subprocess, 'run', run)
+    def execute(command, directory, prompt, env):
+        target.write_text('value = 3\n')
+        git('add', 'internships_project/city_sample.py')
+        git('-c', 'commit.gpgsign=false', 'commit', '-m', 'Other agent')
+        (directory/'internships_project/city_sample.py').write_text('value = 2\n')
+        Path(command[command.index('--output-last-message') + 1]).write_text(json.dumps(
+            {'summary': 'Source corrigée', 'tests': 'Test ciblé passé', 'limitations': 'Conflit'}))
+        return [{'type': 'turn.completed'}]
+    monkeypatch.setattr(coding, '_execute', execute)
+    with pytest.raises(CityError, match='conflit'):
+        coding.implement_change('e'*32, {'coding_request': ''},
+                                agent_id='internships_engineer', auto_integrate=True)
+    assert target.read_text() == 'value = 3\n'
+    assert git('status', '--porcelain', '--untracked-files=no') == ''
+    assert (root/'.city-worktrees'/('e'*32)/'internships_project/city_sample.py').read_text() == 'value = 2\n'
+
+
 def test_coding_uses_approved_revision_despite_new_commits_and_dirty_main(repo,monkeypatch):
     root,git=repo
     proposal=coding.change_proposal('Corrige sample pour renvoyer deux')
