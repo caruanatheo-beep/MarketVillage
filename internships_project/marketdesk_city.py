@@ -33,6 +33,8 @@ AGENTS = (
      "description": "Audite le code City chaque jour et prépare des propositions sur branche isolée, sans intégration automatique.", "available": True},
     {"id": "networker", "name": "Lina", "role": "Networker", "area": "Network",
      "description": "Recherche chaque jour des contacts publics en finance de marché à Paris et retrouve ton réseau enregistré.", "available": True},
+    {"id": "securities_scout", "name": "Clara", "role": "Securities Services Scout", "area": "Network",
+     "description": "Recherche sur demande des contacts publics en collateral, financement de titres, FX et services titres chez les conservateurs et dépositaires.", "available": True},
     {"id": "outreach_agent", "name": "Iris", "role": "Outreach Agent", "area": "Career Center",
      "description": "Prépare un brouillon depuis un contact et ton profil. Aucun envoi depuis City.", "available": True},
     {"id": "developer", "name": "Axel", "role": "Interview Coach", "area": "Interview Studio",
@@ -1297,7 +1299,7 @@ class CityStore:
                                                           fields["kind"], fields["start_period"]) if value)
                 cls._upsert_memory(db, username, agent_id, "offer", key, title, content,
                                    {"url": url, **fields, "tags": ["offre", "finance de marché"]})
-        elif agent_id == "networker":
+        elif agent_id in {"networker", "securities_scout"}:
             for contact in (result.get("contacts") or [])[:40]:
                 if not isinstance(contact, dict):
                     continue
@@ -1405,7 +1407,7 @@ class CityStore:
                 summary = str((result or {}).get("text") or (result or {}).get("title") or "Résultat disponible.")
                 message = summary[:250]
             self._event(db, task, status, message)
-            if not error and task["agent_id"] in {"job_hunter", "networker", "market_analyst", "finance_tutor", "developer", "innovation_lab", "internship_scout"}:
+            if not error and task["agent_id"] in {"job_hunter", "networker", "securities_scout", "market_analyst", "finance_tutor", "developer", "innovation_lab", "internship_scout"}:
                 compact = json.dumps(result or {}, ensure_ascii=False)
                 if len(compact) <= 24000:
                     db.execute("INSERT INTO city_shared_results(username,cache_key,agent_id,result_json,updated_at) "

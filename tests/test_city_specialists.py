@@ -28,7 +28,7 @@ def test_roles_reject_legacy_and_cross_role_tools(store, agent, legacy):
 def test_registry_tools_and_prompts():
     from pydantic_ai.models.test import TestModel
     from internships_project.city_agents import build_agent, PROMPTS
-    assert len(AGENT_BY_ID) == 12
+    assert len(AGENT_BY_ID) == 13
     for agent in specialists.SPECIALISTS:
         tools = build_agent(agent, TestModel())._function_toolset.tools
         assert 'execute_specialist_operation' in tools

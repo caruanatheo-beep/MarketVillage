@@ -75,7 +75,7 @@ h1, h2, h3, p { margin-top: 0; }
 .portrait { width: 49px; height: 53px; font-size: 1.35rem; }
 .market_analyst { background: #3c6b8c; }.finance_tutor { background: #81619c; }
 .desk_manager { background: #6650a7; }
-.job_hunter { background: #578762; }.networker { background: #b86574; }
+.job_hunter { background: #578762; }.networker { background: #b86574; }.securities_scout { background: #469c90; }
 .outreach_agent { background: #806aba; }.developer { background: #60718c; }
 .agent-panel { min-height: 626px; max-height: 626px; overflow-y: auto; border-radius: 12px;
   padding: 15px 17px 12px; scrollbar-color: #69577f #20283b; }
@@ -910,6 +910,7 @@ body { overflow:hidden; }
 .game-app .pixel-agent-avatar.internships_engineer .agent-sprite { background-image:url("/city/pixel-assets/characters/char_2.png"); filter:hue-rotate(55deg); }
 .game-app .pixel-agent-avatar.quality_engineer .agent-sprite { background-image:url("/city/pixel-assets/characters/char_0.png"); filter:hue-rotate(290deg); }
 .game-app .pixel-agent-avatar.networker .agent-sprite { background-image:url("/city/pixel-assets/characters/char_3.png"); }
+.game-app .pixel-agent-avatar.securities_scout .agent-sprite { background-image:url("/city/pixel-assets/characters/char_3.png"); filter:hue-rotate(95deg); }
 .game-app .pixel-agent-avatar.outreach_agent .agent-sprite { background-image:url("/city/pixel-assets/characters/char_4.png"); }
 .game-app .pixel-agent-avatar.developer .agent-sprite { background-image:url("/city/pixel-assets/characters/char_5.png"); }
 .game-app .pixel-agent-avatar.desk_manager .agent-sprite { background-image:url("/city/pixel-assets/characters/char_5.png"); filter:hue-rotate(250deg) saturate(1.15); }

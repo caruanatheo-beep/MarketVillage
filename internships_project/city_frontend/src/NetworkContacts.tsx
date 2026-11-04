@@ -27,7 +27,7 @@ export function NetworkContactsWindow({onClose}:{onClose:()=>void}){
     onClick={e=>{if(e.target===e.currentTarget){const r=e.currentTarget.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)onClose();}}}>
     <header className="network-window-heading">
       <span className="network-host roster-avatar pixel-agent-avatar networker" aria-hidden="true"><i className="agent-sprite"/></span>
-      <div><span className="network-kicker">Lina · Network</span><h2 id="network-window-title">Contacts</h2><p>Ton réseau en finance de marché · Sales et métiers proches · Paris.</p></div>
+      <div><span className="network-kicker">Lina & Clara · Network</span><h2 id="network-window-title">Contacts</h2><p>Ton réseau en finance de marché et services titres · Paris et autres places.</p></div>
       <button className="network-close" type="button" onClick={onClose} aria-label="Fermer les contacts">×</button>
     </header>
     <NetworkContacts/>

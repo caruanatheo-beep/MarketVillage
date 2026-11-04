@@ -24,6 +24,7 @@ sont accessibles dans Réglages. Le chat du Manager et les contacts conservent l
 | Axel | `daily_questions`, `mock_interview`, `evaluate_answer` | Sur demande uniquement | Questions Sales/S&T/Global Markets, HireVue, grille de couverture indicative et historique des réponses |
 | Nova | `innovation_review` | Deux fois par semaine : lundi et jeudi | Deux projets publics GitHub non déjà proposés par revue, licence, spécification de prototype isolé, complexité et coûts à mesurer |
 | Lina | Recherche de contacts existante + `refresh_internships` | Collecte quotidienne de contacts inchangée | Contacts ; collecte réelle des offres sur demande |
+| Clara | `discover_service_contacts` | Sur demande uniquement | Contacts publics en services titres et collateral, ajoutés au carnet partagé sans appel API payant ; BP2S = BNP Paribas Securities Services |
 | Hugo | `refresh_internships` via le service Python existant | Chaque jour + sur demande | Bilan des nouveaux stages détectés dans la synthèse du Manager ; recherche des publications du jour sur demande |
 | Mira | `collect_markets` via le service Python Markets | Chaque jour + sur demande | Brief de marché et sentiment sourcé dans la synthèse quotidienne |
 

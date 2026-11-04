@@ -24,6 +24,17 @@ FOCUSES = ("Fixed Income Sales", "Equity Derivatives Sales", "Rates Sales", "Cre
 PRIORITY_BANKS = ("LCL", "BRED Banque Populaire", "CIC Marchés")
 OTHER_BANKS = ("Banque Palatine", "La Banque Postale CIB", "ODDO BHF",
                "Crédit Mutuel Arkéa", "Portzamparc")
+SECURITIES_ENTITIES = (
+    ("Société Générale Securities Services", ("societe generale securities services", "sgss"), ("FX", "collateral", "liquidité", "investor services")),
+    ("BNP Paribas Securities Services", ("bnp paribas securities services", "bp2s"), ("FX", "securities financing", "collateral")),
+    ("CACEIS", ("caceis",), ("repo", "securities lending", "FX")),
+    ("CIC Market Solutions", ("cic market solutions",), ("FX", "taux", "solutions de marché")),
+    ("Crédit Agricole Titres", ("credit agricole titres",), ("services titres", "conservation")),
+    ("Euroclear France", ("euroclear france",), ("collateral", "settlement", "liquidité")),
+    ("Euroclear Bank", ("euroclear bank",), ("collateral management", "treasury")),
+    ("Clearstream", ("clearstream",), ("securities financing", "collateral", "treasury")),
+    ("Uptevia", ("uptevia",), ("services aux émetteurs", "titres")),
+)
 SOURCE_GROUPS = {
     'banks_and_managers': ('group.bnpparibas','cib.bnpparibas','globalmarkets.bnpparibas.com',
                           'wholesale.banking.societegenerale.com','ca-cib.com','natixis.com',
@@ -48,6 +59,10 @@ MARKETS = re.compile(r"\b(sales|vendeur\w*|vente|distribution|trader|trading|str
                      r"strategiste\w* (?:de |des |de la )?(?:marche\w*|taux|credit|actions)|"
                      r"ingenieur\w* financier\w*|financial engineer\w*|investment specialist|"
                      r"equity (?:research )?analyst|analyste (?:actions|taux|credit|marche\w*)|market economist)\b", re.I)
+SERVICE_MARKETS = re.compile(r"\b(collateral|securities (?:financing|lending|services)|financement de titres|"
+                             r"pret de titres|services? titres|custody|custodian|conservation|settlement|clearing|"
+                             r"investor services|issuer services|services? aux emetteurs|liquidity|liquidite|"
+                             r"repo|treasury|fx)\b", re.I)
 EXCLUDED = re.compile(r"\b(real estate|private equity|immobilier|back.?office|corporate treasury|recruit\w*|recrut\w*)\b", re.I)
 
 
@@ -83,6 +98,10 @@ def contact_focus(contact: dict) -> dict:
                             r"private equity|cash management|transaction banking|recruit\w*|recrut\w*|"
                             r"corporate treasury|back.?office)\b", role)
     products = (
+        ('Collateral', r"\bcollateral\b"),
+        ('Securities Financing / Lending', r"\b(securities financing|securities lending|financement de titres|pret de titres)\b"),
+        ('Conservation / Settlement', r"\b(custody|custodian|conservation|settlement|clearing|services? titres)\b"),
+        ('Investor / Issuer Services', r"\b(investor services|issuer services|services? aux emetteurs)\b"),
         ('Credit', r"\b(credit|bond\w*|obligataire|obligations)\b"),
         ('Rates / STIR / Repo', r"\b(rates|taux|stir|repo|interest rate\w*)\b"),
         ('FX', r"\b(fx|forex|foreign exchange|devises|change)\b"),
@@ -113,7 +132,7 @@ def contact_focus(contact: dict) -> dict:
                 'focus_reason':'Le poste mentionne une activité hors finance de marché.'}
     if sales and specialty:
         return {'contact_segment':'sales', 'sales_priority':True, 'specialty':specialty, 'focus_reason':basis}
-    if not sales and MARKETS.search(role):
+    if not sales and (MARKETS.search(role) or SERVICE_MARKETS.search(role)):
         return {'contact_segment':'secondary', 'sales_priority':False, 'specialty':specialty or 'Autre métier de marché',
                 'focus_reason':'Métier de marché connexe, sans fonction Sales explicite.'}
     return {'contact_segment':'unclear', 'sales_priority':False, 'specialty':'Périmètre à préciser',
@@ -391,17 +410,17 @@ class _SearchParser(HTMLParser):
             self.current[self.capture] += data
 
 
-def parse_results(html: str, query: str) -> list[dict]:
+def parse_results(html: str, query: str, *, service_roles: bool = False) -> list[dict]:
     parser = _SearchParser()
     parser.feed(html)
     if parser.blocked:
         raise ValueError("La recherche publique demande une vérification anti-robot.")
     if not parser.results:
         raise ValueError("Le moteur n'a renvoyé aucune liste de résultats exploitable.")
-    return _contacts_from_results(parser.results, query, "DuckDuckGo")
+    return _contacts_from_results(parser.results, query, "DuckDuckGo", service_roles=service_roles)
 
 
-def _contacts_from_results(results: list[dict], query: str, engine: str) -> list[dict]:
+def _contacts_from_results(results: list[dict], query: str, engine: str, *, service_roles: bool = False) -> list[dict]:
     contacts = []
     for result in results[:20]:
         url = linkedin_url(result["url"])
@@ -421,7 +440,8 @@ def _contacts_from_results(results: list[dict], query: str, engine: str) -> list
         if not 2 <= len(words) <= 7 or any(not re.search(r"[^\W\d_]", w, re.U) for w in words):
             continue
         evidence = normalized(f"{role} {company} {snippet}")
-        if not company or not MARKETS.search(normalized(role)) or EXCLUDED.search(evidence):
+        if (not company or not (MARKETS.search(normalized(role)) or
+                                (service_roles and SERVICE_MARKETS.search(normalized(role)))) or EXCLUDED.search(evidence)):
             continue
         contacts.append({"name": name[:160], "role": role[:240], "company": company[:160],
                          "location": "Paris / Île-de-France (extrait public)" if _paris_location(snippet,name,company) else "", "linkedin_url": url,
@@ -432,9 +452,9 @@ def _contacts_from_results(results: list[dict], query: str, engine: str) -> list
     return contacts
 
 
-def search_public(query: str) -> list[dict]:
+def search_public(query: str, *, service_roles: bool = False) -> list[dict]:
     try:
-        return parse_results(_search_response(SEARCH_URL, {"q": query}), query)
+        return parse_results(_search_response(SEARCH_URL, {"q": query}), query, service_roles=service_roles)
     except (requests.RequestException, ValueError):
         # Public RSS fallback, no API key or authentication. All evidence filters still apply.
         xml = _search_response("https://www.bing.com/search", {"format": "rss", "q": query})
@@ -446,7 +466,7 @@ def search_public(query: str) -> list[dict]:
                     "url": i.findtext("link", "")} for i in items]
         if not any(linkedin_url(r['url']) for r in results):
             raise ValueError("Recherche publique indisponible : accès principal refusé et aucun profil LinkedIn renvoyé par le flux de secours.")
-        return _contacts_from_results(results, query, "Bing RSS")
+        return _contacts_from_results(results, query, "Bing RSS", service_roles=service_roles)
 
 
 def _search_response(url: str, params: dict) -> str:
@@ -589,6 +609,47 @@ def import_assisted_page(username: str, payload: dict) -> dict:
                    f'{len(leads)} contacts de marché repérés ; {len(excluded)} profils écartés.'}
 
 
+def discover_service_contacts(username: str) -> dict:
+    """Find sourced, less visible securities-services profiles without a paid API."""
+    from .marketdesk_city import CityError
+    queries = [(entity, aliases, 'site:linkedin.com/in/ (' +
+                ' OR '.join('"' + name + '"' for name in (entity, *aliases)) + ') (' +
+                ' OR '.join('"' + term + '"' for term in activities) + ')')
+               for entity, aliases, activities in SECURITIES_ENTITIES]
+    leads, warnings = [], []
+
+    def collect(item):
+        entity, aliases, query = item
+        try:
+            found = search_public(query, service_roles=True)
+        except (requests.RequestException, ValueError) as exc:
+            return [], entity + ': ' + (str(exc)[:120] if isinstance(exc, ValueError) else type(exc).__name__)
+        matched = []
+        for lead in found:
+            company = normalized(str(lead.get('company') or ''))
+            if (not any(alias in company for alias in aliases)
+                    or contact_focus(lead)['contact_segment'] not in {'sales', 'secondary'}):
+                continue
+            matched.append({**lead, 'company': entity, 'origin': 'securities_public_search',
+                            'source_type': 'Profil professionnel indexé',
+                            'employment_status': 'Poste actuel à confirmer'})
+        return matched, ''
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        for found, warning in pool.map(collect, queries):
+            leads.extend(found)
+            if warning:
+                warnings.append(warning)
+    if len(warnings) == len(queries):
+        raise CityError('Recherche publique de Clara indisponible : ' + warnings[0] + '. Aucun contact ajouté.')
+    added, duplicates = save_leads(username, leads, limit=10)
+    return {'title': 'Clara · services titres', 'contacts': added, 'count': len(added),
+            'duplicates': duplicates, 'target': 10, 'entities_searched': len(queries),
+            'warnings': warnings[:3], 'source': 'Profils publics indexés · DuckDuckGo / Bing RSS',
+            'text': f'{len(added)} nouveaux contacts enregistrés en services titres ; '
+                    f'{duplicates} doublons écartés. Postes actuels à confirmer.'}
+
+
 def discover_contacts(username: str) -> dict:
     from .marketdesk_city import CityError
     if os.getenv("MARKETDESK_NETWORK_SEARCH_MODE", "ai") != "public":
@@ -651,4 +712,4 @@ def list_contacts(username: str) -> list[dict]:
               "conversation", "detected_at", "source_url", "source_title", "source_excerpt", "employment_status", "notes",
               "school", "school_source_url", "school_evidence", "source_type", "source_date", "location_source_url", "location_evidence")
     return [{"id": key, **{f: str(c.get(f) or "") for f in fields}, **contact_focus(c)}
-            for key, c in contacts.items() if c.get("origin") in {"lina_public_search","lina_assisted","lina_assisted_paste"}]
+            for key, c in contacts.items() if c.get("origin") in {"lina_public_search","lina_assisted","lina_assisted_paste","securities_public_search"}]

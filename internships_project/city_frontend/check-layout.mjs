@@ -168,7 +168,7 @@ export async function checkLayout() {
     assert.deepEqual([seat?.seatCol,seat?.seatRow],[col,row],`Shifted workstation ${id}`);
   }
   const workstations = [...office.seats].filter(([id]) => /^marketdesk-(chair-|manager-chair$)/.test(id));
-  assert.equal(workstations.length, 12, "Expected twelve assigned workstations");
+  assert.equal(workstations.length, 13, "Expected thirteen assigned workstations");
   for (const [id, seat] of workstations) {
     const blocked = new Set(office.blockedTiles);
     // The engine unblocks an agent's own chair when leaving or returning to it.
@@ -180,7 +180,7 @@ export async function checkLayout() {
       assert.ok(findPath(bay.col,bay.row,seat.seatCol,seat.seatRow,office.tileMap,blocked).length,`Cannot return from golf bay ${bay.index} to ${id}`);
     }
   }
-  const roster=['market_analyst','finance_tutor','job_hunter','networker','outreach_agent','developer','innovation_lab','internship_scout','city_ui_engineer','internships_engineer','quality_engineer','desk_manager'];
+  const roster=['market_analyst','finance_tutor','job_hunter','networker','outreach_agent','developer','innovation_lab','internship_scout','city_ui_engineer','internships_engineer','quality_engineer','securities_scout','desk_manager'];
   roster.forEach((id,index)=>{office.addAgent(index,index%6,0,id==='desk_manager'?'marketdesk-manager-chair':`marketdesk-chair-${id}`,true);office.setAgentPinned(index,true);office.setAgentActive(index,false);});
   const golf=new GolfPractice(office,roster);
   const idle=roster.map(id=>({id,status:'idle'}));

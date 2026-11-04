@@ -34,7 +34,7 @@ type LoadedCharacter = { down: SpriteData[]; up: SpriteData[]; right: SpriteData
 type Runtime = { office: OfficeState; golf: GolfPractice; zoom: number; zoomTarget: number; scale: number; offsetX: number; offsetY: number };
 
 const ROOT = "/city/pixel-assets";
-const ROSTER = ["market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout", "city_ui_engineer", "internships_engineer", "quality_engineer"];
+const ROSTER = ["market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout", "city_ui_engineer", "internships_engineer", "quality_engineer", "securities_scout"];
 const MANAGER_ID = "desk_manager";
 const WORLD_ROSTER = [...ROSTER, MANAGER_ID];
 const MARKET_PANEL = { col: -1.25, width: 14.5, top: 0.3, height: 5.3 };
@@ -482,6 +482,7 @@ export function buildOfficeLayout(): OfficeLayout {
   put("career-cabinet", "MD_CAREER_CABINET", 16, 28);
   put("career-books", "BOOKSHELF", 29, 28);
   put("network-table", "MD_NETWORK_CONFERENCE", 40, 23);
+  put("chair-securities_scout", "MARKET_ERGO_CHAIR", 43, 25);
   put("network-world-map", "MD_NETWORK_WORLD_MAP", 40, 20);
   
   

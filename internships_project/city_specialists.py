@@ -19,10 +19,11 @@ from .marketdesk_city import CityError
 
 VERSION = 2
 CODING_AGENTS = ("job_hunter", "city_ui_engineer", "internships_engineer", "quality_engineer")
-SPECIALISTS = {"job_hunter", "finance_tutor", "developer", "innovation_lab", *CODING_AGENTS}
+SPECIALISTS = {"job_hunter", "finance_tutor", "developer", "innovation_lab", "securities_scout", *CODING_AGENTS}
 DEFAULT_OPERATIONS = {'job_hunter':'repository_audit','finance_tutor':'quant_report',
                       'developer':'daily_questions','innovation_lab':'innovation_review',
-                      'city_ui_engineer':'develop','internships_engineer':'develop','quality_engineer':'develop'}
+                      'city_ui_engineer':'develop','internships_engineer':'develop','quality_engineer':'develop',
+                      'securities_scout':'discover_service_contacts'}
 OPERATIONS = {
     "job_hunter": {"repository_audit", "codex_review", "code_change", "prepare_branch", "develop"},
     "city_ui_engineer": {"develop"},
@@ -31,11 +32,12 @@ OPERATIONS = {
     "finance_tutor": {"quant_report"},
     "developer": {"daily_questions", "mock_interview", "evaluate_answer"},
     "innovation_lab": {"innovation_review"},
+    "securities_scout": {"discover_service_contacts"},
 }
 ROLE_NAMES = {"job_hunter": "Software Engineer", "finance_tutor": "Quant Research",
               "developer": "Interview Coach", "innovation_lab": "Innovation Lab",
               "city_ui_engineer": "UI Engineer", "internships_engineer": "Sources Engineer",
-              "quality_engineer": "Quality Engineer"}
+              "quality_engineer": "Quality Engineer", "securities_scout": "Securities Services Scout"}
 
 
 def validate_mission(agent_id: str, parameters: dict, description: str = "") -> dict:
@@ -62,6 +64,7 @@ def validate_mission(agent_id: str, parameters: dict, description: str = "") -> 
         'city_ui_engineer': r'\b(postuler|candidatures?|envoyer|déployer|merge)\b',
         'internships_engineer': r'\b(postuler|candidatures?|envoyer|déployer|merge)\b',
         'quality_engineer': r'\b(postuler|candidatures?|envoyer|déployer|merge)\b',
+        'securities_scout': r'\b(postuler|candidatures?|envoyer|déployer|merge)\b',
     }
     if operation == 'develop':
         request = str(payload.get('request') or '').strip()
@@ -381,4 +384,7 @@ def run_specialist(agent_id: str, username: str, parameters: dict) -> dict:
         return interview(parameters)
     if operation == "innovation_review":
         return innovation_review(set(parameters.get('excluded_repositories') or []))
+    if operation == "discover_service_contacts":
+        from .network_discovery import discover_service_contacts
+        return discover_service_contacts(username)
     raise CityError("Opération spécialisée inconnue.")
