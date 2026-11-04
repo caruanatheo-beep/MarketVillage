@@ -138,6 +138,20 @@ def test_parallel_coding_claims_are_bounded_per_agent_and_globally(store):
     assert store.claim_next()['id'] == format(3, '032x')
 
 
+def test_unavailable_codex_quota_defers_coding_without_losing_mission(store, monkeypatch):
+    task = store.create_task('alice', 'job_hunter', 'Développement autonome',
+                             {'operation': 'develop'})
+    def unavailable(*args, **kwargs):
+        raise CityError('Quota Codex indisponible : missions de développement suspendues.')
+    monkeypatch.setattr(coding, 'implement_change', unavailable)
+    assert CityWorker(store).run_once()
+    with store.db() as db:
+        status, scheduled = db.execute('SELECT status,scheduled_at FROM city_tasks WHERE id=?',
+                                       (task['id'],)).fetchone()
+    assert status == 'queued' and scheduled > task['created_at']
+    assert store.claim_next() is None
+
+
 def test_autonomous_engineer_rebases_after_another_mission_integrates(repo, monkeypatch):
     root, git = repo
     monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 12)

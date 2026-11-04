@@ -1259,6 +1259,16 @@ class CityStore:
             db.execute("UPDATE city_tasks SET heartbeat_at=? WHERE id=? AND status='running'",
                        (_utc(), task_id))
 
+    def defer_coding(self, task_id: str, reason: str) -> None:
+        next_try = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(timespec='seconds')
+        with self.db() as db:
+            task = db.execute("SELECT * FROM city_tasks WHERE id=? AND status='running'", (task_id,)).fetchone()
+            if not task:
+                return
+            db.execute("UPDATE city_tasks SET status='queued',scheduled_at=?,started_at=NULL,heartbeat_at=NULL "
+                       "WHERE id=?", (next_try, task_id))
+            self._event(db, task, 'queued', reason + ' Nouvelle tentative dans une heure.')
+
     @classmethod
     def _remember_task_result(cls, db, task: dict, result: dict) -> None:
         agent_id, username = task["agent_id"], task["username"]
@@ -1770,6 +1780,7 @@ class CityWorker:
         heartbeat = threading.Thread(target=pulse, daemon=True)
         heartbeat.start()
         usage = None
+        parameters = {}
         try:
             parameters = json.loads(task.get("parameters_json") or "{}")
             if task['agent_id'] == 'innovation_lab':
@@ -1892,7 +1903,11 @@ class CityWorker:
             # Public logs and the UI receive only the exception type for unknown errors.
             from .llm_usage import GenerationLimitError
             safe = str(exc) if isinstance(exc, (CityError, GenerationLimitError)) else f"Erreur de mission ({type(exc).__name__})."
-            self.store.finish(task["id"], error=safe)
+            if (parameters.get('operation') == 'develop' and isinstance(exc, CityError)
+                    and safe.startswith(('Quota Codex indisponible', 'Développement reporté'))):
+                self.store.defer_coding(task['id'], safe)
+            else:
+                self.store.finish(task["id"], error=safe)
         finally:
             beating.set()
         return True

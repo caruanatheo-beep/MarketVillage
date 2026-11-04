@@ -36,7 +36,8 @@ dans des worktrees Git distincts, avec Codex connecté à
 l'abonnement ChatGPT et `gpt-6.1-sol` en raisonnement moyen. Aucun appel API payant
 n'est utilisé pour ce développement. Avant chaque lancement, City lit l'utilisation
 des fenêtres de quota Codex et reporte la mission si l'une atteint 70 % ou si la
-mesure est indisponible. Ce seuil protège une réserve d'usage ; il ne représente
+mesure est indisponible. Dans ces cas City reporte la mission d'une heure et réessaie.
+Ce seuil protège une réserve d'usage ; il ne représente
 pas un pourcentage garanti de consommation quotidienne.
 
 City contrôle le périmètre des fichiers, la syntaxe Python, un test ciblé et le build
