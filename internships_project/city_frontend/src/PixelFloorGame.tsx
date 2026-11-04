@@ -24,6 +24,7 @@ type FeaturedOffer = { title: string; company: string; location: string; url: st
   published?: string; published_inferred?: boolean; source?: string; detected_at?: string; selection_reason?: string;
   selection_source?: "job_hunter"|"internships_cache"; total_offers?: number; tracker_updated_at?: string };
 type Props = { agents: Agent[]; tasks: Task[]; events: Event[]; selectedId: string; onPick: (id: string) => void;
+  onTaskPick: (id: string) => void;
   marketPoints: MarketReading[]; marketRetrievedAt: string; marketError?: string; internshipError?: string;
   featuredOffers: FeaturedOffer[] };
 type AssetLeaf = { id: string; file: string; width: number; height: number; footprintW: number; footprintH: number; orientation?: string; state?: string; frame?: number; mirrorSide?: boolean };
@@ -33,7 +34,7 @@ type LoadedCharacter = { down: SpriteData[]; up: SpriteData[]; right: SpriteData
 type Runtime = { office: OfficeState; golf: GolfPractice; zoom: number; zoomTarget: number; scale: number; offsetX: number; offsetY: number };
 
 const ROOT = "/city/pixel-assets";
-const ROSTER = ["market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout"];
+const ROSTER = ["market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout", "city_ui_engineer", "internships_engineer", "quality_engineer"];
 const MANAGER_ID = "desk_manager";
 const WORLD_ROSTER = [...ROSTER, MANAGER_ID];
 const MARKET_PANEL = { col: -1.25, width: 14.5, top: 0.3, height: 5.3 };
@@ -409,6 +410,10 @@ export function buildOfficeLayout(): OfficeLayout {
     put(`chair-${station.agent}`, "MARKET_ERGO_CHAIR", station.col + 2, station.row + 2);
   }
   put("chair-internship_scout", "MARKET_ERGO_CHAIR", 10, 26);
+  for (const [id, col] of [["city_ui_engineer", 2], ["internships_engineer", 6], ["quality_engineer", 10]] as const) {
+    put(`desk-${id}`, "DESK_FRONT", col, 28);
+    put(`chair-${id}`, "MARKET_ERGO_CHAIR", col + 1, 30);
+  }
   // Panoramic windows form aligned glazed bands only on the north-facing facades.
   // The central manager screen wall stays clear, and career/network doors remain open.
   for (const [id, col, row] of [
@@ -471,10 +476,8 @@ export function buildOfficeLayout(): OfficeLayout {
   put("research-lounge-sofa", "MD_CENTRAL_LOUNGE_SOFA", 43, 15);
   put("research-lounge-table", "MD_LOUNGE_COFFEE_TABLE", 40, 16);
   put("technology-server-rack", "MD_SERVER_RACK", 1, 23); put("technology-server-rack-east", "MD_SERVER_RACK", 13, 23);
-  put("technology-server-cluster", "MD_SERVER_RACK_CLUSTER", 1, 27);
   put("technology-board", "MD_CAREER_BOARD", 9, 22);
   put("desk-internship_scout", "MD_CAREER_DESK", 8, 24);
-  put("technology-books", "BOOKSHELF", 11, 28);
   put("career-board", "MD_CAREER_BOARD", 16, 22); 
   put("career-cabinet", "MD_CAREER_CABINET", 16, 28);
   put("career-books", "BOOKSHELF", 29, 28);
@@ -837,27 +840,39 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
   }
 }
 
-function renderTaskLabels(ctx: CanvasRenderingContext2D, zoom: number, offsetX: number, offsetY: number,
-  office: OfficeState, agents: Agent[], tasks: Task[]): void {
+type BubbleHit = { x: number; y: number; width: number; height: number; taskId: string };
+function renderTaskBubbles(ctx: CanvasRenderingContext2D, zoom: number, offsetX: number, offsetY: number,
+  office: OfficeState, agents: Agent[], tasks: Task[]): BubbleHit[] {
+  const hits: BubbleHit[] = [];
   ctx.save();
-  ctx.font = `bold ${Math.max(7, 6 * zoom)}px ui-monospace, monospace`;
+  ctx.font = '600 12px Inter, "Segoe UI", sans-serif';
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   for (const agent of agents) {
-    if (agent.status !== "running" && agent.status !== "waiting_approval") continue;
+    if (agent.status !== "running") continue;
     const character = office.characters.get(agentIndex(agent.id));
-    const task = tasks.find(item => item.agent_id === agent.id && item.status === agent.status);
+    const task = tasks.find(item => item.agent_id === agent.id && item.status === "running");
     const description = task?.description?.trim();
-    if (!character || !description) continue;
-    const label = description.length > 30 ? `${description.slice(0, 29).trimEnd()}…` : description;
-    const x = offsetX + character.x * zoom, y = offsetY + (character.y - 25) * zoom;
-    const width = ctx.measureText(label).width + 10 * zoom, height = 12 * zoom;
-    ctx.fillStyle = "#07101def"; ctx.fillRect(x - width / 2, y - height / 2, width, height);
-    ctx.strokeStyle = agent.status === "waiting_approval" ? "#ffd173" : "#65eaff";
-    ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = zoom * 5;
-    ctx.lineWidth = Math.max(1.5, zoom * 0.55); ctx.strokeRect(x - width / 2, y - height / 2, width, height);
-    ctx.fillStyle = agent.status === "waiting_approval" ? "#f3cc82" : "#b9f4ff"; ctx.fillText(label, x, y);
+    if (!character || !task || !description) continue;
+    const label = description.length > 34 ? `${description.slice(0, 33).trimEnd()}…` : description;
+    const anchorY = offsetY + character.y * zoom;
+    const anchorX = projectTowerX(offsetX + character.x * zoom, anchorY, offsetX, offsetY, zoom);
+    const width = Math.min(240, Math.max(150, ctx.measureText(label).width + 24)), height = 42;
+    const x = Math.max(6, Math.min(ctx.canvas.width - width - 6, anchorX - width / 2));
+    let y = anchorY - 34 * zoom - height;
+    while (hits.some(hit => x < hit.x + hit.width + 5 && x + width + 5 > hit.x && y < hit.y + hit.height + 5 && y + height + 5 > hit.y)) y -= height + 8;
+    y = Math.max(62, y);
+    ctx.shadowColor = "#081c1dcc"; ctx.shadowBlur = 12;
+    ctx.fillStyle = "#103a3ced"; ctx.strokeStyle = "#79e6cb"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(x, y, width, height, 8); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#8ef5da"; ctx.font = '700 11px Inter, "Segoe UI", sans-serif';
+    ctx.fillText(`${agent.name} · au travail`, x + width / 2, y + 13);
+    ctx.fillStyle = "#e6f8f1"; ctx.font = '600 12px Inter, "Segoe UI", sans-serif';
+    ctx.fillText(label, x + width / 2, y + 30);
+    hits.push({ x, y, width, height, taskId: task.id });
   }
   ctx.restore();
+  return hits;
 }
 
 function adjacentWalkable(office: OfficeState, targetId: number, fromId: number): { col: number; row: number } | null {
@@ -960,8 +975,10 @@ export function validateAgentRoutes(office: OfficeState): void {
 
 export function PixelFloorGame(props: Props): React.ReactElement {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const bubbleHits = useRef<BubbleHit[]>([]);
   const runtime = useRef<Runtime | null>(null);
   const pick = useRef(props.onPick); pick.current = props.onPick;
+  const pickTask = useRef(props.onTaskPick); pickTask.current = props.onTaskPick;
   const selected = useRef(props.selectedId); selected.current = props.selectedId;
   const latest = useRef(props); latest.current = props;
   const lastStatuses = useRef(new Map<string, AgentStatus>());
@@ -1079,14 +1096,13 @@ export function PixelFloorGame(props: Props): React.ReactElement {
         if (live) {
           live.scale = scale; live.offsetX = position.offsetX; live.offsetY = position.offsetY;
           node.dataset.viewScale=String(scale);node.dataset.viewX=String(position.offsetX);node.dataset.viewY=String(position.offsetY);
-          renderTaskLabels(ctx, scale, position.offsetX, position.offsetY, floor, latest.current.agents, latest.current.tasks);
         }
         output.clearRect(0,0,node.width,node.height);
         renderTowerBackdrop(output,position.offsetX,position.offsetY,scale);
         renderTowerPerspective(output,worldCanvas,position.offsetX,position.offsetY,scale);
         renderZoneLabels(output,scale,position.offsetX,position.offsetY);
         const focus=floor.characters.get(index),agent=latest.current.agents.find(a=>a.id===selected.current);
-        if(focus&&agent){
+        if(focus&&agent&&agent.status!=="running"){
           const y=position.offsetY+focus.y*scale;
           const x=projectTowerX(position.offsetX+focus.x*scale,y,position.offsetX,position.offsetY,scale);
           output.save();output.strokeStyle='#8ee5ee';output.lineWidth=1.5;
@@ -1102,6 +1118,7 @@ export function PixelFloorGame(props: Props): React.ReactElement {
         renderMarketDecor(output,scale,position.offsetX,position.offsetY,latest.current.marketPoints,
           latest.current.marketRetrievedAt,latest.current.marketError,visibleOffer,offerIndexRef.current,
           offers.length,latest.current.internshipError);
+        bubbleHits.current=renderTaskBubbles(output,scale,position.offsetX,position.offsetY,floor,latest.current.agents,latest.current.tasks);
       },
     });
     return () => { stop(); observer.disconnect(); };
@@ -1156,6 +1173,9 @@ export function PixelFloorGame(props: Props): React.ReactElement {
     const live = runtime.current, node = canvas.current;
     if (!live || !node) return;
     const rect = node.getBoundingClientRect(), dpr = node.width / rect.width;
+    const screenX=(event.clientX-rect.left)*dpr,screenBubbleY=(event.clientY-rect.top)*dpr;
+    const bubble=bubbleHits.current.find(hit=>screenX>=hit.x&&screenX<=hit.x+hit.width&&screenBubbleY>=hit.y&&screenBubbleY<=hit.y+hit.height);
+    if(bubble){pickTask.current(bubble.taskId);return;}
     const screenY=unprojectTowerY((event.clientY-rect.top)*dpr,live.offsetY,live.scale);
     const x = (unprojectTowerX((event.clientX-rect.left)*dpr,screenY,live.offsetX,live.offsetY,live.scale)-live.offsetX)/live.scale;
     const y = (screenY - live.offsetY) / live.scale;
@@ -1201,6 +1221,9 @@ export function PixelFloorGame(props: Props): React.ReactElement {
     const live = runtime.current, node = canvas.current;
     if (!live || !node) return;
     const rect = node.getBoundingClientRect(), dpr = node.width / rect.width;
+    const screenX=(event.clientX-rect.left)*dpr,screenBubbleY=(event.clientY-rect.top)*dpr;
+    const bubble=bubbleHits.current.find(hit=>screenX>=hit.x&&screenX<=hit.x+hit.width&&screenBubbleY>=hit.y&&screenBubbleY<=hit.y+hit.height);
+    if(bubble){node.style.cursor="pointer";node.title="Ouvrir la mission en cours";return;}
     const screenY=unprojectTowerY((event.clientY-rect.top)*dpr,live.offsetY,live.scale);
     const x = (unprojectTowerX((event.clientX-rect.left)*dpr,screenY,live.offsetX,live.offsetY,live.scale)-live.offsetX)/live.scale;
     const y = (screenY - live.offsetY) / live.scale;

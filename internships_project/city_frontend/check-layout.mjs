@@ -168,7 +168,7 @@ export async function checkLayout() {
     assert.deepEqual([seat?.seatCol,seat?.seatRow],[col,row],`Shifted workstation ${id}`);
   }
   const workstations = [...office.seats].filter(([id]) => /^marketdesk-(chair-|manager-chair$)/.test(id));
-  assert.equal(workstations.length, 9, "Expected nine assigned workstations");
+  assert.equal(workstations.length, 12, "Expected twelve assigned workstations");
   for (const [id, seat] of workstations) {
     const blocked = new Set(office.blockedTiles);
     // The engine unblocks an agent's own chair when leaving or returning to it.
@@ -180,7 +180,7 @@ export async function checkLayout() {
       assert.ok(findPath(bay.col,bay.row,seat.seatCol,seat.seatRow,office.tileMap,blocked).length,`Cannot return from golf bay ${bay.index} to ${id}`);
     }
   }
-  const roster=['market_analyst','finance_tutor','job_hunter','networker','outreach_agent','developer','innovation_lab','internship_scout','desk_manager'];
+  const roster=['market_analyst','finance_tutor','job_hunter','networker','outreach_agent','developer','innovation_lab','internship_scout','city_ui_engineer','internships_engineer','quality_engineer','desk_manager'];
   roster.forEach((id,index)=>{office.addAgent(index,index%6,0,id==='desk_manager'?'marketdesk-manager-chair':`marketdesk-chair-${id}`,true);office.setAgentPinned(index,true);office.setAgentActive(index,false);});
   const golf=new GolfPractice(office,roster);
   const idle=roster.map(id=>({id,status:'idle'}));
@@ -206,7 +206,7 @@ export async function checkLayout() {
   for(let step=0;step<800;step++){golf.update(.05);office.update(.05);}
   assert.equal(golf.visits.size,0,'Stale backend state stops ambient activity');
   console.log(`Golf OK: 90 round-trip paths, ${played.size} animated visitors, max ${maxVisitors} mats, mission interruption and stale-state protection.`);
-  console.log(`Layout OK: ${assets.catalog.length} assets, ${office.layout.furniture.length} objects, all 9 workstations reachable (18 engine routes); perspective and inverse hit tests validated.`);
+  console.log(`Layout OK: ${assets.catalog.length} assets, ${office.layout.furniture.length} objects, all ${workstations.length} workstations reachable (${workstations.length*2} engine routes); perspective and inverse hit tests validated.`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

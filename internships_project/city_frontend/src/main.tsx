@@ -124,8 +124,6 @@ async function api<T>(path: string, payload?: object): Promise<T> {
 }
 
 function App(): React.ReactElement {
-  const [panelCollapsed,setPanelCollapsed]=useState(false);
-  const [panelWidth,setPanelWidth]=useState(340);
   const [notificationView,setNotificationView]=useState({filter:"all",agent:""});
   const [missionFilter,setMissionFilter]=useState("active");
   const [resultTaskId,setResultTaskId]=useState<string|null>(null);
@@ -133,11 +131,10 @@ function App(): React.ReactElement {
   const [siteError,setSiteError]=useState("");
   const [commandQuery,setCommandQuery]=useState("");
   useEffect(()=>{if(!resultTaskId)return;const close=(event:KeyboardEvent)=>{if(event.key==="Escape")setResultTaskId(null);};window.addEventListener("keydown",close);return()=>window.removeEventListener("keydown",close);},[resultTaskId]);
-  const resizeStart=useRef<{x:number;width:number}|null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [marketSnapshot, setMarketSnapshot] = useState<MarketSnapshot | null>(null);
   const [internshipHighlight, setInternshipHighlight] = useState<InternshipHighlight | null>(null);
-  const [selectedId, setSelectedId] = useState("desk_manager");
+  const [selectedId, setSelectedId] = useState("");
   const [workflowTemplate, setWorkflowTemplate] = useState("careers_outreach");
   const [workflowFocus, setWorkflowFocus] = useState("");
   const [workflowPriority, setWorkflowPriority] = useState(1);
@@ -157,7 +154,7 @@ function App(): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [openedTaskId, setOpenedTaskId] = useState<string | null>(null);
-  const [windowMode, setWindowMode] = useState<"none"|"agent"|"agents"|"missions"|"activity"|"contacts"|"chat">("agent");
+  const [windowMode, setWindowMode] = useState<"none"|"agent"|"agents"|"missions"|"activity"|"contacts"|"chat">("none");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
@@ -321,7 +318,7 @@ function App(): React.ReactElement {
     setNotificationView({filter,agent});setWindowMode("activity");
   }
   function openAgent(id:string, tab?:"chat"|"missions"|"history"):void {
-    setPanelCollapsed(false);setSelectedId(id);
+    setSelectedId(id);
     if(tab==="history"){openNotifications("all",id==="desk_manager"?"":id);return;}
     if(tab==="missions"){setWindowMode("missions");return;}
     if(tab==="chat"||id==="desk_manager"){setWindowMode("chat");return;}
@@ -689,7 +686,7 @@ function App(): React.ReactElement {
       <div className="city-header-actions"><button type="button" className="secondary-button" onClick={()=>{setSettingsOpen(true);void loadSettings();}}>R&eacute;glages</button>
         <form action="/logout" method="post" className="city-logout"><button type="submit">Quitter</button></form></div>
     </header>
-    <div className={`city-dashboard command-center ${panelCollapsed?"console-collapsed":""}`} style={{"--console-width":`${panelWidth}px`} as React.CSSProperties}>
+    <div className="city-dashboard command-center city-full-width">
       <div className="world-column">
         <div className="world-toolbar"><div><span className="tiny-label">MARKETDESK CITY</span><strong>MarketDesk Tower</strong></div>
           <div className="world-controls" aria-label="Navigation du campus">
@@ -702,7 +699,7 @@ function App(): React.ReactElement {
             <button type="button" title="Plein écran" onClick={()=>{const node=document.querySelector(".world-column");if(!document.fullscreenElement)void node?.requestFullscreen();else void document.exitFullscreen();}} aria-label="Plein écran">⛶</button>
           </div></div>
         <div className="world-stage tower-world"><PixelFloorGame agents={snapshot?.agents||[]} tasks={snapshot?.tasks||[]} events={snapshot?.events||[]}
-          selectedId={selectedId} onPick={id=>openAgent(id)} marketPoints={marketPoints} marketRetrievedAt={marketRetrievedAt}
+          selectedId={selectedId} onPick={id=>openAgent(id)} onTaskPick={inspectCockpitTask} marketPoints={marketPoints} marketRetrievedAt={marketRetrievedAt}
           marketError={marketSnapshot?.error} internshipError={internshipHighlight?.error} featuredOffers={featuredOffers}/>
           <div className="game-brand-hud"><span className="city-brand-mark" aria-hidden="true"><i/><i/><i/><i/></span><div><strong>MarketDesk City</strong><small>Global Markets &middot; AI Tower</small></div></div>
           <div className="command-search"><span aria-hidden="true">⌕</span><input aria-label="Rechercher un agent ou une mission" placeholder="Rechercher un agent, une mission…" value={commandQuery} onChange={e=>setCommandQuery(e.target.value)}/>{commandQuery.trim()&&<div className="command-search-results">{(snapshot?.agents||[]).filter(a=>(a.name+" "+a.role).toLowerCase().includes(commandQuery.toLowerCase())).map(a=><button key={a.id} onClick={()=>{openAgent(a.id);setCommandQuery("");}}>{a.name}<small>{a.role}</small></button>)}{(snapshot?.tasks||[]).filter(t=>t.description.toLowerCase().includes(commandQuery.toLowerCase())).slice(0,5).map(t=><button key={t.id} onClick={()=>{showResult(t);setCommandQuery("");}}>{t.description}<small>{LABELS[t.status]}</small></button>)}<button onClick={()=>setCommandQuery("")}>Fermer la recherche</button></div>}</div>
@@ -710,21 +707,18 @@ function App(): React.ReactElement {
             <button type="button" className={windowMode==="missions"?"active":""} onClick={()=>setWindowMode(windowMode==="missions"?"none":"missions")} aria-label="Missions" aria-pressed={windowMode==="missions"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M9 3h6v4H9zM8 12h8M8 16h5"/></svg><span>Missions</span>{activeCount>0&&<b>{activeCount}</b>}</button>
             <button type="button" className={windowMode==="activity"?"active":""} onClick={()=>{if(windowMode==="activity")setWindowMode("none");else openNotifications();}} aria-label="Notifications" aria-pressed={windowMode==="activity"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M2 12h5l3-8 4 16 3-8h5"/></svg><span>Notifications</span>{(pendingCount>0||(snapshot?.events||[]).some(e=>e.id>notificationReadThrough))&&<b>{Math.max(pendingCount,(snapshot?.events||[]).filter(e=>e.id>notificationReadThrough).length)}</b>}</button>
             <button type="button" className={windowMode==="contacts"?"active":""} onClick={()=>setWindowMode(windowMode==="contacts"?"none":"contacts")} aria-label="Contacts" aria-pressed={windowMode==="contacts"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-4-5"/></svg><span>Contacts</span></button>
+            <button type="button" aria-label="Ouvrir Markets" title="Ouvrir Markets" disabled={!!launchingSite} onClick={()=>void openLocalSite("markets")}>M↗<span>Markets</span></button>
+            <button type="button" aria-label="Ouvrir Internships" title="Ouvrir Internships" disabled={!!launchingSite} onClick={()=>void openLocalSite("internships")}>I↗<span>Internships</span></button>
             <button type="button" aria-label="Réglages" onClick={()=>{setSettingsOpen(true);void loadSettings();}}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor"/><circle cx="15" cy="17" r="3" fill="currentColor"/></svg><span>Réglages</span></button>
             <form action="/logout" method="post" className="city-logout"><button type="submit">Quitter</button></form>
           </nav>
           <div className="game-status-hud"><i className="live-dot"/> City active <small>{snapshot?.today_completed??0} missions aujourd’hui</small></div>
           <div className="world-hint">S&eacute;lectionne un bureau ou un robot pour ouvrir son espace.</div></div>
         <div className="world-footer"><span><i className="room-dot trading"/> March&eacute;s</span><span><i className="room-dot career"/> Carri&egrave;res</span><span><i className="room-dot lab"/> Laboratoire</span><span className="world-footer-note">Les robots r&eacute;agissent aux missions et transferts r&eacute;els.</span></div>      </div>
-      {panelCollapsed&&<button className="console-reopen" onClick={()=>setPanelCollapsed(false)} aria-label="Ouvrir le centre de commande">☰ Command Center</button>}
-      <aside className="agent-panel command-console" aria-label="Centre de commande">
-        <div className="console-resizer" role="separator" aria-label="Largeur du panneau" aria-orientation="vertical" aria-valuenow={panelWidth} aria-valuemin={340} aria-valuemax={600} tabIndex={0}
-          onKeyDown={e=>{if(e.key==="ArrowLeft"||e.key==="ArrowRight"){e.preventDefault();setPanelWidth(w=>Math.max(340,Math.min(600,w+(e.key==="ArrowLeft"?20:-20))));}}}
-          onPointerDown={e=>{resizeStart.current={x:e.clientX,width:panelWidth};e.currentTarget.setPointerCapture(e.pointerId);}}
-          onPointerMove={e=>{if(resizeStart.current)setPanelWidth(Math.max(340,Math.min(600,resizeStart.current.width+resizeStart.current.x-e.clientX)));}}
-          onPointerUp={()=>{resizeStart.current=null;}} onPointerCancel={()=>{resizeStart.current=null;}}/>
-        <Cockpit agents={snapshot?.agents||[]} tasks={snapshot?.tasks||[]} events={snapshot?.events||[]} selectedId={selectedId}
-          onSelect={id=>{setSelectedId(id);setPanelCollapsed(false);setWindowMode("agent");}} onCollapse={()=>setPanelCollapsed(true)}
+    </div>
+    {windowMode==="agent"&&<section className="game-popup agent-dialog" role="dialog" aria-label="Fiche de l’agent">
+        <Cockpit compact agents={snapshot?.agents||[]} tasks={snapshot?.tasks||[]} events={snapshot?.events||[]} selectedId={selectedId}
+          onSelect={id=>setSelectedId(id)} onCollapse={()=>setWindowMode("none")}
           onNotifications={openNotifications} onOpen={inspectCockpitTask}
           onChat={message=>{if(message)setChatInput(message);openAgent("desk_manager","chat");}}
           onContacts={()=>setWindowMode("contacts")} onCancel={id=>api(`/city/api/tasks/${id}/cancel`,{})}
@@ -732,20 +726,20 @@ function App(): React.ReactElement {
           onReview={()=>api('/city/api/jules/review',{})} onCode={request=>api('/city/api/jules/change',{request})} onRefresh={refresh}
           onSite={kind=>void openLocalSite(kind)} siteBusy={!!launchingSite} siteError={siteError}/>
 
-      </aside>
-    </div>
-    {windowMode==="chat"&&<ManagerChatWindow onClose={()=>setWindowMode("agent")}>{managerChat}</ManagerChatWindow>}
-    {windowMode==="contacts"&&<NetworkContactsWindow onClose={()=>setWindowMode("agent")}/>}
+      </section>}
+    {windowMode==="chat"&&<ManagerChatWindow onClose={()=>setWindowMode("none")}>{managerChat}</ManagerChatWindow>}
+    {windowMode==="contacts"&&<NetworkContactsWindow onClose={()=>setWindowMode("none")}/>}
     {windowMode==="missions"&&<section className="game-popup game-mission-control" aria-label="Mission Control">
       <div className="game-popup-heading"><div><strong>Mission Control</strong><small>{activeCount} en cours &middot; {pendingCount} à valider</small></div><button type="button" onClick={()=>setWindowMode("none")} aria-label="Fermer">&times;</button></div>
       {managerPanel()}</section>}
     {windowMode==="activity"&&<NotificationCenter key={`${notificationView.filter}-${notificationView.agent}`} initialFilter={notificationView.filter} initialAgent={notificationView.agent} tasks={snapshot?.tasks||[]} events={snapshot?.events||[]} agents={snapshot?.agents||[]} readThrough={notificationReadThrough}
-      onClose={()=>setWindowMode("agent")} onOpen={id=>{const task=snapshot?.tasks.find(t=>t.id===id);if(task)showResult(task);else setError("Cette mission n'est plus dans les données chargées.");}}
+      onClose={()=>setWindowMode("none")} onOpen={id=>{const task=snapshot?.tasks.find(t=>t.id===id);if(task)showResult(task);else setError("Cette mission n'est plus dans les données chargées.");}}
       onRead={async()=>{const result=await api<{last_read_event_id:number}>("/city/api/notifications/read",{read_through:Math.max(0,...(snapshot?.events||[]).map(e=>e.id))});setNotificationReadThrough(result.last_read_event_id);}}
       onRelaunch={()=>api("/city/api/agents/job_hunter/run",{})} onCodeRequest={request=>api('/city/api/jules/change',{request})} onCodexReview={()=>api('/city/api/jules/review',{})} onApprove={id=>api(`/city/api/tasks/${id}/approve`,{})}
       onCancel={id=>api(`/city/api/tasks/${id}/cancel`,{})} onReview={(id,approved)=>api(`/city/api/proposals/${id}/review`,{approved})}
       onRetry={id=>api(`/city/api/tasks/${id}/retry`,{})} onRefresh={refresh}/>}
     {error&&<div className="city-toast" role="alert"><span>{error}</span><button type="button" onClick={()=>setError("")} aria-label="Fermer">&times;</button></div>}
+    {siteError&&<div className="city-toast" role="alert"><span>{siteError}</span><button type="button" onClick={()=>setSiteError("")} aria-label="Fermer">&times;</button></div>}
     {resultTaskId&&<section className={`game-popup mission-results-window ${snapshot?.tasks.find(t=>t.id===resultTaskId)?.agent_id==='market_analyst'?'market-brief-window':''}`} role="dialog" aria-label="Résultat de mission"><div className="game-popup-heading"><div><strong>Résultat de mission</strong><small>Contributions enregistrées par les agents</small></div><button type="button" onClick={()=>setResultTaskId(null)} aria-label="Fermer le résultat">×</button></div><div className="mission-results-body">
       {(()=>{const root=snapshot?.tasks.find(t=>t.id===resultTaskId);if(!root)return <p>Cette mission n’est plus disponible dans les données chargées.</p>;
         const parts=root.workflow_id?(snapshot?.tasks||[]).filter(t=>t.workflow_id===root.workflow_id):[root];

@@ -1435,3 +1435,26 @@ body { overflow:hidden; }
   .settings-dialog { height:calc(100dvh - 16px); padding:0 16px 20px; }
   .settings-heading { margin:0 -16px 16px; }
 }
+
+/* The city fills the viewport; agent controls open only when selected. */
+.game-app .city-dashboard.command-center.city-full-width {
+  grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); overflow:hidden;
+}
+.game-app .city-full-width .command-search { left:50%; transform:translateX(-50%); width:min(26vw,380px); }
+.game-app .agent-dialog {
+  top:50%; left:50%; right:auto; transform:translate(-50%,-50%);
+  width:min(440px,calc(100vw - 28px)); height:auto; max-height:min(620px,calc(100dvh - 28px));
+  display:flex; flex-direction:column; gap:12px; padding:18px;
+  border-color:var(--city-border); background:linear-gradient(145deg,#1c5558,#103338);
+}
+.agent-dialog .cockpit-metrics,.agent-dialog .cockpit-decision,.agent-dialog .cockpit-section.is-idle,
+.agent-dialog .cockpit-section[aria-label="Missions actives"],.agent-dialog .cockpit-error-link,
+.agent-dialog .cockpit-section[aria-label="Derniers résultats"],.agent-dialog .cockpit-footer { display:none; }
+.agent-dialog .cockpit-scroll { min-height:0; overflow-y:auto; }
+.agent-dialog .cockpit-agent { border:0; padding:0; }
+.agent-dialog .cockpit-agent>header { margin-bottom:8px; }
+.agent-dialog .cockpit-heading h2 { font-size:22px; }
+@media(max-width:700px){
+  .game-app .city-dashboard.command-center.city-full-width { display:grid !important; grid-template-rows:minmax(0,1fr); padding:58px 8px 8px; }
+  .game-app .agent-dialog { top:50%; left:50%; right:auto; width:min(440px,calc(100vw - 20px)); height:auto; max-height:calc(100dvh - 24px); }
+}

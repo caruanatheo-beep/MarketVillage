@@ -3,6 +3,7 @@ import {cockpitData,resultSummary,type CockpitTask} from './cockpitData';
 import {type NotificationEvent} from './notifications';
 type Agent={id:string;name:string;role:string;description:string;status:string};
 type Props={agents:Agent[];tasks:CockpitTask[];events:NotificationEvent[];selectedId:string;
+  compact?:boolean;
   onSelect:(id:string)=>void;onNotifications:(filter:string,agent?:string)=>void;onOpen:(id:string)=>void;
   onChat:(message?:string)=>void;onContacts:()=>void;onCancel:(id:string)=>Promise<unknown>;
   onLaunch:(id:string)=>Promise<unknown>;onReview:()=>Promise<unknown>;onCode:(request:string)=>Promise<unknown>;onRefresh:()=>Promise<void>;
@@ -20,7 +21,7 @@ export function Cockpit(p:Props){
   const agentBusy=selected&&p.tasks.some(t=>t.agent_id===selected.id&&['running','queued','waiting_approval'].includes(t.status));
   const name=(id:string)=>p.agents.find(a=>a.id===id)?.name||'Agent';
   return <>
-    <header className="cockpit-heading"><div><span className="cockpit-eyebrow">MARKETDESK CITY</span><h2>Ton cockpit</h2></div><button className="cockpit-icon" onClick={p.onCollapse} aria-label="Replier le panneau">→</button></header>
+    <header className="cockpit-heading"><div><span className="cockpit-eyebrow">MARKETDESK CITY</span><h2>{p.compact?selected?.name||'Agent':'Ton cockpit'}</h2></div><button className="cockpit-icon" onClick={p.onCollapse} aria-label="Fermer la fiche">×</button></header>
     <nav className="cockpit-metrics" aria-label="Résumé des missions">
       <button onClick={()=>p.onNotifications('active')}><strong>{data.active.length}</strong><span><i className="cockpit-dot"/>En cours</span></button>
       <button className={data.decisions.length?'needs-attention':''} onClick={()=>p.onNotifications('decision')}><strong>{data.decisions.length}</strong><span>Décisions</span></button>

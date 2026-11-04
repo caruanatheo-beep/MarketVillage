@@ -5,9 +5,10 @@ Les identifiants SQLite existants sont conservés pour ne pas perdre l'historiqu
 `developer` Axel Interview Coach. `innovation_lab` désigne Nova. Ces identifiants ne
 donnent aucun accès aux anciens outils. Le Desk Manager est l'unique chat utilisateur.
 
-Le cockpit latéral privilégie les décisions, les missions actives, la fiche de l'agent
-sélectionné et les derniers résultats. Ses compteurs ouvrent les notifications avec
-le filtre correspondant (dont les résultats du jour à l'heure de Paris).
+La ville occupe la largeur disponible. Une bulle au-dessus d'un agent en mission
+affiche son travail en cours et ouvre la mission au clic. La fiche de l'agent
+s'ouvre en fenêtre au clic sur son personnage ou son bureau. Missions et
+Notifications conservent les décisions et les résultats détaillés.
 Les étapes affichées proviennent du dernier événement enregistré, sans progression
 inventée. Seules les missions en attente proposent une annulation ; les décisions
 restent dans leurs écrans de validation existants. Les diagnostics et l'usage API
