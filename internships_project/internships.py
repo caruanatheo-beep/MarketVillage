@@ -438,13 +438,22 @@ def _title_period(title: str) -> str:
 
 
 def start_month(period: str) -> str:
+    """Return a start month only when the advertised date is valid."""
     text = period.strip().casefold()
-    date_match = re.search(r"(\d{1,2})[/.](\d{1,2})[/.](\d{4})", text)
+    date_match = re.search(r"\b(\d{1,2})[/.](\d{1,2})[/.](\d{4})\b", text)
     if date_match:
-        return f"{date_match.group(3)}-{int(date_match.group(2)):02d}"
-    iso_match = re.search(r"\b(20\d{2})-(\d{2})(?:-\d{2})?\b", text)
+        try:
+            parsed = date(int(date_match.group(3)), int(date_match.group(2)), int(date_match.group(1)))
+        except ValueError:
+            return ""
+        return parsed.isoformat()[:7]
+    iso_match = re.search(r"\b(20\d{2})-(\d{2})(?:-(\d{2}))?\b", text)
     if iso_match:
-        return f"{iso_match.group(1)}-{iso_match.group(2)}"
+        try:
+            parsed = date(int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3) or 1))
+        except ValueError:
+            return ""
+        return parsed.isoformat()[:7]
     month_match = re.search(rf"\b({_MONTH})\s+(20\d{{2}})\b", text)
     if month_match:
         return f"{month_match.group(2)}-{_MONTH_ALIASES[month_match.group(1)]:02d}"
