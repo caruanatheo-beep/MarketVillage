@@ -13,7 +13,7 @@ export function NotificationCenter(props:Props){
   const [team,setTeam]=useState<'all'|'code'|'business'>('all');
   const [busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [codeRequest,setCodeRequest]=useState('');
-  useEffect(()=>{const el=dialog.current,previous=document.activeElement as HTMLElement|null;el?.showModal();el?.querySelector<HTMLInputElement>('input')?.focus();return()=>{el?.close();previous?.focus();};},[]);
+  useEffect(()=>{const el=dialog.current,previous=document.activeElement as HTMLElement|null;el?.show();el?.querySelector<HTMLInputElement>('input')?.focus();return()=>{el?.close();previous?.focus();};},[]);
   const rows=notificationRows(props.tasks,props.events,props.readThrough);
   const decisions=props.tasks.filter(needsDecision).length,failures=props.tasks.filter(t=>t.status==='failed').length,completed=props.tasks.filter(t=>t.status==='completed'&&!isPendingProposal(t)).length;
   const visible=rows.filter(({task,unread})=>(!agent||task.agent_id===agent)&&(team==='all'||(team==='code')===(agentGroup(task.agent_id)==='Développement'))&&
@@ -24,7 +24,7 @@ export function NotificationCenter(props:Props){
     try{await operation();await props.onRefresh();setNotice(success);}catch(exc){setError(exc instanceof Error?exc.message:'Action impossible.');}finally{setBusy('');}
   }
   const julesActive=props.tasks.some(t=>t.agent_id==='job_hunter'&&['running','queued','waiting_approval'].includes(t.status));
-  return <dialog ref={dialog} className="network-window notification-center" aria-labelledby="notifications-title" onCancel={props.onClose}>
+  return <dialog ref={dialog} className="network-window notification-center" aria-labelledby="notifications-title" onCancel={props.onClose} onKeyDown={e=>{if(e.key==="Escape")props.onClose();}}>
     <header className="notification-heading"><div><span className="notification-eyebrow">TON VILLAGE, EN UN COUP D’ŒIL</span><h2 id="notifications-title">Centre de notifications</h2><p>Les décisions à prendre, les résultats à consulter et les missions à suivre.</p></div><button type="button" className="network-close" onClick={props.onClose} aria-label="Fermer les notifications">×</button></header>
     <div className="notification-content">
     <div className="notification-summary">

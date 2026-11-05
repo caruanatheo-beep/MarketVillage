@@ -4,13 +4,13 @@ export function ManagerChatWindow({children,onClose}:{children:React.ReactNode;o
   const dialog=useRef<HTMLDialogElement>(null);
   useEffect(()=>{
     const el=dialog.current, previous=document.activeElement as HTMLElement|null;
-    el?.showModal();
+    el?.show();
     el?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
     const history=el?.querySelector<HTMLElement>(".chat-history");
     if(history)history.scrollTop=history.scrollHeight;
     return()=>{el?.close();previous?.focus();};
   },[]);
-  return <dialog ref={dialog} className="network-window manager-chat-window" aria-labelledby="manager-chat-title" onCancel={onClose}
+  return <dialog ref={dialog} className="network-window manager-chat-window" aria-labelledby="manager-chat-title" onCancel={onClose} onKeyDown={event=>{if(event.key==="Escape")onClose();}}
     onClick={event=>{if(event.target===event.currentTarget){const r=event.currentTarget.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)onClose();}}}>
     <header className="network-window-heading">
       <span className="network-host roster-avatar pixel-agent-avatar desk_manager" aria-hidden="true"><i className="agent-sprite"/></span>

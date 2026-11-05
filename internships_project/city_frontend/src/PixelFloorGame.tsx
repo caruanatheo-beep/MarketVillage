@@ -37,8 +37,8 @@ const ROOT = "/city/pixel-assets";
 const ROSTER = ["market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout", "city_ui_engineer", "internships_engineer", "quality_engineer", "securities_scout"];
 const MANAGER_ID = "desk_manager";
 const WORLD_ROSTER = [...ROSTER, MANAGER_ID];
-const MARKET_PANEL = { col: -1.25, width: 14.5, top: 0.3, height: 6.0 };
-const OFFERS_PANEL = { col: 35.2, width: 14.5, top: 0.3, height: 6.0 };
+const MARKET_PANEL = { col: -100, width: 18, top: 0.3, height: 7.2 };
+const OFFERS_PANEL = { col: 100, width: 18, top: 0.3, height: 7.2 };
 function fitPanel(geometry: typeof MARKET_PANEL, zoom: number, offsetX: number, canvasWidth: number): typeof MARKET_PANEL {
   const cell = TILE_SIZE * zoom, inset = Math.max(3, cell * .35);
   const maxX = Math.max(inset, canvasWidth - geometry.width * cell - inset);
@@ -767,7 +767,7 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
   ];
   const gap = cell * 0.34;
   const slot = (market.w - gap * 2) / items.length;
-  write("LE POINT MARCHÉS", market.x + cell * .52, market.y + cell * .61, "#aaf2df", 8.6, "700");
+  write("LE POINT MARCHÉS", market.x + cell * .52, market.y + cell * .7, "#aaf2df", 11.5, "700");
   const centered = (text: string, x: number, y: number, color: string, size: number, weight: string) => {
     ctx.font = `${weight} ${Math.max(zoom < .7 ? 5.5 : 9.5, size * zoom)}px Inter, Arial, sans-serif`;
     write(text, x - ctx.measureText(text).width / 2, y, color, size, weight);
@@ -775,14 +775,14 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
   items.forEach((item, index) => {
     const x = market.x + gap + (index + .5) * slot;
     const point = marketPoints.find(reading => reading.series_id === item.id);
-    const wellX = x - slot * .46, wellY = market.y + cell * 1.24;
-    ctx.beginPath(); ctx.roundRect(wellX, wellY, slot * .92, cell * 4.25, cell * .2);
+    const wellX = x - slot * .46, wellY = market.y + cell * 1.35;
+    ctx.beginPath(); ctx.roundRect(wellX, wellY, slot * .92, cell * 5.25, cell * .2);
     ctx.fillStyle = "#071f2a65"; ctx.fill();
     ctx.strokeStyle = "#9dcbbe30"; ctx.lineWidth = Math.max(.7, zoom * .3); ctx.stroke();
-    centered(item.label, x, market.y + cell * 1.72, "#b8d5d2", 7.3, "600");
+    centered(item.label, x, market.y + cell * 1.95, "#b8d5d2", 9.5, "600");
     if (!point || !Number.isFinite(point.value)) {
-      centered("—", x, market.y + cell * 2.65, "#e5edf4", 8, "700");
-      centered("N/D", x, market.y + cell * 3.5, "#94a7b8", 5, "500");
+      centered("—", x, market.y + cell * 3.15, "#e5edf4", 11, "700");
+      centered("N/D", x, market.y + cell * 4.2, "#94a7b8", 8, "500");
       return;
     }
     const value = point.value.toLocaleString("en-GB", {minimumFractionDigits:item.decimals, maximumFractionDigits:item.decimals});
@@ -791,13 +791,13 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
         ? `${point.change >= 0 ? "+" : ""}${(point.change * 100).toFixed(0)} bp`
         : `${point.change >= 0 ? "+" : ""}${(point.change / point.previous * 100).toFixed(1)}%`
       : "—";
-    centered(value + (item.id === "DGS10" ? "%" : ""), x, market.y + cell * 2.65, "#f4f7fb", 12.6, "700");
-    centered(delta, x, market.y + cell * 3.5,
+    centered(value + (item.id === "DGS10" ? "%" : ""), x, market.y + cell * 3.15, "#f4f7fb", 15.2, "700");
+    centered(delta, x, market.y + cell * 4.2,
       point.change == null ? "#a8b6c3" : point.change >= 0 ? "#41ecc4" : "#ff665e",
-      8, "700");
+      10, "700");
     if(point.previous != null && Number.isFinite(point.previous)) {
       const rising=point.value>=point.previous;
-      const left=x-slot*.31,right=x+slot*.31,base=market.y+cell*4.85;
+      const left=x-slot*.31,right=x+slot*.31,base=market.y+cell*5.85;
       ctx.strokeStyle='#94b4c72e';ctx.lineWidth=Math.max(1,zoom*.4);
       ctx.beginPath();ctx.moveTo(left,base);ctx.lineTo(right,base);ctx.stroke();
       ctx.strokeStyle=rising?'#41ecc4':'#ff665e';ctx.lineWidth=Math.max(1,zoom*.7);
@@ -808,30 +808,30 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
 
   const x = jobs.x + cell * 0.62;
   const max = jobs.w - cell * 1.25;
-  write("OPPORTUNITÉ DU JOUR", x, jobs.y + cell * 0.61, "#f7d7a3", 8.4, "700", max);
+  write("OPPORTUNITÉ DU JOUR", x, jobs.y + cell * 0.7, "#f7d7a3", 11.5, "700", max);
   if (!featured) {
     write(internshipError ? "Offres temporairement indisponibles" : "Aucune offre à afficher",
-      x, jobs.y + cell * 2.5, "#d2e0dc", 8, "500", max);
+      x, jobs.y + cell * 2.5, "#d2e0dc", 11, "500", max);
     return;
   }
   ctx.beginPath();
-  ctx.roundRect(jobs.x + cell * .38, jobs.y + cell * 1.25, jobs.w - cell * .76, cell * 3.1, cell * .2);
+  ctx.roundRect(jobs.x + cell * .38, jobs.y + cell * 1.35, jobs.w - cell * .76, cell * 4.3, cell * .2);
   ctx.fillStyle = "#071d2866"; ctx.fill();
   ctx.fillStyle = "#f1c782";
-  ctx.fillRect(jobs.x + cell * .38, jobs.y + cell * 1.5, Math.max(2, zoom * .8), cell * 2.5);
-  write(featured.company || "Entreprise non indiquée", x, jobs.y + cell * 1.65, "#fff8ed", 12.5, "700", max);
-  ctx.font = `500 ${Math.max(zoom < .7 ? 5.5 : 9.5, 8.7 * zoom)}px Inter, Arial, sans-serif`;
+  ctx.fillRect(jobs.x + cell * .38, jobs.y + cell * 1.6, Math.max(2, zoom * .8), cell * 3.7);
+  write(featured.company || "Entreprise non indiquée", x, jobs.y + cell * 1.85, "#fff8ed", 16, "700", max);
+  ctx.font = `500 ${Math.max(11, 11 * zoom)}px Inter, Arial, sans-serif`;
   const words = featured.title.split(/\s+/);
   let line = "";
   while (words.length && ctx.measureText([line, words[0]].filter(Boolean).join(" ")).width <= max) line += (line ? " " : "") + words.shift();
   if (!line) line = words.shift() || "";
-  write(line, x, jobs.y + cell * 2.38, "#e7f0ed", 8.7, "500", max);
-  write(words.join(" "), x, jobs.y + cell * 3.08, "#e7f0ed", 8.7, "500", max);
-  write(featured.location || "Lieu non indiqué", x, jobs.y + cell * 3.87, "#b8d6cf", 7.5, "600", max);
-  const navY = jobs.y + cell * 5.08;
+  write(line, x, jobs.y + cell * 2.8, "#e7f0ed", 11, "500", max);
+  write(words.join(" "), x, jobs.y + cell * 3.7, "#e7f0ed", 11, "500", max);
+  write(featured.location || "Lieu non indiqué", x, jobs.y + cell * 4.8, "#b8d6cf", 10, "600", max);
+  const navY = jobs.y + cell * 6.28;
   ctx.beginPath(); ctx.roundRect(x, navY - cell * .39, cell * 4.35, cell * .78, cell * .16);
   ctx.fillStyle = "#cceee0"; ctx.fill();
-  write("Voir l’offre ↗", x + cell * .33, navY, "#17443f", 7.6, "700", cell * 3.8);
+  write("Voir l’offre ↗", x + cell * .33, navY, "#17443f", 10, "700", cell * 3.8);
   if (offerCount > 1) {
     const buttonW = cell * 0.88, buttonH = cell * 0.58;
     const prevX = jobs.x + jobs.w - cell * 2.62;
@@ -1209,7 +1209,7 @@ export function PixelFloorGame(props: Props): React.ReactElement {
       tileY >= offersPanel.top && tileY <= offersPanel.top + offersPanel.height) {
       const prevX = offersPanel.col + offersPanel.width - 2.62;
       const nextX = offersPanel.col + offersPanel.width - 1.48;
-      if (offers.length > 1 && tileY >= offersPanel.top + 4.79 && tileY <= offersPanel.top + 5.37) {
+      if (offers.length > 1 && tileY >= offersPanel.top + 5.99 && tileY <= offersPanel.top + 6.57) {
         if (tileX >= prevX && tileX <= prevX + 0.88) {
           setOfferIndex((offerIndexRef.current - 1 + offers.length) % offers.length);
           return;
@@ -1268,7 +1268,7 @@ export function PixelFloorGame(props: Props): React.ReactElement {
       const offer = offers[Math.min(offerIndexRef.current, offers.length - 1)];
       const prevX = offersPanel.col + offersPanel.width - 2.62;
       const nextX = offersPanel.col + offersPanel.width - 1.48;
-      const isPager = offers.length > 1 && tileY >= offersPanel.top + 4.79 && tileY <= offersPanel.top + 5.37 &&
+      const isPager = offers.length > 1 && tileY >= offersPanel.top + 5.99 && tileY <= offersPanel.top + 6.57 &&
         (tileX >= prevX && tileX <= prevX + 0.88 || tileX >= nextX && tileX <= nextX + 0.88);
       node.title = isPager ? "Parcourir les offres" : offer
         ? `${offer.company} — ${offer.title}\n${offer.location || "Lieu non indiqué"}\nContrat : ${offer.kind || "non indiqué"}\nDébut : ${offer.start_period || "non indiqué"}\nPublication : ${offer.published ? offer.published_inferred ? `date estimée à la détection (${offer.published})` : offer.published : "non indiquée"}\nSource : ${offer.source || "non indiquée"}${offer.selection_reason ? `\n${offer.selection_reason}` : ""}`

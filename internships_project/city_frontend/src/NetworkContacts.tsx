@@ -20,11 +20,11 @@ export function NetworkContactsWindow({onClose}:{onClose:()=>void}){
   const dialog=useRef<HTMLDialogElement>(null);
   useEffect(()=>{
     const el=dialog.current,previous=document.activeElement as HTMLElement|null;
-    el?.showModal();
+    el?.show();
     el?.querySelector<HTMLInputElement>('input[aria-label="Rechercher un contact"]')?.focus();
     return()=>{el?.close();previous?.focus();};
   },[]);
-  return <dialog ref={dialog} className="network-window" aria-labelledby="network-window-title" onCancel={onClose}
+  return <dialog ref={dialog} className="network-window" aria-labelledby="network-window-title" onCancel={onClose} onKeyDown={e=>{if(e.key==="Escape")onClose();}}
     onClick={e=>{if(e.target===e.currentTarget){const r=e.currentTarget.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)onClose();}}}>
     <header className="network-window-heading">
       <span className="network-host roster-avatar pixel-agent-avatar networker" aria-hidden="true"><i className="agent-sprite"/></span>

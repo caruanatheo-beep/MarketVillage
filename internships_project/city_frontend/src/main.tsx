@@ -363,6 +363,10 @@ function App(): React.ReactElement {
   function openNotifications(filter="all",agent=""):void {
     setNotificationView({filter,agent});setWindowMode("activity");
   }
+  function switchTab(mode:typeof windowMode):void {
+    setResultTaskId(null);setResultTaskDetail(null);
+    setWindowMode(windowMode===mode?"none":mode);
+  }
   function openAgent(id:string, tab?:"chat"|"missions"|"history"):void {
     setSelectedId(id);
     if(tab==="history"){openNotifications("all",id==="desk_manager"?"":id);return;}
@@ -665,7 +669,8 @@ function App(): React.ReactElement {
           <label>Priorité<select value={workflowPriority} onChange={event=>setWorkflowPriority(Number(event.target.value))}><option value={0}>Normale</option><option value={1}>Élevée</option><option value={2}>Urgente</option></select></label></div>
         <button type="submit" className="primary-button" disabled={busy||!mission.trim()}>{busy?"Préparation...":"Lancer le projet"}</button>
       </form>
-      <section className="workflow-builder">
+      <details className="workflow-builder">
+        <summary>Workflow personnalisé <span>Créer des étapes ou relancer un scénario enregistré</span></summary>
         <div className="section-heading"><div><h3>Constructeur de workflows</h3><small>Relie les étapes et enregistre ton scénario pour le relancer en un clic.</small></div>
           <button type="button" className="secondary-button compact-button" onClick={newWorkflowDefinition}>Nouveau</button></div>
         <label className="workflow-name-field">Nom du workflow
@@ -709,7 +714,7 @@ function App(): React.ReactElement {
             </div>
           </article>)}
         </div>}
-      </section>
+      </details>
       <details className="memory-center">
         <summary><span>Mémoire partagée</span><small>{memoryEntries.length} élément(s) · compte actuel</small></summary>
         <p className="memory-note">Recherche locale par mots-clés et synonymes, sans appel IA. Les offres gardées en mémoire restent historiques.</p>
@@ -791,12 +796,13 @@ function App(): React.ReactElement {
            <div className="command-topbar"><div className="game-brand-hud"><span className="city-brand-mark" aria-hidden="true"><i/><i/><i/><i/></span><div><strong>MarketDesk City</strong><small>Global Markets &middot; AI Tower</small></div></div>
            <div className="command-search"><span aria-hidden="true">⌕</span><input aria-label="Rechercher un agent ou une mission" placeholder="Rechercher un agent, une mission…" value={commandQuery} onChange={e=>setCommandQuery(e.target.value)}/>{commandQuery.trim()&&<div className="command-search-results">{(['Développement','Agents métier'] as const).map(group=>{const agents=(snapshot?.agents||[]).filter(a=>agentGroup(a.id)===group&&(a.name+' '+a.role).toLowerCase().includes(commandQuery.toLowerCase()));return agents.length?<div className="command-result-group" key={group}><strong>{group}</strong>{agents.map(a=><button key={a.id} onClick={()=>{openAgent(a.id);setCommandQuery('');}}>{a.name}<small>{a.role}</small></button>)}</div>:null})}{(snapshot?.tasks||[]).filter(t=>t.description.toLowerCase().includes(commandQuery.toLowerCase())).slice(0,5).map(t=><button key={t.id} onClick={()=>{showResult(t);setCommandQuery("");}}>{t.description}<small>{agentGroup(t.agent_id)} · {LABELS[t.status]}</small></button>)}<button onClick={()=>setCommandQuery("")}>Fermer la recherche</button></div>}</div>
           <nav className="game-hud" aria-label="Commandes MarketDesk City">
-             <button type="button" className={windowMode==="agents"?"active":""} onClick={()=>setWindowMode(windowMode==="agents"?"none":"agents")} aria-label="Équipe" aria-pressed={windowMode==="agents"}><span>Équipe</span></button>
-            <button type="button" className={windowMode==="missions"?"active":""} onClick={()=>setWindowMode(windowMode==="missions"?"none":"missions")} aria-label="Missions" aria-pressed={windowMode==="missions"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M9 3h6v4H9zM8 12h8M8 16h5"/></svg><span>Missions</span>{activeCount>0&&<b>{activeCount}</b>}</button>
-            <button type="button" className={windowMode==="activity"?"active":""} onClick={()=>{if(windowMode==="activity")setWindowMode("none");else openNotifications();}} aria-label="Notifications" aria-pressed={windowMode==="activity"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M2 12h5l3-8 4 16 3-8h5"/></svg><span>Notifications</span>{(pendingCount>0||(snapshot?.events||[]).some(e=>e.id>notificationReadThrough))&&<b>{Math.max(pendingCount,(snapshot?.events||[]).filter(e=>e.id>notificationReadThrough).length)}</b>}</button>
-            <button type="button" className={windowMode==="contacts"?"active":""} onClick={()=>setWindowMode(windowMode==="contacts"?"none":"contacts")} aria-label="Contacts" aria-pressed={windowMode==="contacts"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-4-5"/></svg><span>Contacts</span></button>
-            <button type="button" aria-label="Ouvrir Markets" title="Ouvrir Markets" disabled={!!launchingSite} onClick={()=>void openLocalSite("markets")}>M↗<span>Markets</span></button>
-            <button type="button" aria-label="Ouvrir Internships" title="Ouvrir Internships" disabled={!!launchingSite} onClick={()=>void openLocalSite("internships")}>I↗<span>Internships</span></button>
+            <button type="button" className={windowMode==="none"?"active":""} onClick={()=>switchTab("none")} aria-label="Ville" aria-pressed={windowMode==="none"}><span>Ville</span></button>
+             <button type="button" className={windowMode==="agents"?"active":""} onClick={()=>switchTab("agents")} aria-label="Équipe" aria-pressed={windowMode==="agents"}><span>Équipe</span></button>
+            <button type="button" className={windowMode==="missions"?"active":""} onClick={()=>switchTab("missions")} aria-label="Missions" aria-pressed={windowMode==="missions"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M9 3h6v4H9zM8 12h8M8 16h5"/></svg><span>Missions</span>{activeCount>0&&<b>{activeCount}</b>}</button>
+            <button type="button" className={windowMode==="activity"?"active":""} onClick={()=>{if(windowMode==="activity")switchTab("activity");else{setResultTaskId(null);setResultTaskDetail(null);openNotifications();}}} aria-label="Notifications" aria-pressed={windowMode==="activity"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M2 12h5l3-8 4 16 3-8h5"/></svg><span>Notifications</span>{(pendingCount>0||(snapshot?.events||[]).some(e=>e.id>notificationReadThrough))&&<b>{Math.max(pendingCount,(snapshot?.events||[]).filter(e=>e.id>notificationReadThrough).length)}</b>}</button>
+            <button type="button" className={windowMode==="contacts"?"active":""} onClick={()=>switchTab("contacts")} aria-label="Contacts" aria-pressed={windowMode==="contacts"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-4-5"/></svg><span>Contacts</span></button>
+            <button type="button" aria-label="Ouvrir Markets" title="Ouvrir Markets" disabled={!!launchingSite} onClick={()=>void openLocalSite("markets")}><span>Marchés ↗</span></button>
+            <button type="button" aria-label="Ouvrir Internships" title="Ouvrir Internships" disabled={!!launchingSite} onClick={()=>void openLocalSite("internships")}><span>Stages ↗</span></button>
             <button type="button" aria-label="Réglages" onClick={()=>{setSettingsOpen(true);void loadSettings();}}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor"/><circle cx="15" cy="17" r="3" fill="currentColor"/></svg><span>Réglages</span></button>
             <form action="/logout" method="post" className="city-logout"><button type="submit">Quitter</button></form>
            </nav></div>
@@ -819,8 +825,8 @@ function App(): React.ReactElement {
     {windowMode==="agents"&&<section className="game-popup team-directory" role="dialog" aria-label="Équipe MarketDesk City"><div className="game-popup-heading"><div><strong>Ton équipe</strong><small>Choisis un agent pour voir son activité et lui confier une mission.</small></div><button type="button" onClick={()=>setWindowMode('none')} aria-label="Fermer">×</button></div><div className="team-directory-body">{([['Développement',groupedAgents(snapshot?.agents||[]).code],['Agents métier',groupedAgents(snapshot?.agents||[]).business]] as const).map(([label,agents])=><section className="team-directory-section" key={label}><header><h3>{label}</h3><span>{agents.length} agents</span></header><div className="team-directory-grid">{agents.map(agent=>{const current=(snapshot?.tasks||[]).find(task=>task.agent_id===agent.id&&['running','queued'].includes(task.status));return <button type="button" className="team-directory-card" key={agent.id} onClick={()=>openAgent(agent.id)}><span className={`roster-avatar pixel-agent-avatar ${agent.id}`} aria-hidden="true"><i className="agent-sprite"/></span><span><strong>{agent.name}</strong><small>{agent.role}</small><em>{current?`${LABELS[current.status]} · ${current.description}`:'Disponible pour une mission'}</em></span><b aria-hidden="true">↗</b></button>})}</div></section>)}</div></section>}
     {windowMode==="chat"&&<ManagerChatWindow onClose={()=>setWindowMode("none")}>{managerChat}</ManagerChatWindow>}
     {windowMode==="contacts"&&<NetworkContactsWindow onClose={()=>setWindowMode("none")}/>}
-    {windowMode==="missions"&&<section className="game-popup game-mission-control" aria-label="Mission Control">
-      <div className="game-popup-heading"><div><strong>Mission Control</strong><small>{activeCount} en cours &middot; {pendingCount} à valider</small></div><button type="button" onClick={()=>setWindowMode("none")} aria-label="Fermer">&times;</button></div>
+    {windowMode==="missions"&&<section className="game-popup game-mission-control" aria-label="Missions">
+      <div className="game-popup-heading"><div><strong>Missions</strong><small>{activeCount} en cours &middot; {pendingCount} à valider</small></div><button type="button" onClick={()=>setWindowMode("none")} aria-label="Fermer">&times;</button></div>
       <div className="mission-view-tabs" role="tablist" aria-label="Vues des missions"><button type="button" role="tab" aria-selected={missionView==='missions'} onClick={()=>setMissionView('missions')}>Toutes les missions</button><button type="button" role="tab" aria-selected={missionView==='code'} onClick={()=>setMissionView('code')}>Équipe de code <span>{(snapshot?.tasks||[]).filter(task=>agentGroup(task.agent_id)==='Développement'&&['queued','running'].includes(task.status)).length}</span></button></div>
       {missionView==='code'?codePanel():managerPanel()}</section>}
     {windowMode==="activity"&&<NotificationCenter key={`${notificationView.filter}-${notificationView.agent}`} initialFilter={notificationView.filter} initialAgent={notificationView.agent} tasks={snapshot?.tasks||[]} events={snapshot?.events||[]} agents={snapshot?.agents||[]} readThrough={notificationReadThrough}
