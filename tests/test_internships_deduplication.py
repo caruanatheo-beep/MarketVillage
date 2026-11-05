@@ -1,9 +1,12 @@
 """Deduplication checks using synthetic offers, without source or data reads."""
 
 from dataclasses import replace
+from datetime import date, datetime, timezone
 from itertools import permutations
 import unittest
+from unittest.mock import Mock, patch
 
+from internships_project import internships
 from internships_project.internships import (
     Opportunity, _deduplicate_opportunities, matching_opportunities,
 )
@@ -24,6 +27,68 @@ class DeduplicationTests(unittest.TestCase):
             with self.subTest(order=[job.kind for job in ordered]):
                 result = _deduplicate_opportunities(ordered)
                 self.assertCountEqual(result, offers)
+
+    def test_richer_duplicate_keeps_confirmed_publication_and_daily_visibility(self):
+        for published, inferred in [("", False), ("2026-11-05", True),
+                                    ("2026-11-31", False)]:
+            detailed = replace(self.offer, published=published,
+                               published_inferred=inferred,
+                               description="Trading desk internship details",
+                               url="https://example.invalid/detailed")
+            for ordered in permutations([self.offer, detailed]):
+                with self.subTest(published=published, order=[job.url for job in ordered]):
+                    result = _deduplicate_opportunities(list(ordered))
+                    self.assertEqual(len(result), 1)
+                    self.assertEqual(result[0].url, detailed.url)
+                    self.assertEqual(result[0].published, self.offer.published)
+                    self.assertFalse(result[0].published_inferred)
+                    self.assertEqual(matching_opportunities(
+                        result, daily=True, today=date(2026, 11, 4)), result)
+
+    def test_confirmed_date_from_another_direct_source_is_preserved(self):
+        undated = replace(self.offer, published="", source="Career site")
+        confirmed = replace(self.offer, source="Public feed",
+                            url="https://example.invalid/feed")
+        for ordered in permutations([undated, confirmed]):
+            result = _deduplicate_opportunities(list(ordered))
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0].published, confirmed.published)
+            self.assertFalse(result[0].published_inferred)
+
+    def test_duplicates_keep_earliest_detection_without_claiming_publication(self):
+        older = replace(self.offer, published="2026-10-20", published_inferred=True)
+        detailed = replace(self.offer, published_inferred=True,
+                           description="Trading desk internship details",
+                           url="https://example.invalid/detailed")
+        for ordered in permutations([older, detailed]):
+            result = _deduplicate_opportunities(list(ordered))
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0].published, older.published)
+            self.assertTrue(result[0].published_inferred)
+
+    def test_publication_dates_do_not_leak_between_start_cohorts(self):
+        april = replace(self.offer, start_period="April 2027")
+        september = replace(self.offer, published="", start_period="September 2027",
+                            url="https://example.invalid/september")
+        for ordered in permutations([april, september]):
+            result = _deduplicate_opportunities(list(ordered))
+            self.assertEqual(next(job for job in result if job.url == september.url).published, "")
+
+    def test_progressive_refresh_publishes_confirmed_date_after_duplicate_replacement(self):
+        detailed = replace(self.offer, published="", description="Trading desk details",
+                           url="https://example.invalid/detailed")
+        now = datetime(2026, 11, 5, tzinfo=timezone.utc)
+        writer = Mock()
+        with patch.multiple(internships, _cache=None, _last_attempt=now,
+                            _refresh_previous_jobs={self.offer.url: self.offer},
+                            _refresh_first_seen={}, _write_cache=writer):
+            internships._publish_refresh_progress([detailed], [])
+            jobs = internships._cache[1]
+            self.assertEqual(len(jobs), 1)
+            self.assertEqual(jobs[0].url, detailed.url)
+            self.assertEqual(jobs[0].published, self.offer.published)
+            self.assertFalse(jobs[0].published_inferred)
+            writer.assert_called_once_with(now, jobs, [])
 
     def test_distinct_start_cohorts_remain_available_to_date_filters(self):
         april = replace(self.offer, start_period="avril 2027")

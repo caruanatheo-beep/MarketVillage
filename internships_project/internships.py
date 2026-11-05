@@ -2307,6 +2307,20 @@ def _collect_source(name: str, loader: object, args: tuple, force: bool) -> tupl
         return [], check, f"{name}: {reason}"
 
 
+def _merge_duplicate_publication(preferred: Opportunity, other: Opportunity) -> Opportunity:
+    """Keep a valid confirmed date, or the earliest detection, for one vacancy."""
+    valid = [job for job in (preferred, other) if _publication_sort_value(job.published)]
+    confirmed = [job for job in valid if not job.published_inferred]
+    if confirmed:
+        publication = confirmed[0]
+    elif valid:
+        publication = min(valid, key=lambda job: job.published)
+    else:
+        return preferred
+    return replace(preferred, published=publication.published,
+                   published_inferred=publication.published_inferred)
+
+
 def _deduplicate_opportunities(jobs: list[Opportunity]) -> list[Opportunity]:
     jobs = _without_jobteaser_duplicates(jobs)
     grouped: dict[tuple[str, str, str, str], list[Opportunity]] = {}
@@ -2335,7 +2349,11 @@ def _deduplicate_opportunities(jobs: list[Opportunity]) -> list[Opportunity]:
                 if previous is not None and previous.source == job.source:
                     job = replace(job, start_period=job.start_period or previous.start_period,
                                   description=job.description or previous.description)
-                unique[month] = job
+                preferred, other = job, previous
+            else:
+                preferred, other = previous, job
+            unique[month] = (_merge_duplicate_publication(preferred, other)
+                             if other is not None else preferred)
         deduplicated.extend(unique.values())
     return sorted(deduplicated, key=_opportunity_sort_key)
 
