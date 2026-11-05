@@ -723,6 +723,7 @@ function App(): React.ReactElement {
           onChat={message=>{if(message)setChatInput(message);openAgent("desk_manager","chat");}}
           onContacts={()=>setWindowMode("contacts")} onCancel={id=>api(`/city/api/tasks/${id}/cancel`,{})}
           onLaunch={id=>id==="internship_scout"?api('/city/api/collect/internships',{}):id==="market_analyst"?api('/city/api/collect/markets',{}):id==="job_hunter"?api('/city/api/develop/job_hunter',{}):api(`/city/api/agents/${id}/run`,{})}
+          onDevelop={(id,request='')=>api(`/city/api/develop/${id}`,{request})}
           onReview={()=>api('/city/api/jules/review',{})} onCode={request=>api('/city/api/jules/change',{request})} onRefresh={refresh}
           onSite={kind=>void openLocalSite(kind)} siteBusy={!!launchingSite} siteError={siteError}/>
 

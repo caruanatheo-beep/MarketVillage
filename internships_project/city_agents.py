@@ -59,6 +59,8 @@ PROMPTS["quality_engineer"] = "You are Maël, Quality Engineer for City and Inte
 PROMPTS["desk_manager"] += " collect_dashboard_data starts Python collectors directly: Mira for Markets and Hugo for Internships. These services do not depend on running Gradio interfaces."
 PROMPTS["desk_manager"] += " For every request to collect or refresh Markets data, use collect_dashboard_data('markets') so Mira runs it. Never assign Markets collection to Noé; Noé only runs quant_report."
 PROMPTS["desk_manager"] += " The development team is Jules (City services), Camille (interfaces), Sacha (Internships sources), and Maël (quality). Use start_specialist_mission with develop for coding requests, or leave its request empty for autonomous analysis. Their bounded Codex jobs can integrate tested changes locally without user approval; report the actual commit and tests, never claim deployment or remote push."
+for _agent_id in AGENT_BY_ID:
+    PROMPTS[_agent_id] += " For a user-requested code improvement in your domain, use develop_code. Codex edits an isolated worktree and integrates locally only after server checks; no human approval is needed. Report the actual files, commit and checks after completion. Do not claim a queued mission is complete."
 PROMPTS["desk_manager"] += " When asked for a morning briefing, use read_morning_briefing to summarize persisted Lina, Hugo and Mira results and pending decisions. State each result's date; do not claim a fresh collection."
 PROMPTS["internship_scout"] += " Rank offers only against explicit saved profile preferences; a match is indicative. Mention a deadline only when the source offer provides a valid date."
 
@@ -244,7 +246,7 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
 
         @agent.tool
         async def start_specialist_mission(ctx: RunContext[ChatDeps],
-                                           specialist: Literal['Jules','Camille','Sacha','Maël','Mael','Noé','Noe','Axel','Nova','Clara','job_hunter','city_ui_engineer','internships_engineer','quality_engineer','finance_tutor','developer','innovation_lab','securities_scout'],
+                                           specialist: Literal['Desk Manager','Mira','Noé','Noe','Jules','Lina','Clara','Iris','Axel','Nova','Hugo','Camille','Sacha','Maël','Mael','desk_manager','market_analyst','finance_tutor','job_hunter','networker','securities_scout','outreach_agent','developer','innovation_lab','internship_scout','city_ui_engineer','internships_engineer','quality_engineer'],
                                            operation: Literal['','develop','repository_audit','codex_review','code_change','quant_report','collect_markets','daily_questions','mock_interview','evaluate_answer','innovation_review','discover_service_contacts'] = '',
                                            question_id: str = "", answer: str = "",
                                            strategy: str = "momentum", series_id: str = "SP500",
@@ -256,20 +258,20 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
             Queue develop for Jules, Camille, Sacha or Maël, with or without a user request.
             Also queue Noé quant, Axel interviews, or Nova review.
             """
-            from .city_specialists import SPECIALISTS, DEFAULT_OPERATIONS, OPERATIONS
-            aliases = {AGENT_BY_ID[key]['name'].casefold():key for key in SPECIALISTS}
+            from .city_specialists import SPECIALISTS, DEVELOPMENT_AGENTS, DEFAULT_OPERATIONS, OPERATIONS
+            aliases = {AGENT_BY_ID[key]['name'].casefold():key for key in DEVELOPMENT_AGENTS}
             aliases['noe'] = 'finance_tutor'
             aliases['mael'] = 'quality_engineer'
             specialist = aliases.get(specialist.strip().casefold(), specialist)
-            if specialist not in SPECIALISTS:
+            if specialist not in SPECIALISTS and not (specialist in DEVELOPMENT_AGENTS and operation == 'develop'):
                 raise CityError('Choisis un agent de développement, Noé, Axel, Nova ou Clara pour une mission spécialisée.')
             if operation == 'prepare_branch':
                 raise CityError('La préparation de branche nécessite le bouton « Valider la proposition » sur un audit Jules terminé.')
             operation = operation or DEFAULT_OPERATIONS[specialist]
             if operation == 'collect_markets':
                 raise CityError("Pour collecter Markets, utilise collect_dashboard_data('markets') : cette mission appartient à Mira.")
-            if operation not in OPERATIONS[specialist]:
-                raise CityError(f"Opération incompatible avec {AGENT_BY_ID[specialist]['name']}. Utilise {DEFAULT_OPERATIONS[specialist]} pour sa mission principale.")
+            if operation not in OPERATIONS.get(specialist, set()) and not (operation == 'develop' and specialist in DEVELOPMENT_AGENTS):
+                raise CityError(f"Opération incompatible avec {AGENT_BY_ID[specialist]['name']}. Utilise {DEFAULT_OPERATIONS.get(specialist, 'develop')} pour sa mission principale.")
             if ctx.deps.delegated:
                 raise CityError("Une seule nouvelle mission par message.")
             parameters = {"operation": operation}
@@ -422,5 +424,13 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
         return await _tool(ctx, "Mémoire partagée · préférence", lambda: {
             "memory": ctx.deps.store.record_memory(ctx.deps.username, _bounded(title, 120),
                                                    _bounded(detail, 1000), "preference", agent_id)})
+
+    @agent.tool
+    async def develop_code(ctx: RunContext[ChatDeps], request: str = "") -> dict:
+        """Queue a tested, isolated Codex code change in this agent's domain without a manual approval step."""
+        detail = request.strip() or ctx.deps.current_message.strip()
+        return await _tool(ctx, "Développement · "+AGENT_BY_ID[agent_id]['name'], lambda: ctx.deps.store.create_task(
+            ctx.deps.username, agent_id, "Développement · "+AGENT_BY_ID[agent_id]['name'],
+            {"operation": "develop", "request": detail}, auto_run=True))
 
     return agent

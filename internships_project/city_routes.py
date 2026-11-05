@@ -179,8 +179,8 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
             return denied()
         if not safe_post(request):
             return JSONResponse({'detail':'Requête refusée.'}, status_code=403)
-        from .city_specialists import CODING_AGENTS
-        if agent_id not in CODING_AGENTS:
+        from .city_specialists import DEVELOPMENT_AGENTS
+        if agent_id not in DEVELOPMENT_AGENTS:
             return JSONResponse({'detail':'Agent de développement inconnu.'}, status_code=404)
         try:
             payload = await bounded_json(request, 4000)

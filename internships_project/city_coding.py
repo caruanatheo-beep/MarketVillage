@@ -13,7 +13,7 @@ import sys
 import tempfile
 import threading
 
-from .marketdesk_city import CityError
+from .marketdesk_city import AGENT_BY_ID, CityError
 from .city_specialists import VERSION, git, repo_root, approved_base, branch_context
 
 _integration_lock = threading.Lock()
@@ -36,7 +36,12 @@ def codex_environment() -> dict:
     names = {'PATH','PATHEXT','SYSTEMROOT','WINDIR','COMSPEC','TEMP','TMP','USERPROFILE',
              'HOME','HOMEDRIVE','HOMEPATH','APPDATA','LOCALAPPDATA','PROGRAMFILES',
              'PROGRAMFILES(X86)','PROGRAMDATA','CODEX_HOME','SSL_CERT_FILE','CODEX_CA_CERTIFICATE'}
-    return {key:value for key,value in os.environ.items() if key.upper() in names}
+    env = {key:value for key,value in os.environ.items() if key.upper() in names}
+    if os.name == 'nt' and not env.get('HOME') and env.get('USERPROFILE'):
+        env['HOME'] = env['USERPROFILE']
+    if not env.get('CODEX_HOME') and env.get('HOME'):
+        env['CODEX_HOME'] = str(Path(env['HOME']) / '.codex')
+    return env
 
 
 def require_chatgpt(binary: str, env: dict) -> None:
@@ -248,13 +253,23 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
                '-c','default_permissions=":workspace"','-c','forced_login_method="chatgpt"',
                '-c','sandbox_workspace_write.network_access=false','--json',
                '--output-schema',str(schema),'--output-last-message',str(report),'-']
-    actor = {'job_hunter':'Jules, développeur City',
-             'city_ui_engineer':'Camille, développeuse des interfaces City et Internships',
-             'internships_engineer':'Sacha, développeur des sources Internships',
-             'quality_engineer':'Maël, responsable des tests et de la fiabilité'}.get(agent_id)
-    if not actor:
+    scope = {'desk_manager':'orchestration, missions et compte rendu City',
+             'market_analyst':'collecte Markets et brief de marché',
+             'finance_tutor':'recherche quantitative et backtests',
+             'job_hunter':'services et agents MarketDesk City',
+             'networker':'recherche et fiches de contacts',
+             'securities_scout':'contacts en services titres',
+             'outreach_agent':'brouillons et suivi des prises de contact',
+             'developer':'préparation et évaluation des entretiens',
+             'innovation_lab':'veille et innovations locales',
+             'internship_scout':'collecte et affichage des stages',
+             'city_ui_engineer':'interfaces City et Internships',
+             'internships_engineer':'sources, dates et doublons Internships',
+             'quality_engineer':'tests et fiabilité du dépôt'}.get(agent_id)
+    if not scope:
         raise CityError('Agent de développement inconnu.')
-    prompt = ('Tu es '+actor+'. Réalise la demande ci-dessous dans cet espace Git séparé. '
+    prompt = ('Tu es '+AGENT_BY_ID[agent_id]['name']+', responsable du code lié à '+scope+'. '
+              'Réalise la demande ci-dessous dans cet espace Git séparé. '
               'Lis les fichiers utiles, corrige/développe réellement, ajoute les tests nécessaires et lance '
               'les vérifications ciblées disponibles. Tu peux utiliser les outils de code locaux. '
               'Préserve les applications distinctes Markets, Internships et City, les interfaces et données. '
@@ -359,7 +374,16 @@ def _integration_checks(root: Path, directory: Path, files: list[str], agent_id:
         if name.endswith('.py'):
             import ast
             ast.parse((directory / name).read_text(encoding='utf-8-sig'), filename=name)
-    tests = {'job_hunter': ['tests/test_city_coding.py'],
+    tests = {'desk_manager': ['tests/test_marketdesk_city.py'],
+             'market_analyst': ['tests/test_city_briefing_relevance.py'],
+             'finance_tutor': ['tests/test_city_specialists.py'],
+             'job_hunter': ['tests/test_city_coding.py'],
+             'networker': ['tests/test_network_discovery.py'],
+             'securities_scout': ['tests/test_securities_scout.py'],
+             'outreach_agent': ['tests/test_mail_outreach.py'],
+             'developer': ['tests/test_city_specialists.py'],
+             'innovation_lab': ['tests/test_city_specialists.py'],
+             'internship_scout': ['tests/test_city_internship_scout.py'],
              'city_ui_engineer': ['tests/test_city_notifications.py'],
              'internships_engineer': [
                  'tests/test_internships_start_dates.py',

@@ -15,10 +15,11 @@ import re
 import subprocess
 from datetime import datetime, timezone
 
-from .marketdesk_city import CityError
+from .marketdesk_city import AGENTS, CityError
 
 VERSION = 2
 CODING_AGENTS = ("job_hunter", "city_ui_engineer", "internships_engineer", "quality_engineer")
+DEVELOPMENT_AGENTS = tuple(agent["id"] for agent in AGENTS)
 SPECIALISTS = {"job_hunter", "finance_tutor", "developer", "innovation_lab", "securities_scout", *CODING_AGENTS}
 DEFAULT_OPERATIONS = {'job_hunter':'repository_audit','finance_tutor':'quant_report',
                       'developer':'daily_questions','innovation_lab':'innovation_review',
@@ -42,6 +43,12 @@ ROLE_NAMES = {"job_hunter": "Software Engineer", "finance_tutor": "Quant Researc
 
 def validate_mission(agent_id: str, parameters: dict, description: str = "") -> dict:
     """Reject legacy payloads and shell commands; development prose goes to Codex only."""
+    if parameters.get("operation") == "develop":
+        request = str(parameters.get("request") or "").strip()
+        if (agent_id not in DEVELOPMENT_AGENTS or len(request) > 3000 or (request and len(request) < 10)
+                or set(parameters).intersection({"command", "shell", "code", "script", "cached_only", "discover_public", "contact_id", "profile_id"})):
+            raise CityError('Décris le développement souhaité en 10 à 3 000 caractères, ou laisse vide pour une analyse autonome.')
+        return {**parameters, "request": request, "role_version": VERSION}
     if agent_id == "internship_scout":
         if parameters.get("operation", "refresh_internships") != "refresh_internships" or set(parameters).intersection(
                 {"command", "shell", "code", "script", "discover_public"}):
@@ -66,11 +73,6 @@ def validate_mission(agent_id: str, parameters: dict, description: str = "") -> 
         'quality_engineer': r'\b(postuler|candidatures?|envoyer|déployer|merge)\b',
         'securities_scout': r'\b(postuler|candidatures?|envoyer|déployer|merge)\b',
     }
-    if operation == 'develop':
-        request = str(payload.get('request') or '').strip()
-        if agent_id not in CODING_AGENTS or len(request) > 3000 or (request and len(request) < 10):
-            raise CityError('Décris le développement souhaité en 10 à 3 000 caractères, ou laisse vide pour une analyse autonome.')
-        payload['request'] = request
     if operation == 'code_change':
         request = str(payload.get('request') or '').strip()
         if agent_id != 'job_hunter' or not 10 <= len(request) <= 3000:

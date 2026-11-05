@@ -556,7 +556,7 @@ class CityStore:
     def morning_briefing(self, username: str, now: datetime | None = None) -> str:
         """Summarize persisted work for one account; no model call or new collection."""
         from zoneinfo import ZoneInfo
-        from .city_specialists import CODING_AGENTS
+        from .city_specialists import DEVELOPMENT_AGENTS
         moment = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Paris"))
         names = {"market_analyst": "Mira", "internship_scout": "Hugo", "networker": "Lina", "job_hunter": "Jules"}
         day_start = moment.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
@@ -583,11 +583,11 @@ class CityStore:
             failures = db.execute(
                 "SELECT COUNT(*) FROM city_tasks WHERE username=? AND status='failed' AND finished_at>=?",
                 (username, (moment - timedelta(days=7)).astimezone(timezone.utc).isoformat())).fetchone()[0]
-            marks = ','.join('?' for _ in CODING_AGENTS)
+            marks = ','.join('?' for _ in DEVELOPMENT_AGENTS)
             development = db.execute(
                 f"SELECT agent_id,status,result_json,error FROM city_tasks WHERE username=? AND agent_id IN ({marks}) "
                 "AND json_extract(parameters_json,'$.operation')='develop' AND finished_at>=? "
-                "ORDER BY finished_at LIMIT 16", (username, *CODING_AGENTS, day_start)).fetchall()
+                "ORDER BY finished_at LIMIT 16", (username, *DEVELOPMENT_AGENTS, day_start)).fetchall()
         lines = [f"### Briefing du {moment:%d/%m/%Y} · Desk Manager", "", "**Derniers résultats enregistrés**"]
         for agent, label in names.items():
             row = latest[agent]
@@ -775,7 +775,7 @@ class CityStore:
         agent = AGENT_BY_ID.get(agent_id)
         if agent is None:
             raise CityError("Agent inconnu.")
-        if agent_id == "desk_manager" and (parameters or {}).get("operation") != "refresh_internships":
+        if agent_id == "desk_manager" and (parameters or {}).get("operation") not in {"refresh_internships", "develop"}:
             raise CityError("Utilise un processus du Desk Manager pour coordonner les agents.")
         if not agent["available"]:
             raise CityError("Aucun workflow n'est connecté à cet agent.")
@@ -1204,7 +1204,7 @@ class CityStore:
                               (_utc(),)).fetchall()
             task = None
             for row in rows:
-                from .city_specialists import SPECIALISTS, CODING_AGENTS, VERSION, validate_mission
+                from .city_specialists import SPECIALISTS, VERSION, validate_mission
                 try:
                     params = json.loads(row['parameters_json'] or '{}')
                     if row['agent_id'] in SPECIALISTS and params.get('role_version') != VERSION:
@@ -1236,10 +1236,9 @@ class CityStore:
                 concurrency = json.loads(saved[0]).get("max_concurrent_tasks", 2) if saved else 2
                 if running >= concurrency:
                     continue
-                if row['agent_id'] in CODING_AGENTS:
-                    marks = ','.join('?' for _ in CODING_AGENTS)
-                    active_code = db.execute(f"SELECT COUNT(*) FROM city_tasks WHERE status='running' AND agent_id IN ({marks})",
-                                             CODING_AGENTS).fetchone()[0]
+                if params.get('operation') == 'develop':
+                    active_code = db.execute("SELECT COUNT(*) FROM city_tasks WHERE status='running' "
+                                             "AND json_extract(parameters_json,'$.operation')='develop'").fetchone()[0]
                     same_agent = db.execute("SELECT 1 FROM city_tasks WHERE username=? AND agent_id=? AND status='running' LIMIT 1",
                                             (row['username'], row['agent_id'])).fetchone()
                     if active_code >= 4 or same_agent:
@@ -1800,8 +1799,7 @@ class CityWorker:
                 result = prepare_branch(task['id'], json.loads(source[0]) if source else {}, bool(approval and approval[0]))
                 self.store.finish(task['id'], result=result)
                 return True
-            from .city_specialists import CODING_AGENTS
-            if task['agent_id'] in CODING_AGENTS and parameters.get('operation') == 'develop':
+            if parameters.get('operation') == 'develop':
                 from .city_coding import implement_change
                 result = implement_change(task['id'], {'coding_request': parameters.get('request', '')},
                                           agent_id=task['agent_id'], auto_integrate=True)
@@ -1906,7 +1904,9 @@ class CityWorker:
             from .llm_usage import GenerationLimitError
             safe = str(exc) if isinstance(exc, (CityError, GenerationLimitError)) else f"Erreur de mission ({type(exc).__name__})."
             if (parameters.get('operation') == 'develop' and isinstance(exc, CityError)
-                    and safe.startswith(('Quota Codex indisponible', 'Développement reporté'))):
+                    and safe.startswith(('Quota Codex indisponible', 'Développement reporté', 'Connecte Codex'))):
+                self.store.defer_coding(task['id'], safe)
+            elif task['agent_id'] == 'market_analyst' and isinstance(exc, CityError) and safe.startswith("Markets n'a retourné aucune observation"):
                 self.store.defer_coding(task['id'], safe)
             else:
                 self.store.finish(task["id"], error=safe)

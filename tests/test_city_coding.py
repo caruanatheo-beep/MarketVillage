@@ -16,7 +16,7 @@ from pydantic_ai.models.test import TestModel
 from internships_project import city_coding as coding, city_specialists as specialists, state_store
 from internships_project.city_agents import ChatDeps, build_agent
 from internships_project.city_routes import add_city_routes
-from internships_project.marketdesk_city import CityStore, CityWorker, CityError
+from internships_project.marketdesk_city import AGENT_BY_ID, CityStore, CityWorker, CityError
 
 
 @pytest.fixture
@@ -56,6 +56,18 @@ def test_codex_auth_rejects_api_and_environment_has_no_application_secrets(monke
     assert not any(k in env for k in ('OPENAI_API_KEY','CODEX_API_KEY','MARKETDESK_SESSION_SECRET'))
     monkeypatch.setattr(subprocess,'run',lambda *args,**kwargs:SimpleNamespace(returncode=0,stdout='',stderr='Logged in using an API key'))
     with pytest.raises(CityError,match='ChatGPT'):coding.require_chatgpt('codex',env)
+
+
+def test_codex_environment_restores_windows_home_without_exposing_api_keys(monkeypatch, tmp_path):
+    monkeypatch.delenv('HOME', raising=False)
+    monkeypatch.delenv('CODEX_HOME', raising=False)
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))
+    monkeypatch.setenv('OPENAI_API_KEY', 'private')
+    env = coding.codex_environment()
+    if os.name == 'nt':
+        assert env['HOME'] == str(tmp_path)
+        assert env['CODEX_HOME'] == str(tmp_path / '.codex')
+    assert 'OPENAI_API_KEY' not in env
 
 
 def test_coding_runs_only_after_human_approval_and_keeps_main_untouched(repo,store,monkeypatch):
@@ -142,11 +154,15 @@ def test_parallel_coding_claims_are_bounded_per_agent_and_globally(store):
     assert store.claim_next()['id'] == format(3, '032x')
 
 
-def test_unavailable_codex_quota_defers_coding_without_losing_mission(store, monkeypatch):
+@pytest.mark.parametrize('reason', [
+    'Quota Codex indisponible : missions de développement suspendues.',
+    'Connecte Codex avec ton abonnement ChatGPT : codex login. Aucun repli sur une clé API.',
+])
+def test_unavailable_codex_quota_defers_coding_without_losing_mission(store, monkeypatch, reason):
     task = store.create_task('alice', 'job_hunter', 'Développement autonome',
                              {'operation': 'develop'})
     def unavailable(*args, **kwargs):
-        raise CityError('Quota Codex indisponible : missions de développement suspendues.')
+        raise CityError(reason)
     monkeypatch.setattr(coding, 'implement_change', unavailable)
     assert CityWorker(store).run_once()
     with store.db() as db:
@@ -154,6 +170,20 @@ def test_unavailable_codex_quota_defers_coding_without_losing_mission(store, mon
                                        (task['id'],)).fetchone()
     assert status == 'queued' and scheduled > task['created_at']
     assert store.claim_next() is None
+
+
+def test_market_collection_without_data_is_retried(store, monkeypatch):
+    from internships_project import city_services
+    def unavailable():
+        raise CityError("Markets n'a retourné aucune observation exploitable.")
+    monkeypatch.setattr(city_services, 'market_brief', unavailable)
+    task = store.create_task('alice', 'market_analyst', 'Brief quotidien des marchés',
+                             {'operation': 'collect_markets'}, auto_run=True)
+    assert CityWorker(store).run_once()
+    with store.db() as db:
+        status, scheduled = db.execute('SELECT status,scheduled_at FROM city_tasks WHERE id=?',
+                                       (task['id'],)).fetchone()
+    assert status == 'queued' and scheduled > task['created_at']
 
 
 def test_internships_gate_uses_offline_tests_and_names_a_failure(repo, monkeypatch):
@@ -349,6 +379,10 @@ def test_coding_http_auth_payload_and_manager_preserve_user_request(store):
         assert client.post('/city/api/develop/city_ui_engineer', json={}).status_code == 401
         assert client.post('/city/api/develop/city_ui_engineer', headers={'x-user':'alice'}, json={}).status_code == 403
         assert client.post('/city/api/develop/unknown', headers=headers, json={}).status_code == 404
+        for agent_id in AGENT_BY_ID:
+            response = client.post(f'/city/api/develop/{agent_id}', headers=headers, json={})
+            assert response.status_code == 201, (agent_id, response.text)
+            assert store.cancel_queued('alice', response.json()['task']['id'])
         autonomous = client.post('/city/api/develop/city_ui_engineer', headers=headers, json={})
         assert autonomous.status_code == 201
         assert store.cancel_queued('alice', autonomous.json()['task']['id'])
@@ -368,6 +402,20 @@ def test_coding_http_auth_payload_and_manager_preserve_user_request(store):
     with store.db() as db:
         params=json.loads(db.execute("SELECT parameters_json FROM city_tasks WHERE username='bob'").fetchone()[0])
     assert params['request']==request
+
+
+def test_market_agent_development_uses_codex_runner_not_market_collector(store, monkeypatch):
+    from internships_project import city_coding
+    called = []
+    def implement(task_id, proposal, *, agent_id, auto_integrate):
+        called.append((agent_id, auto_integrate))
+        return {'title': 'Développement intégré', 'integrated': True, 'commit': 'fixture', 'text': 'Tests validés'}
+    monkeypatch.setattr(city_coding, 'implement_change', implement)
+    task = store.create_task('alice', 'market_analyst', 'Améliorer Markets',
+                             {'operation': 'develop', 'request': 'Améliore le collecteur Markets'}, auto_run=True)
+    assert CityWorker(store).run_once()
+    result = next(row for row in store.snapshot('alice')['tasks'] if row['id'] == task['id'])
+    assert result['status'] == 'completed' and called == [('market_analyst', True)]
 
 
 def test_codex_failure_and_missing_completion_never_report_success(monkeypatch,tmp_path):
