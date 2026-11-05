@@ -356,8 +356,13 @@ def _jobteaser_duplicate(job: Opportunity, official: list[Opportunity]) -> bool:
             continue
         if job.kind != other.kind:
             continue
-        if job.location and other.location and _is_paris(job.location) != _is_paris(other.location):
-            continue
+        if job.location and other.location:
+            same_location = (
+                _normalized_offer_text(job.location) == _normalized_offer_text(other.location)
+                or (_is_paris(job.location) and _is_paris(other.location))
+            )
+            if not same_location:
+                continue
         if job.start_period and other.start_period and start_month(job.start_period) != start_month(other.start_period):
             continue
         other_title = _cross_source_title(other.title)

@@ -43,3 +43,29 @@ class DeduplicationTests(unittest.TestCase):
             with self.subTest(order=[job.url for job in ordered]):
                 self.assertCountEqual(_deduplicate_opportunities(ordered),
                                       [self.offer, vie])
+
+    def test_direct_source_in_another_city_keeps_jobteaser_offer(self):
+        direct = replace(self.offer, location="New York, USA")
+        teaser = replace(self.offer, location="London, UK",
+                         source="JobTeaser · sitemap",
+                         url="https://example.invalid/teaser")
+        for ordered in [[teaser, direct], [direct, teaser]]:
+            with self.subTest(order=[job.url for job in ordered]):
+                self.assertCountEqual(_deduplicate_opportunities(ordered),
+                                      [teaser, direct])
+
+    def test_direct_source_same_city_merges_location_typography(self):
+        direct = replace(self.offer, location="Zürich, Switzerland")
+        teaser = replace(self.offer, location=" ZURICH — Switzerland ",
+                         source="JobTeaser · sitemap",
+                         url="https://example.invalid/teaser")
+        for ordered in [[teaser, direct], [direct, teaser]]:
+            with self.subTest(order=[job.url for job in ordered]):
+                self.assertEqual(_deduplicate_opportunities(ordered), [direct])
+
+    def test_direct_source_in_paris_area_still_replaces_jobteaser(self):
+        teaser = replace(self.offer, location="La Défense",
+                         source="JobTeaser · sitemap",
+                         url="https://example.invalid/teaser")
+        self.assertEqual(_deduplicate_opportunities([teaser, self.offer]),
+                         [self.offer])
