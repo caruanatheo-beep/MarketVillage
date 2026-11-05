@@ -2,7 +2,7 @@
 
 **Un village d’agents pour organiser la recherche en finance de marché, le networking et la recherche de stages.**
 
-MarketDesk City est le produit principal de ce dépôt : une interface pixel-art avec neuf postes de travail, un **Desk Manager** qui centralise les échanges et huit agents spécialisés. Les missions, résultats, propositions et conversations sont conservés par compte dans SQLite.
+MarketDesk City est le produit principal de ce dépôt : une interface pixel-art avec treize agents, dont le **Desk Manager** qui centralise les échanges. Les missions, résultats, propositions et conversations sont conservés par compte dans SQLite.
 
 Le Manager transforme tes demandes en missions, suit leur avancement et te présente les résultats. Cliquer sur son personnage ouvre le chat dans une fenêtre ; Lina dispose de sa propre fenêtre de contacts.
 
@@ -11,10 +11,11 @@ en cours et erreurs. Ses filtres, indicateurs de lecture par compte et journal d
 permettent d’ouvrir les résultats et d’autoriser, refuser ou réessayer les missions
 concernées. Marquer comme lu ne valide jamais une proposition.
 
-Pour Jules, demande « Lance une nouvelle revue du code avec Jules » au Manager ou
-utilise **Notifications → Relancer l’audit de Jules**. Le Manager accepte les noms des
-spécialistes et leurs identifiants techniques ; la préparation de branche exige toujours
-le bouton de validation d’une proposition. Les fichiers préparés sont indiqués dans le résultat.
+Chaque fiche d’agent propose **Développer avec cet agent**. Une consigne est facultative :
+l’agent peut choisir une amélioration dans son domaine. Codex travaille dans une branche
+isolée ; les contrôles serveur précèdent l’intégration locale. Le résultat affiche les
+fichiers, tests et commit, sans demande de validation manuelle. Les anciens audits et
+propositions de Jules restent consultables dans Notifications.
 
 ## Ce que tu peux faire
 
@@ -23,7 +24,7 @@ le bouton de validation d’une proposition. Les fichiers préparés sont indiqu
 - Constituer un réseau de contacts Sales et métiers proches, avec des sources publiques et une déduplication.
 - Enrichir certaines fiches avec l’école ou l’université fréquentée, lorsqu’une source l’atteste.
 - Demander une analyse quantitative, préparer un entretien ou produire un brouillon de communication.
-- Confier à Jules des corrections ou fonctionnalités avec Codex, puis examiner le diff et les vérifications en branche isolée.
+- Confier à chaque agent une correction ou fonctionnalité dans son domaine avec Codex et consulter le diff, les tests et le commit dans son résultat.
 - Piloter City depuis le cockpit : décisions prioritaires, étapes réelles des missions, agent sélectionné et derniers résultats. Les compteurs ouvrent les notifications filtrées ; le total du jour suit l’heure de Paris.
 
 ## Les agents
@@ -90,6 +91,12 @@ python -m internships_project.city_app
 ```
 
 Ouvrir **http://127.0.0.1:7862** et se connecter à son compte.
+
+Pour les missions de code, connecte le Codex CLI avec `codex login` sur cette session Windows,
+puis vérifie `codex login status` : il doit indiquer ChatGPT. Lance City depuis un terminal
+Windows normal ayant accès au dossier utilisateur et au réseau ; un lanceur isolé qui bloque
+ces accès met les missions de code et la collecte Markets en attente de rattrapage. Aucune
+clé API n’est utilisée comme repli pour Codex.
 
 La configuration reste côté serveur, dans l’environnement ou un fichier `.env` local :
 

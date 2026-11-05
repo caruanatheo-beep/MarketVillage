@@ -566,7 +566,7 @@ class CityStore:
                 "AND status='completed' ORDER BY finished_at DESC,rowid DESC LIMIT 1", (username, agent)).fetchone()
                 for agent in names}
             failed_today = {agent: db.execute(
-                "SELECT error FROM city_tasks WHERE username=? AND agent_id=? AND status='failed' "
+                "SELECT error,finished_at FROM city_tasks WHERE username=? AND agent_id=? AND status='failed' "
                 "AND finished_at>=? ORDER BY finished_at DESC LIMIT 1",
                 (username, agent, day_start)).fetchone() for agent in names}
             proposals = db.execute(
@@ -600,7 +600,7 @@ class CityStore:
             finished = datetime.fromisoformat(row["finished_at"]).astimezone(ZoneInfo("Europe/Paris"))
             summary = str(result.get("summary") or result.get("text") or row["description"]).splitlines()[0].lstrip('# ')[:220]
             lines.append(f"- {label} ({finished:%d/%m %H:%M}) : {summary}")
-            if failed_today[agent]:
+            if failed_today[agent] and failed_today[agent][1] > row['finished_at']:
                 lines.append(f"  Collecte du jour en échec : {failed_today[agent][0][:160]}")
             if finished.date() == moment.date() and agent == "market_analyst" and result.get("text"):
                 lines.extend(["", "**Analyse de Mira**", str(result["text"])[:3500]])

@@ -69,3 +69,19 @@ def test_ranking_does_not_infer_missing_deadline():
     offer = internships.Opportunity("Sales", "Bank", "Paris", "Stage", "https://example.test", "", 10,
                                     deadline="bientôt")
     assert rank_offers([offer], {"target_roles": ["Sales"]}, date(2026, 11, 2))[0][1]["deadline"] == ""
+
+
+def test_manager_briefing_uses_successful_market_retry(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store, "USER_DB_PATH", tmp_path / "users.sqlite3")
+    store = CityStore(state_store.USER_DB_PATH)
+    failed = store.create_task("alice", "market_analyst", "Premier essai",
+                               {"operation": "collect_markets"}, auto_run=True)
+    assert store.claim_next()["id"] == failed["id"]
+    store.finish(failed["id"], error="Markets indisponible")
+    recovered = store.create_task("alice", "market_analyst", "Rattrapage",
+                                  {"operation": "collect_markets"}, auto_run=True)
+    assert store.claim_next()["id"] == recovered["id"]
+    store.finish(recovered["id"], result={"text": "Brief vérifié du jour"})
+    summary = store.morning_briefing("alice")
+    assert "Brief vérifié du jour" in summary
+    assert "Collecte du jour en échec" not in summary
