@@ -1,5 +1,6 @@
 """Mira preserves observed prices when independent enrichment sources fail."""
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from itertools import combinations
 
@@ -96,3 +97,42 @@ def test_provider_warnings_are_also_visible_in_the_report(monkeypatch, sources):
 
     assert result["warnings"] == ["Official feed unavailable", "Calendar incomplete"]
     assert all(warning in result["text"] for warning in result["warnings"])
+
+
+@pytest.mark.parametrize("field", ["value", "previous", "change"])
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), float("-inf")])
+def test_brief_excludes_invalid_prices_from_facts_counts_and_shared_report(monkeypatch, sources, field, invalid):
+    points, status = data.load_snapshot()
+    valid = replace(points[1], previous=None, change=None)
+    damaged = [replace(points[0], series_id=series, **{field: invalid})
+               for series in ("SP500", "DGS10", "DEXUSEU", "BAMLH0A0HYM2")]
+    # A valid short rate makes an invalid long rate reach the curve calculation.
+    short_rate = replace(points[0], series_id="DGS2", value=4, previous=4, change=0)
+    monkeypatch.setattr(data, "load_snapshot", lambda: ([valid, short_rate], status))
+    expected = city_services.market_brief()
+    monkeypatch.setattr(data, "load_snapshot", lambda: (damaged + [valid, short_rate], status))
+
+    result = city_services.run_agent("market_analyst", "fixture", {"operation": "collect_markets"})
+
+    for key in ("market_points", "market_data", "summary", "sentiment", "data_status"):
+        assert result[key] == expected[key]
+    assert result["market_points"] == 2
+    assert len(result["warnings"]) == 1
+    assert "4" in result["warnings"][0]
+    assert result["warnings"][0] in result["text"][:3500]
+    assert result["text"].endswith(expected["text"])
+
+
+@pytest.mark.parametrize("invalid", [None, float("nan"), float("inf"), float("-inf")])
+def test_only_invalid_prices_fail_before_enrichment(monkeypatch, sources, invalid):
+    points, status = data.load_snapshot()
+    monkeypatch.setattr(data, "load_snapshot", lambda: ([replace(points[0], value=invalid)], status))
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("No enrichment should run without usable prices")
+
+    for module, method, _ in sources.values():
+        monkeypatch.setattr(module, method, forbidden)
+
+    with pytest.raises(CityError, match="aucune observation exploitable"):
+        city_services.run_agent("market_analyst", "fixture", {"operation": "collect_markets"})

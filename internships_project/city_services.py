@@ -113,6 +113,14 @@ def run_agent(agent_id: str, username: str, parameters: dict | None = None) -> d
     raise CityError("Aucun workflow n'est connecté à cet agent.")
 
 
+def _usable_market_point(point) -> bool:
+    """Match the quote panel's validity rule while allowing missing history."""
+    return point.value is not None and all(
+        math.isfinite(value) for value in (point.value, point.previous, point.change)
+        if value is not None
+    )
+
+
 def market_brief() -> dict:
     """Read the existing Market Brief snapshot, news and official calendar."""
     try:
@@ -123,7 +131,9 @@ def market_brief() -> dict:
         from src.models import NewsItem
 
         points, status = load_snapshot()
-        if not any(getattr(point, "value", None) is not None for point in points):
+        rejected = sum(point.value is not None and not _usable_market_point(point) for point in points)
+        points = [point for point in points if _usable_market_point(point)]
+        if not points:
             raise CityError("Markets n'a retourné aucune observation exploitable. Vérifie l'accès réseau à FRED et DBnomics.")
         # Publications and agenda enrich the brief, but must not discard usable
         # prices when one independent provider fails. Keep the snapshot required.
@@ -141,6 +151,8 @@ def market_brief() -> dict:
             events, calendar_error = [], f"Calendrier indisponible ({type(exc).__name__})."
         warnings = [redact_diagnostic(error) for error in (
             *news_errors[:3], *market_news_errors[:2], *([calendar_error] if calendar_error else []))]
+        if rejected:
+            warnings.insert(0, f"Observations de marché écartées : {rejected} (valeurs non finies).")
         verified_news = [item for item in news if isinstance(item, NewsItem)]
         sentiment = _market_sentiment(points, [item for item in market_news if isinstance(item, NewsItem)])
         values = point_map(points)
@@ -181,7 +193,7 @@ def market_brief() -> dict:
         # Task reports and shared memory consume text, not the warnings field.
         if warnings:
             brief = "## Sources incomplètes\n" + "\n".join(f"- {warning}" for warning in warnings) + "\n\n" + brief
-        market_count = sum(p.value is not None for p in points)
+        market_count = len(points)
         return {"title": "Brief de marché", "as_of": datetime.now(timezone.utc).isoformat(),
                 "market_points": market_count,
                 "market_data": _market_readings(points),
@@ -208,10 +220,7 @@ def _market_sentiment(points: list, news: list) -> dict:
     spx, vix, hy = (values.get(key) for key in ("SP500", "VIXCLS", "BAMLH0A0HYM2"))
     def recent(point) -> bool:
         # An unusable observation must not contribute a directional signal.
-        if point.value is None or not all(
-            math.isfinite(value) for value in (point.value, point.previous, point.change)
-            if value is not None
-        ):
+        if not _usable_market_point(point):
             return False
         age = _observation_age(point.date)['age_days']
         return age is not None and 0 <= age <= 4
@@ -276,11 +285,10 @@ def _market_readings(points: list) -> list[dict]:
     selected = []
     wanted = {"DGS2", "DGS10", "DEXUSEU", "DEXUSUK", "SP500", "VIXCLS", "BAMLH0A0HYM2", "DCOILWTICO"}
     for point in points:
-        if getattr(point, "series_id", "") in wanted and getattr(point, "value", None) is not None:
+        if getattr(point, "series_id", "") in wanted:
             # A malformed observation must not break JSON serialization of
             # the entire market panel. Missing historical values remain valid.
-            if not all(math.isfinite(value) for value in (point.value, point.previous, point.change)
-                       if value is not None):
+            if not _usable_market_point(point):
                 continue
             selected.append({"series_id": point.series_id, "label": point.label,
                              "value": float(point.value), "unit": point.unit,
