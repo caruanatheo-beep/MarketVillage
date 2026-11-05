@@ -198,6 +198,32 @@ def test_autonomous_worktree_resumes_after_branch_commit(repo, monkeypatch):
     assert 'internships_project/city_sample.py' in result['files']
 
 
+def test_resume_does_not_mistake_same_agent_base_commit_for_current_work(repo, monkeypatch):
+    root, git = repo
+    source = root/'internships_project/city_sample.py'
+    source.parent.mkdir(parents=True)
+    source.write_text('value = 1\n')
+    git('add', 'internships_project/city_sample.py')
+    git('-c', 'commit.gpgsign=false', 'commit', '-m', 'Improve MarketDesk with city_ui_engineer')
+    task_id = 'b'*32
+    branch = 'marketdesk/city-ui-engineer-'+task_id[:12]
+    directory = root/'.city-worktrees'/task_id
+    coding.git(root, 'worktree', 'add', '-b', branch, directory.relative_to(root).as_posix(), 'HEAD')
+    (directory/'internships_project/city_sample.py').write_text('value = 2\n')
+    (directory/'tests/test_city_sample.py').write_text('def test_value():\n    assert True\n')
+    (directory/'.jules-complete.json').write_text(json.dumps(
+        {'summary': 'Valeur corrigée.', 'tests': 'Test réussi.', 'limitations': 'Aucune.'}))
+    (root/'sample.py').write_text('value = 3\n')
+    git('add', 'sample.py')
+    git('-c', 'commit.gpgsign=false', 'commit', '-m', 'Other agent')
+    monkeypatch.setattr(coding, '_integration_checks', lambda *_args, **_kwargs: 'focused tests')
+    result = coding.implement_change(task_id, {'coding_request': ''},
+                                    agent_id='city_ui_engineer', auto_integrate=True)
+    assert result['integrated'] and result['rebased']
+    assert set(result['files']) == {'internships_project/city_sample.py', 'tests/test_city_sample.py'}
+    assert source.read_text() == 'value = 2\n'
+
+
 def test_dirty_main_requeues_development_and_retry_keeps_task_id(store, monkeypatch):
     task = store.create_task('alice', 'job_hunter', 'Développement autonome', {'operation': 'develop'})
     def blocked(*_args, **_kwargs):

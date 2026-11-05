@@ -380,12 +380,15 @@ def _resume_autonomous_change(root: Path, directory: Path, branch: str, agent_id
     except (OSError, ValueError) as exc:
         raise CityError('Travail Codex non terminé : la branche reste disponible pour examen.') from exc
     head = git(directory, 'rev-parse', 'HEAD')
-    committed = git(directory, 'log', '-1', '--format=%s') == 'Improve MarketDesk with '+agent_id
-    revision = git(directory, 'rev-parse', 'HEAD^') if committed else head
-    tracked = (git(directory, 'diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD').splitlines()
-               if committed else git(directory, 'diff', '--name-only', '--no-renames', 'HEAD').splitlines())
+    pending = git(directory, 'diff', '--name-only', '--no-renames', 'HEAD').splitlines()
     added = [name for name in git(directory, 'ls-files', '--others', '--exclude-standard').splitlines()
              if name not in {'.jules-result.json', '.jules-schema.json', '.jules-complete.json'}]
+    # The base commit may belong to an earlier mission by this same agent.
+    committed = (not pending and not added and
+                 git(directory, 'log', '-1', '--format=%s') == 'Improve MarketDesk with '+agent_id)
+    revision = git(directory, 'rev-parse', 'HEAD^') if committed else head
+    tracked = (git(directory, 'diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD').splitlines()
+               if committed else pending)
     files = sorted(set(tracked + added))
     if not files:
         raise CityError('Aucune modification à reprendre dans la branche de travail.')
@@ -448,7 +451,10 @@ def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
             try:
                 git(directory, 'rebase', current)
             except CityError as exc:
-                git(directory, 'rebase', '--abort')
+                try:
+                    git(directory, 'rebase', '--abort')
+                except CityError:
+                    pass  # Git did not start a rebase; preserve the worktree for review.
                 raise CityError('Intégration suspendue : conflit avec une autre mission. La branche reste disponible.') from exc
             _integration_checks(root, directory, files, agent_id, committed=True)
             if on_progress:
