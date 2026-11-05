@@ -1646,3 +1646,64 @@ body { overflow:hidden; }
 @media(max-width:700px) { .mission-view-tabs { padding:10px 16px; }.code-team-panel { padding:16px; }.code-team-roster-grid,.code-team-feed-list { grid-template-columns:1fr; }.code-team-metrics { flex-wrap:wrap; } }
 .game-app .code-results-window { width:min(1040px,calc(100vw - 52px)); height:min(900px,calc(100dvh - 32px)); max-height:none; }
 .game-app .code-results-window .jules-code-diff { overflow:auto; overflow-wrap:normal; }
+
+/* Contacts: compact directory with a persistent selected profile. */
+.network-window { width:min(1280px,calc(100vw - 36px)); height:min(900px,calc(100dvh - 36px)); }
+.network-window-heading { min-height:82px; padding:14px 24px; }
+.network-workspace { display:flex; flex-direction:column; padding:0; overflow:hidden; background:#102629; }
+.network-workspace-tabs { display:flex; flex:none; gap:4px; padding:10px 18px 0; border-bottom:1px solid #456963; background:#19383a; }
+.network-workspace-tabs button { border:0; border-bottom:3px solid transparent; border-radius:8px 8px 0 0; background:transparent; color:#c0d8d3; padding:10px 16px; font-size:13px; }
+.network-workspace-tabs button[aria-current="page"] { color:#f3fffb; background:#29504d; border-bottom-color:#87dfc4; }
+.network-workspace-tabs button span { margin-left:9px; padding:2px 6px; border-radius:6px; background:#31534f; font-size:10px; }
+.network-workspace-body { min-height:0; flex:1; overflow:auto; padding:18px 22px; }
+.network-workspace-body.directory-open { overflow:hidden; }
+.network-directory-view { display:flex; flex-direction:column; min-height:0; height:100%; gap:12px; }
+.network-directory-overview,.network-directory-controls,.network-directory-options { display:flex; align-items:center; justify-content:space-between; gap:12px; flex:none; }
+.network-directory-overview>div { display:flex; align-items:baseline; gap:9px; color:#cadfd9; }
+.network-directory-overview strong { font-size:26px; line-height:1; color:#f4fffc; }
+.network-directory-overview b { padding:4px 8px; border-radius:6px; background:#285448; color:#a9f3ce; font-size:11px; font-weight:600; }
+.network-directory-controls .network-search { flex:1; min-width:210px; height:42px; background:#102229; }
+.network-directory-controls .network-search input { flex:1; min-width:0; height:38px; color:#effaf7; font:inherit; outline:none; }
+.network-directory-controls .network-search input::placeholder { color:#91aaa6; }
+.network-directory-scope { display:flex; gap:4px; }
+.network-directory-scope button { min-height:38px; background:#1a3739; border-color:#45655f; white-space:nowrap; }
+.network-directory-scope button[aria-pressed="true"] { background:#327061; border-color:#85cbb7; color:#fff; }
+.network-directory-scope span { margin-left:7px; color:#a9d5cb; font-size:10px; }
+.network-directory-options { justify-content:flex-start; flex-wrap:wrap; color:#c4d8d4; font-size:12px; }
+.network-directory-options>label { display:flex; align-items:center; gap:7px; white-space:nowrap; }
+.network-directory-options input { accent-color:#6ec9aa; }
+.network-directory-options select,.network-advanced select { min-height:34px; min-width:150px; padding:5px 9px; border:1px solid #45655f; border-radius:7px; background:#183238; color:#e5f2ee; font:inherit; font-size:12px; }
+.network-advanced { position:relative; }.network-advanced>summary { cursor:pointer; list-style:none; padding:7px 10px; border:1px solid #45655f; border-radius:7px; }
+.network-advanced>summary::-webkit-details-marker { display:none; }
+.network-advanced>div { position:absolute; z-index:5; top:38px; left:0; display:grid; gap:8px; min-width:250px; padding:12px; border:1px solid #587f74; border-radius:9px; background:#1a3839; box-shadow:0 12px 26px #0007; }
+.network-results-layout { display:grid; grid-template-columns:minmax(300px,42%) minmax(0,58%); gap:12px; flex:1; min-height:0; }
+.network-contact-list,.network-contact-detail { min-height:0; overflow:auto; border:1px solid #41645e; border-radius:12px; background:#172f34; scrollbar-width:thin; scrollbar-color:#669287 transparent; }
+.network-contact-list-title { position:sticky; top:0; z-index:1; padding:10px 14px; border-bottom:1px solid #385951; background:#1c393c; color:#acd4c6; font-size:11px; font-weight:700; }
+.network-directory button.network-list-row { display:flex; align-items:flex-start; width:100%; gap:11px; min-height:72px; padding:12px; border:0; border-bottom:1px solid #38534f; border-radius:0; background:transparent; text-align:left; }
+.network-directory button.network-list-row:hover,.network-directory button.network-list-row[aria-selected="true"] { background:#2b514e; }
+.network-list-row[aria-selected="true"] { box-shadow:inset 3px 0 #91e2c8; }
+.network-list-copy { display:flex; flex:1; min-width:0; flex-direction:column; gap:3px; }
+.network-list-copy strong,.network-list-copy small,.network-list-copy em { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.network-list-copy strong { color:#f1faf7; font-size:13px; }.network-list-copy small { color:#c5dcd7; }.network-list-copy em { color:#96b7ad; font-size:11px; font-style:normal; }
+.network-list-row>i { padding:2px 5px; border-radius:4px; background:#315d50; color:#bbefda; font-size:10px; font-style:normal; }
+.network-directory button.network-load-more { display:block; margin:12px auto; }
+.network-contact-detail { padding:24px; background:linear-gradient(145deg,#1d3b3d,#152b31); }
+.network-detail-head { display:flex; align-items:center; gap:15px; }.network-detail-head .network-initials { width:56px; height:56px; flex-basis:56px; font-size:16px; }
+.network-detail-head h3 { margin:4px 0; color:#f5fffc; font-size:22px; line-height:1.2; }.network-detail-head p { color:#d5e8e2; }
+.network-detail-tags,.network-detail-links { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
+.network-detail-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin:18px 0; padding:16px; border:1px solid #4a6f65; border-radius:10px; background:#233f40; }
+.network-detail-facts div { display:flex; flex-direction:column; gap:4px; min-width:0; }.network-detail-facts strong { overflow-wrap:anywhere; color:#f2fcf8; font-size:13px; }
+.network-contact-detail a { color:#a7e9d3; text-decoration:none; }.network-contact-detail a:hover { text-decoration:underline; }
+.network-detail-links a { padding:8px 11px; border:1px solid #58987e; border-radius:7px; background:#285545; }
+.network-contact-detail h4 { margin:20px 0 6px; font-size:12px; color:#abdbca; }.network-contact-detail section p { color:#d2e3df; }
+.network-contact-detail details { margin:18px 0; padding-top:13px; border-top:1px solid #466860; color:#acc5bc; overflow-wrap:anywhere; }
+.network-contact-detail summary { color:#b5e8d7; cursor:pointer; }.network-detail-footnote { display:block; margin-top:20px; }
+.network-section-intro h3 { margin:0 0 5px; font-size:19px; color:#f2fcf8; }.network-section-intro p { color:#b6d0c7; }
+.network-agent-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:18px; }
+.network-agent-card { padding:20px; border:1px solid #52766c; border-radius:12px; background:#1d393c; }
+.network-agent-heading { display:flex; align-items:center; gap:12px; }.network-agent-heading h4 { margin:2px 0; font-size:20px; color:#f6fffc; }
+.network-agent-card>p { min-height:50px; color:#c7dfd5; }.network-agent-actions { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
+.network-agent-card details { padding-top:13px; border-top:1px solid #456a61; color:#b9d2c8; }.network-agent-card summary { cursor:pointer; }
+.network-directory button.network-primary { background:#317763; border-color:#79c7aa; color:#f6fffb; }
+.network-import-view { max-width:1000px; margin:auto; }.network-import-view .network-assisted { margin-top:16px; }
+@media(max-width:800px) { .network-workspace-body.directory-open { overflow:auto; }.network-directory-view { height:auto; }.network-results-layout { display:flex; flex-direction:column; }.network-contact-list { max-height:280px; flex:none; }.network-contact-detail { overflow:visible; }.network-agent-grid { grid-template-columns:1fr; }.network-directory-controls { flex-wrap:wrap; }.network-directory-scope { width:100%; }.network-directory-scope button { flex:1; } }

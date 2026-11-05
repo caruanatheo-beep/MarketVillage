@@ -1,11 +1,12 @@
 import React, {useEffect, useRef, useState} from "react";
 import {LinkedInAssisted} from "./LinkedInAssisted";
 
-type Contact = {id:string;name:string;role:string;company:string;location:string;linkedin_url:string;school?:string;school_source_url?:string;school_evidence?:string;source_type?:string;source_date?:string;location_source_url?:string;location_evidence?:string;
+type Contact = {id:string;name:string;role:string;company:string;location:string;linkedin_url:string;school?:string;school_source_url?:string;school_evidence?:string;source_type?:string;source_date?:string;location_source_url?:string;location_evidence?:string;origin?:string;
   detected_at:string;source_url:string;source_title:string;source_excerpt:string;verification_status:string;employment_status:string;
   contact_segment:"sales"|"secondary"|"outside"|"unclear";sales_priority:boolean;specialty:string;focus_reason:string};
 type Schedule = {enabled:boolean;last_day:string;status:string;error:string;report?:{count?:number;duplicates?:number;text?:string;warnings?:string[]}};
-type Data = {contacts:Contact[];schedule:Schedule};
+type Scout = {id?:string;status:string;created_at?:string;finished_at?:string;error?:string;summary?:string};
+type Data = {contacts:Contact[];schedule:Schedule;clara?:Scout};
 const safeLink=(url:string)=>/^https:\/\/(?:www\.)?linkedin\.com\/in\/[^/?#]+\/?$/.test(url)?url:undefined;
 const safeSource=(url:string)=>{try{const u=new URL(url);return u.protocol==="https:"&&!u.username&&!u.password?url:undefined;}catch{return undefined;}};
 
@@ -27,7 +28,7 @@ export function NetworkContactsWindow({onClose}:{onClose:()=>void}){
     onClick={e=>{if(e.target===e.currentTarget){const r=e.currentTarget.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)onClose();}}}>
     <header className="network-window-heading">
       <span className="network-host roster-avatar pixel-agent-avatar networker" aria-hidden="true"><i className="agent-sprite"/></span>
-      <div><span className="network-kicker">Lina & Clara · Network</span><h2 id="network-window-title">Contacts</h2><p>Ton réseau en finance de marché et services titres · Paris et autres places.</p></div>
+      <div><span className="network-kicker">LINA · CLARA · NETWORK</span><h2 id="network-window-title">Tes contacts</h2><p>Recherche, vérifie et retrouve tes interlocuteurs de marché.</p></div>
       <button className="network-close" type="button" onClick={onClose} aria-label="Fermer les contacts">×</button>
     </header>
     <NetworkContacts/>
@@ -39,9 +40,11 @@ export function NetworkContacts(){
   const [data,setData]=useState<Data|null>(null), [error,setError]=useState(""), [busy,setBusy]=useState(false);
   const [readStatus,setReadStatus]=useState(0),[loading,setLoading]=useState(true);
   const [query,setQuery]=useState(""),[company,setCompany]=useState("");
-  const [segment,setSegment]=useState("all"),[specialty,setSpecialty]=useState("");
-  const [visibleCount,setVisibleCount]=useState(50);
-  useEffect(()=>setVisibleCount(50),[query,company,segment,specialty]);
+  const [scope,setScope]=useState<'all'|'lina'|'clara'>('all'),[specialty,setSpecialty]=useState("");
+  const [view,setView]=useState<'directory'|'collect'|'import'>('directory');
+  const [salesOnly,setSalesOnly]=useState(false),[sortBy,setSortBy]=useState<'recent'|'name'>('recent');
+  const [selectedId,setSelectedId]=useState(''),[visibleCount,setVisibleCount]=useState(80);
+  useEffect(()=>setVisibleCount(80),[query,company,scope,specialty,salesOnly,sortBy]);
   async function load(){
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
     try{
@@ -60,59 +63,53 @@ export function NetworkContacts(){
       throw e;
     }finally{clearTimeout(timer);setLoading(false);}
   }
-  useEffect(()=>{let active=true;const update=()=>load().catch(e=>{if(active)setError(e.message);});void update();const timer=setInterval(update,10000);return()=>{active=false;clearInterval(timer);};},[]);
+  useEffect(()=>{let active=true;const update=()=>load().catch(e=>{if(active)setError(e.message);});void update();const timer=setInterval(()=>{if(!document.hidden)void update();},30000);return()=>{active=false;clearInterval(timer);};},[]);
   async function action(payload:object){
     setBusy(true);setError("");
     try{const r=await fetch("/city/api/network",{method:"POST",headers:{"Content-Type":"application/json","X-MarketDesk-City":"1"},body:JSON.stringify(payload)});
       if(!r.ok)throw Error("La collecte n’a pas pu être planifiée.");await load();
     }catch(e){setError(e instanceof Error?e.message:"Erreur de collecte.");}finally{setBusy(false);}
   }
-  const contacts=data?.contacts||[],schedule=data?.schedule;
-  const text=(s:string)=>s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
-  const salesCount=contacts.filter(c=>c.sales_priority).length;
-  const filtered=contacts.filter(c=>(segment==="all"||(segment==="sales"?c.sales_priority:!c.sales_priority))&&(!specialty||c.specialty===specialty)&&(!company||c.company===company)&&text(`${c.name} ${c.role} ${c.company} ${c.location} ${c.school||""} ${c.specialty||""}`).includes(text(query)));
-  const active=schedule&&["queued","running"].includes(schedule.status);
-  const calendar=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Paris",year:"numeric",month:"2-digit",day:"2-digit"});
+  async function runClara(){
+    setBusy(true);setError('');
+    try{const r=await fetch('/city/api/agents/securities_scout/run',{method:'POST',headers:{'Content-Type':'application/json','X-MarketDesk-City':'1'},body:'{}'});
+      if(!r.ok){const response=await r.json().catch(()=>({}));throw Error(response.detail||'La mission de Clara n’a pas pu être lancée.');}
+      await load();
+    }catch(e){setError(e instanceof Error?e.message:'Mission indisponible.');}finally{setBusy(false);}
+  }
+  const contacts=data?.contacts||[],schedule=data?.schedule,clara=data?.clara;
+  const text=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const linaCount=contacts.filter(c=>c.origin!=='securities_public_search').length;
+  const claraCount=contacts.length-linaCount;
+  const filtered=contacts.filter(c=>(scope==='all'||(scope==='clara')===(c.origin==='securities_public_search'))&&
+    (!salesOnly||c.sales_priority)&&(!specialty||c.specialty===specialty)&&(!company||c.company===company)&&
+    text(`${c.name} ${c.role} ${c.company} ${c.location} ${c.school||''} ${c.specialty||''}`).includes(text(query)))
+    .sort((a,b)=>sortBy==='name'?displayContactName(a.name).localeCompare(displayContactName(b.name),'fr'):
+      b.detected_at.localeCompare(a.detected_at)||a.name.localeCompare(b.name,'fr'));
+  const selected=filtered.find(c=>c.id===selectedId)||filtered[0];
+  const active=!!schedule&&['queued','running'].includes(schedule.status);
+  const claraActive=!!clara&&['queued','running'].includes(clara.status);
+  const calendar=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit'});
   const today=calendar.format(new Date());
   const newToday=contacts.filter(c=>c.detected_at&&calendar.format(new Date(c.detected_at))===today).length;
-  if(!data)return <div className="network-directory"><section className="network-load-state" role={error?"alert":"status"}>
-    <span className="network-load-icon" aria-hidden="true">{error?"!":"…"}</span><h3>{error?"Dossier inaccessible":"Connexion à ton dossier…"}</h3>
-    <p>{error||"Chargement des contacts et de la planification de Lina."}</p>
-    {error&&<div className="network-actions"><button disabled={loading} onClick={()=>{setLoading(true);void load().catch(e=>setError(e instanceof Error?e.message:"Connexion au serveur impossible."));}}>{loading?"Connexion…":"Réessayer"}</button>
-      {readStatus===401||readStatus===403?<a className="network-reconnect" href="/login">Se reconnecter</a>:<button onClick={()=>window.location.reload()}>Recharger MarketDesk</button>}
-    </div>}
+  if(!data)return <div className="network-directory"><section className="network-load-state" role={error?'alert':'status'}>
+    <span className="network-load-icon" aria-hidden="true">{error?'!':'…'}</span><h3>{error?'Dossier inaccessible':'Connexion à ton dossier…'}</h3>
+    <p>{error||'Chargement des contacts de Lina et Clara.'}</p>
+    {error&&<div className="network-actions"><button disabled={loading} onClick={()=>{setLoading(true);void load().catch(e=>setError(e instanceof Error?e.message:'Connexion impossible.'));}}>{loading?'Connexion…':'Réessayer'}</button>
+      {readStatus===401||readStatus===403?<a className="network-reconnect" href="/login">Se reconnecter</a>:<button onClick={()=>window.location.reload()}>Recharger City</button>}</div>}
   </section></div>;
-  return <div className="network-directory">
-    <LinkedInAssisted onImported={load}/>
-    <div className="network-summary"><div className="network-stats"><span><b>{salesCount}</b> Sales prioritaires</span><span className="network-today">+{newToday} aujourd’hui</span></div><span className={`network-collection-state ${active?"running":schedule?.enabled?"enabled":"paused"}`}><i/>{active?"Collecte en cours":schedule?.enabled?"Collecte quotidienne active":"Collecte suspendue"}</span></div>
-    <details className="network-schedule"><summary><span>Collecte et dernier bilan<small>Objectif : 10 nouveaux contacts par jour, Sales en priorité puis métiers proches en finance de marché.</small></span><span className="network-details-chevron" aria-hidden="true">⌄</span></summary>
-      <div className="network-schedule-body"><p>Collecte automatique une fois par jour, heure de Paris, tant que le serveur fonctionne. Tu peux aussi lancer une recherche à tout moment, même si la collecte automatique est suspendue. GPT‑5.4 mini + recherche Web, coût suivi dans les réglages IA.</p>
-        <div className="network-actions"><button disabled={busy||!schedule} onClick={()=>void action({enabled:!schedule?.enabled})}>{schedule?.enabled?"Suspendre":"Activer"}</button>
-        <button className="network-primary" disabled={busy||!schedule||!!active} onClick={()=>void action({collect:true})}>Rechercher maintenant</button></div>
-        <div className="network-actions"><button disabled={busy||!schedule||!!active||!contacts.some(c=>!c.school)} onClick={()=>void action({enrich_schools:true})}>Rechercher les écoles</button><small>5 contacts par lot · sources publiques · coût suivi dans les réglages IA.</small></div>
-        {schedule?.last_day&&<small>Dernière tentative : {schedule.last_day} · {schedule.status==="failed"?"Échec":schedule.status==="completed"?"Terminée":active?"En cours":"Planifiée"}</small>}
-        {schedule?.report?.text&&<p>{schedule.report.text}</p>}{!!schedule?.report?.warnings?.length&&<p className="network-warning">Certaines recherches ont échoué : {schedule.report.warnings.join(" · ")}</p>}
-      </div>
-    </details>
-    {schedule?.error&&<p className="network-warning" role="status">{schedule.error}</p>}
-    {error&&<p role="alert" className="network-warning">{error}</p>}
-    <div className="network-toolbar">
-      <div className="network-segments" role="group" aria-label="Ciblage des contacts">{[["sales","Sales prioritaires",salesCount],["all","Tous les contacts",contacts.length],["other","Autres métiers",contacts.length-salesCount]].map(([id,label,count])=><button type="button" key={id} aria-pressed={segment===id} onClick={()=>{setSegment(String(id));setSpecialty("");}}>{label}<span>{count}</span></button>)}</div>
-      <div className="network-filters"><label className="network-search"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5"/></svg><input aria-label="Rechercher un contact" placeholder="Nom, poste, entreprise…" value={query} onChange={e=>setQuery(e.target.value)}/></label><select aria-label="Spécialité" value={specialty} onChange={e=>setSpecialty(e.target.value)}><option value="">Toutes les spécialités</option>{[...new Set(contacts.map(c=>c.specialty).filter(Boolean))].sort().map(s=><option key={s}>{s}</option>)}</select><select aria-label="Entreprise" value={company} onChange={e=>setCompany(e.target.value)}><option value="">Toutes les entreprises</option>{[...new Set(contacts.map(c=>c.company).filter(Boolean))].sort().map(c=><option key={c}>{c}</option>)}</select></div>
-      <div className="network-result-count"><span>{filtered.length} contact{filtered.length===1?"":"s"} affiché{filtered.length===1?"":"s"} sur {contacts.length}</span>{(query||company||specialty||segment!=="sales")&&<button onClick={()=>{setQuery("");setCompany("");setSpecialty("");setSegment("sales");}}>Réinitialiser</button>}</div>
+  return <div className="network-directory network-workspace">
+    <nav className="network-workspace-tabs" aria-label="Espaces Contacts">{([['directory','Répertoire',contacts.length],['collect','Lina & Clara',Number(active)+Number(claraActive)],['import','Importer',null]] as const).map(([id,label,count])=><button key={id} type="button" aria-current={view===id?'page':undefined} onClick={()=>setView(id)}>{label}{count!==null&&<span>{count}</span>}</button>)}</nav>
+    <div className={`network-workspace-body ${view==='directory'?'directory-open':''}`}>
+      {view==='directory'&&<div className="network-directory-view">
+        <div className="network-directory-overview"><div><strong>{contacts.length}</strong><span>contacts enregistrés</span><b>+{newToday} aujourd’hui</b></div><small>Lina · {linaCount} &nbsp;·&nbsp; Clara · {claraCount}</small></div>
+        <div className="network-directory-controls"><label className="network-search"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5"/></svg><input aria-label="Rechercher un contact" placeholder="Nom, poste, banque, école…" value={query} onChange={e=>setQuery(e.target.value)}/></label><div className="network-directory-scope" role="group" aria-label="Origine des contacts">{([['all','Tous',contacts.length],['lina','Lina',linaCount],['clara','Clara',claraCount]] as const).map(([id,label,count])=><button type="button" key={id} aria-pressed={scope===id} onClick={()=>setScope(id)}>{label}<span>{count}</span></button>)}</div></div>
+        <div className="network-directory-options"><label><input type="checkbox" checked={salesOnly} onChange={e=>setSalesOnly(e.target.checked)}/> Sales uniquement</label><select aria-label="Trier les contacts" value={sortBy} onChange={e=>setSortBy(e.target.value as 'recent'|'name')}><option value="recent">Plus récents</option><option value="name">Nom A–Z</option></select><details className="network-advanced"><summary>Filtres avancés{(company||specialty)?' · actifs':''}</summary><div><select aria-label="Spécialité" value={specialty} onChange={e=>setSpecialty(e.target.value)}><option value="">Toutes les spécialités</option>{[...new Set(contacts.map(c=>c.specialty).filter(Boolean))].sort().map(s=><option key={s}>{s}</option>)}</select><select aria-label="Entreprise" value={company} onChange={e=>setCompany(e.target.value)}><option value="">Toutes les entreprises</option>{[...new Set(contacts.map(c=>c.company).filter(Boolean))].sort().map(c=><option key={c}>{c}</option>)}</select></div></details>{(query||company||specialty||scope!=='all'||salesOnly||sortBy!=='recent')&&<button type="button" onClick={()=>{setQuery('');setCompany('');setSpecialty('');setScope('all');setSalesOnly(false);setSortBy('recent');}}>Effacer les filtres</button>}</div>
+        <div className="network-results-layout"><div className="network-contact-list" role="listbox" aria-label="Contacts filtrés"><div className="network-contact-list-title">{filtered.length} résultat{filtered.length===1?'':'s'}</div>{!filtered.length?<p className="network-empty">Aucun contact ne correspond aux filtres.</p>:filtered.slice(0,visibleCount).map(c=><button type="button" role="option" aria-selected={selected?.id===c.id} className="network-list-row" key={c.id} onClick={()=>setSelectedId(c.id)}><span className="network-initials">{c.name.split(/\s+/).map(w=>w[0]).slice(0,2).join('')}</span><span className="network-list-copy"><strong>{displayContactName(c.name)}</strong><small>{c.role||'Poste à confirmer'}</small><em>{c.company||'Entreprise à confirmer'}{c.location?` · ${c.location}`:''}</em></span>{c.sales_priority&&<i title="Sales prioritaire">S</i>}</button>)}{filtered.length>visibleCount&&<button type="button" className="network-load-more" onClick={()=>setVisibleCount(n=>n+80)}>Afficher 80 contacts de plus</button>}</div>
+          <div className="network-contact-detail">{selected?<article key={selected.id}><div className="network-detail-head"><span className="network-initials">{selected.name.split(/\s+/).map(w=>w[0]).slice(0,2).join('')}</span><div><span className="network-kicker">{selected.origin==='securities_public_search'?'CONTACT DE CLARA':'CONTACT DE LINA'}</span><h3>{displayContactName(selected.name)}</h3><p>{selected.role||'Poste à confirmer'}</p></div></div><div className="network-detail-tags"><span className={`network-specialty ${selected.sales_priority?'sales':'secondary'}`}>{selected.specialty||'Finance de marché'}</span><span className="network-badge">{selected.verification_status||'À vérifier'}</span></div><div className="network-detail-facts"><div><small>Entreprise</small><strong>{selected.company||'À confirmer'}</strong></div><div><small>Localisation</small><strong>{selected.location||'À confirmer'}</strong></div><div><small>École / université</small><strong>{selected.school||'Non renseignée'}</strong></div><div><small>Détecté</small><strong>{selected.detected_at?new Date(selected.detected_at).toLocaleDateString('fr-FR'):'Date inconnue'}</strong></div></div><div className="network-detail-links">{safeLink(selected.linkedin_url)&&<a href={safeLink(selected.linkedin_url)} target="_blank" rel="noopener noreferrer">Profil LinkedIn ↗</a>}{safeSource(selected.source_url)&&<a href={safeSource(selected.source_url)} target="_blank" rel="noopener noreferrer">Source publique ↗</a>}</div>{selected.focus_reason&&<section><h4>Pourquoi ce contact</h4><p>{selected.focus_reason}</p></section>}<details><summary>Sources et vérification</summary><p>{selected.employment_status}</p><p>{selected.source_excerpt||selected.source_title||'Source non précisée.'}</p>{selected.source_date&&<small>Publication : {selected.source_date}</small>}{selected.school&&<p><strong>Formation :</strong> {selected.school_evidence||'Mention publique à confirmer.'} {safeSource(selected.school_source_url||'')&&<a href={safeSource(selected.school_source_url||'')} target="_blank" rel="noopener noreferrer">Source ↗</a>}</p>}{safeSource(selected.location_source_url||'')&&<p><strong>Lieu :</strong> {selected.location_evidence} <a href={safeSource(selected.location_source_url||'')} target="_blank" rel="noopener noreferrer">Source ↗</a></p>}</details><small className="network-detail-footnote">Informations professionnelles publiques à vérifier avant prise de contact.</small></article>:<div className="network-empty">Sélectionne un contact dans la liste.</div>}</div></div>
+      </div>}
+      {view==='collect'&&<div className="network-collect-view"><div className="network-section-intro"><h3>Lancer une recherche</h3><p>Lina cherche des contacts en finance de marché. Clara explore les services titres et les équipes moins visibles.</p></div>{error&&<p role="alert" className="network-warning">{error}</p>}<div className="network-agent-grid"><section className="network-agent-card"><div className="network-agent-heading"><span className="roster-avatar pixel-agent-avatar networker" aria-hidden="true"><i className="agent-sprite"/></span><div><span className="network-kicker">FINANCE DE MARCHÉ</span><h4>Lina</h4></div></div><p>Sales en priorité, puis métiers de marché proches. Recherche manuelle à tout moment.</p><span className={`network-collection-state ${active?'running':schedule?.enabled?'enabled':'paused'}`}><i/>{active?'Recherche en cours':schedule?.enabled?'Collecte quotidienne active':'Collecte quotidienne suspendue'}</span><div className="network-agent-actions"><button className="network-primary" disabled={busy||active} onClick={()=>void action({collect:true})}>Rechercher maintenant</button><button disabled={busy} onClick={()=>void action({enabled:!schedule?.enabled})}>{schedule?.enabled?'Suspendre le quotidien':'Activer le quotidien'}</button><button disabled={busy||active||!contacts.some(c=>!c.school)} onClick={()=>void action({enrich_schools:true})}>Compléter les écoles</button></div>{schedule?.report?.text&&<details><summary>Dernier bilan</summary><p>{schedule.report.text}</p>{schedule.report.warnings?.map((warning,i)=><p key={i} className="network-warning">{warning}</p>)}</details>}{schedule?.error&&<p className="network-warning">{schedule.error}</p>}</section><section className="network-agent-card"><div className="network-agent-heading"><span className="roster-avatar pixel-agent-avatar securities_scout" aria-hidden="true"><i className="agent-sprite"/></span><div><span className="network-kicker">SERVICES TITRES</span><h4>Clara</h4></div></div><p>Collateral, repo, securities lending, FX et trésorerie chez les dépositaires et banques spécialisées.</p><span className={`network-collection-state ${claraActive?'running':clara?.status==='completed'?'enabled':'paused'}`}><i/>{claraActive?'Recherche en cours':clara?.status==='completed'?'Dernière recherche terminée':clara?.status==='failed'?'Dernière recherche en échec':'Prête pour une recherche'}</span><div className="network-agent-actions"><button className="network-primary" disabled={busy||claraActive} onClick={()=>void runClara()}>Lancer Clara</button></div>{clara?.summary&&<details><summary>Dernier bilan</summary><p>{clara.summary}</p></details>}{clara?.error&&<p className="network-warning">{clara.error}</p>}</section></div></div>}
+      {view==='import'&&<div className="network-import-view"><div className="network-section-intro"><h3>Importer depuis LinkedIn</h3><p>Copie des résultats, vérifie l’aperçu, puis ajoute seulement les profils utiles.</p></div><LinkedInAssisted expanded onImported={load}/></div>}
     </div>
-    {!data&&!error&&<p>Chargement du dossier…</p>}
-    {data&&!filtered.length&&<div className="network-empty">{contacts.length?(segment==="sales"&&!salesCount?"Ton dossier ne contient pas encore de Sales ciblé. Les prochaines collectes privilégieront ce métier.":"Aucun contact ne correspond à tes filtres."):"Lina recherche en priorité des Sales à Paris : Fixed Income, Rates, Credit, FX, Equities et produits structurés."}{!!contacts.length&&segment==="sales"&&!salesCount&&<p><button onClick={()=>setSegment("all")}>Voir tous les contacts</button></p>}</div>}
-    <div className="network-contact-grid">{filtered.sort((a,b)=>Number(b.sales_priority)-Number(a.sales_priority)||Number(a.specialty==="Sales & Trading")-Number(b.specialty==="Sales & Trading")||b.detected_at.localeCompare(a.detected_at)||a.id.localeCompare(b.id)).slice(0,visibleCount).map(c=><article className="network-contact" key={c.id}>
-      <div className="network-contact-head"><span className="network-initials">{c.name.split(/\s+/).map(w=>w[0]).slice(0,2).join("")}</span><div><h4 title={c.name}>{displayContactName(c.name)}</h4><div className="network-contact-meta"><strong>{c.company||"Entreprise à confirmer"}</strong><span>{c.location||"Lieu à confirmer"}</span></div></div></div>
-      <p className="network-contact-role" title={c.role}>{c.role||"Poste à confirmer"}</p>
-      <p><small>{c.source_type||"Source publique"}{c.source_date?` · Publication : ${c.source_date}`:""}</small></p>
-      {safeSource(c.location_source_url||"")&&<details><summary>Source de la localisation</summary><p>{c.location_evidence}</p><a href={safeSource(c.location_source_url||"")} target="_blank" rel="noopener noreferrer">Vérifier la localisation ↗</a></details>}
-      <p><strong>École / université :</strong> {c.school||"Non renseignée"}</p>
-      {c.school&&<details><summary>Source de la formation</summary><p>{c.school_evidence}</p>{safeSource(c.school_source_url||"")&&<a href={safeSource(c.school_source_url||"")} target="_blank" rel="noopener noreferrer">Consulter la source ↗</a>}<small>Formation mentionnée publiquement ; diplôme non confirmé.</small></details>}
-      <footer><span className={`network-specialty ${c.sales_priority?"sales":"secondary"}`} title={c.focus_reason}>{c.sales_priority&&!c.specialty?.startsWith("Sales")?"Sales · ":""}{c.specialty||"Périmètre à préciser"}</span><span className="network-badge">{c.verification_status||"À vérifier"}</span>{safeLink(c.linkedin_url)||safeSource(c.source_url)?<a href={safeLink(c.linkedin_url)||safeSource(c.source_url)} target="_blank" rel="noopener noreferrer">{safeLink(c.linkedin_url)?"Profil LinkedIn ↗":"Source publique ↗"}</a>:<span>Copie LinkedIn · lien absent</span>}</footer>
-      <details><summary>Source et détails</summary><p><strong>Poste :</strong> {c.role||"À confirmer"}</p><p>{c.employment_status}</p><p className="network-targeting-note">{c.focus_reason}</p><p>{c.source_excerpt||c.source_title}</p>{safeSource(c.source_url)&&<a href={safeSource(c.source_url)} target="_blank" rel="noopener noreferrer">Consulter la source du contact</a>}<small>Détecté le {new Date(c.detected_at).toLocaleDateString("fr-FR")} · {c.source_type==='Sélection LinkedIn'||c.source_type==='Copie LinkedIn'?'Informations sélectionnées manuellement, poste à confirmer.':'Extrait indexé, poste actuel à confirmer.'} Fiche également disponible dans Internships → Mail.</small></details>
-    </article>)}</div>
-    {filtered.length>visibleCount&&<button onClick={()=>setVisibleCount(v=>v+50)}>Afficher 50 contacts de plus</button>}
   </div>;
 }

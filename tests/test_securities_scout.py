@@ -48,6 +48,9 @@ def test_clara_runs_on_request_and_deduplicates_bp2s_in_shared_contacts(tmp_path
     assert len(queries) == 9
     contacts = network.list_contacts('alice')
     assert {row['company'] for row in contacts} == {'BNP Paribas Securities Services', 'CACEIS'}
+    assert all(row['origin'] == 'securities_public_search' for row in contacts)
+    assert store.securities_scout_status('alice')['status'] == 'completed'
+    assert store.securities_scout_status('bob')['status'] == 'idle'
     assert all(row['verification_status'] == 'À vérifier' for row in contacts)
     assert network.list_contacts('bob') == []
 

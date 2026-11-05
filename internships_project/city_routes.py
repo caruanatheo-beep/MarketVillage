@@ -135,7 +135,8 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
         if not username:
             return denied()
         from .network_discovery import list_contacts
-        return JSONResponse({"contacts": list_contacts(username), "schedule": store.network_schedule(username)},
+        return JSONResponse({"contacts": list_contacts(username), "schedule": store.network_schedule(username),
+                             "clara": store.securities_scout_status(username)},
                             headers={"Cache-Control": "private, no-store"})
 
     @server.get('/city/api/notifications')

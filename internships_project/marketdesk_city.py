@@ -460,6 +460,18 @@ class CityStore:
                 "error": task['error'] if task else "", "finished_at": task['finished_at'] if task else "",
                 "report": {k: report[k] for k in ('count', 'sales_count', 'duplicates', 'rejected', 'target', 'model', 'source', 'text', 'warnings') if k in report}}
 
+    def securities_scout_status(self, username: str) -> dict:
+        with self.db() as db:
+            task = db.execute("SELECT id,status,created_at,finished_at,error,result_json FROM city_tasks "
+                              "WHERE username=? AND agent_id='securities_scout' "
+                              "ORDER BY created_at DESC,rowid DESC LIMIT 1", (username,)).fetchone()
+        if not task:
+            return {"status": "idle"}
+        result = json.loads(task['result_json'] or '{}')
+        return {"id": task['id'], "status": task['status'], "created_at": task['created_at'],
+                "finished_at": task['finished_at'], "error": task['error'],
+                "summary": str(result.get('text') or result.get('summary') or '').splitlines()[0][:300]}
+
     def enqueue_network_daily(self, username: str | None = None, *, manual: bool = False) -> int:
         if manual:
             if not username:

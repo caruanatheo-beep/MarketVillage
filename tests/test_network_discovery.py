@@ -408,7 +408,10 @@ def test_network_routes_are_private_and_require_browser_origin(tmp_path, monkeyp
     add_city_routes(app, lambda req: req.headers.get("x-test-user"), store, CityWorker(store))
     with TestClient(app) as client:
         assert client.get('/city/api/network').status_code == 401
-        assert len(client.get('/city/api/network', headers={'x-test-user': 'alice'}).json()['contacts']) == 1
+        directory = client.get('/city/api/network', headers={'x-test-user': 'alice'}).json()
+        assert len(directory['contacts']) == 1
+        assert directory['contacts'][0]['origin'] == 'lina_public_search'
+        assert directory['clara']['status'] == 'idle'
         assert client.get('/city/api/network', headers={'x-test-user': 'bob'}).json()['contacts'] == []
         assert client.post('/city/api/network', headers={'x-test-user': 'alice'}, json={'enabled': False}).status_code == 403
         headers = {'x-test-user':'alice', 'X-MarketDesk-City':'1'}

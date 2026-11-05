@@ -708,7 +708,7 @@ def discover_contacts(username: str) -> dict:
 
 def list_contacts(username: str) -> list[dict]:
     contacts = state_store.load_user_data(username, "mail_contacts")
-    fields = ("name", "role", "company", "location", "linkedin_url", "verification_status",
+    fields = ("name", "role", "company", "location", "linkedin_url", "verification_status", "origin",
               "conversation", "detected_at", "source_url", "source_title", "source_excerpt", "employment_status", "notes",
               "school", "school_source_url", "school_evidence", "source_type", "source_date", "location_source_url", "location_evidence")
     return [{"id": key, **{f: str(c.get(f) or "") for f in fields}, **contact_focus(c)}
