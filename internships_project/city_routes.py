@@ -6,6 +6,7 @@ import hashlib
 import json
 import mimetypes
 import threading
+from contextlib import aclosing
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -431,8 +432,9 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
             _budget_guard(username, store.get_settings(username))
             events = stream_chat(store, username, agent_id, message, selection)
             async def sse():
-                async for line in events:
-                    yield f"data: {line}\n\n"
+                async with aclosing(events):
+                    async for line in events:
+                        yield f"data: {line}\n\n"
             return StreamingResponse(sse(), media_type="text/event-stream",
                                      headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
         except (ValueError, TypeError) as exc:

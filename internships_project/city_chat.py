@@ -140,8 +140,8 @@ async def stream_chat(store: CityStore, username: str, agent_id: str, message: s
             await queue.put({"type": "end"})
 
     task = asyncio.create_task(run_agent())
-    yield json.dumps({"type": "status", "text": f"{AGENT_BY_ID[agent_id]['name']} réfléchit…"}, ensure_ascii=False)
     try:
+        yield json.dumps({"type": "status", "text": f"{AGENT_BY_ID[agent_id]['name']} réfléchit…"}, ensure_ascii=False)
         while True:
             item = await queue.get()
             if item["type"] == "end":
