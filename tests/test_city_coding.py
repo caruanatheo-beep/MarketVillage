@@ -277,6 +277,22 @@ def test_coding_history_distinguishes_integrated_from_live(store):
     assert store.coding_history('alice')['tasks'][0]['result']['live'] is True
 
 
+def test_stale_completed_codex_work_is_requeued_without_another_call(store, tmp_path, monkeypatch):
+    from internships_project import city_specialists
+    monkeypatch.setattr(city_specialists, 'repo_root', lambda: tmp_path)
+    task = store.create_task('alice', 'job_hunter', 'Corriger un affichage', {'operation': 'develop'})
+    store.claim_next()
+    marker = tmp_path / '.city-worktrees' / task['id'] / '.jules-complete.json'
+    marker.parent.mkdir(parents=True)
+    marker.write_text('{}', encoding='utf-8')
+    with store.db() as db:
+        db.execute("UPDATE city_tasks SET heartbeat_at='2020-01-01T00:00:00+00:00' WHERE id=?", (task['id'],))
+    assert store.recover_stale() == 1
+    with store.db() as db:
+        recovered = db.execute('SELECT status,retry_count FROM city_tasks WHERE id=?', (task['id'],)).fetchone()
+    assert tuple(recovered) == ('queued', 1)
+
+
 def test_parallel_coding_claims_are_bounded_per_agent_and_globally(store):
     from internships_project.city_specialists import VERSION
     for user in ('alice', 'bob'):

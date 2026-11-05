@@ -1609,6 +1609,15 @@ class CityStore:
             rows = db.execute("SELECT * FROM city_tasks WHERE status='running' AND heartbeat_at<?",
                               (cutoff,)).fetchall()
             for row in rows:
+                parameters = json.loads(row['parameters_json'] or '{}')
+                if parameters.get('operation') == 'develop' and re.fullmatch(r'[a-f0-9]{32}', row['id']):
+                    from .city_specialists import repo_root
+                    marker = repo_root() / '.city-worktrees' / row['id'] / '.jules-complete.json'
+                    if marker.is_file():
+                        db.execute("UPDATE city_tasks SET status='queued',scheduled_at=NULL,started_at=NULL,"
+                                   "heartbeat_at=NULL,error=NULL,retry_count=retry_count+1 WHERE id=?", (row['id'],))
+                        self._event(db, row, 'queued', 'Travail Codex terminé retrouvé ; intégration reprise sans nouvel appel.')
+                        continue
                 db.execute("UPDATE city_tasks SET status='failed',finished_at=?,error=? WHERE id=?",
                            (_utc(), "Exécution interrompue ; relance la mission si nécessaire.", row["id"]))
                 self._event(db, row, "failed", "Exécution interrompue après une perte de contact avec le worker.")
