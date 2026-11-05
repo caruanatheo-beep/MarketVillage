@@ -37,8 +37,8 @@ const ROOT = "/city/pixel-assets";
 const ROSTER = ["market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout", "city_ui_engineer", "internships_engineer", "quality_engineer", "securities_scout"];
 const MANAGER_ID = "desk_manager";
 const WORLD_ROSTER = [...ROSTER, MANAGER_ID];
-const MARKET_PANEL = { col: -1.25, width: 14.5, top: 0.3, height: 5.3 };
-const OFFERS_PANEL = { col: 35.2, width: 14.5, top: 0.3, height: 5.3 };
+const MARKET_PANEL = { col: -1.25, width: 14.5, top: 0.3, height: 6.0 };
+const OFFERS_PANEL = { col: 35.2, width: 14.5, top: 0.3, height: 6.0 };
 function fitPanel(geometry: typeof MARKET_PANEL, zoom: number, offsetX: number, canvasWidth: number): typeof MARKET_PANEL {
   const cell = TILE_SIZE * zoom, inset = Math.max(3, cell * .35);
   const maxX = Math.max(inset, canvasWidth - geometry.width * cell - inset);
@@ -705,15 +705,21 @@ function renderZoneLabels(ctx: CanvasRenderingContext2D, zoom: number, offsetX: 
     const padX = Math.max(4, zoom * 2.2), padY = Math.max(3, zoom * 1.35);
     const width = textWidth + mark + gap + padX * 2, height = fontSize + padY * 2;
     const left = x - width / 2, top = y - height / 2;
-    // Compact wayfinding plaques echo the dark interface without obscuring the floor.
-    ctx.fillStyle = "rgba(9, 19, 31, 0.96)";
-    ctx.fillRect(left, top, width, height);
+    const plaque = ctx.createLinearGradient(left, top, left, top + height);
+    plaque.addColorStop(0, "rgba(232, 249, 239, 0.96)");
+    plaque.addColorStop(1, "rgba(174, 215, 201, 0.92)");
+    ctx.shadowColor = "rgba(5, 30, 32, 0.42)";
+    ctx.shadowBlur = Math.max(3, zoom * 2);
+    ctx.shadowOffsetY = Math.max(1, zoom);
+    ctx.beginPath(); ctx.roundRect(left, top, width, height, Math.max(3, zoom * 1.4));
+    ctx.fillStyle = plaque; ctx.fill();
+    ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
     ctx.lineWidth = Math.max(0.8, zoom * 0.35);
-    ctx.strokeStyle = item.color + "b8";
-    ctx.strokeRect(left, top, width, height);
-    ctx.fillStyle = item.color;
+    ctx.strokeStyle = item.color;
+    ctx.stroke();
+    ctx.fillStyle = "#286a63";
     ctx.fillRect(left + padX, y - mark / 2, mark, mark);
-    ctx.fillStyle = "#edf4fa";
+    ctx.fillStyle = "#173b3d";
     ctx.fillText(item.text, x + (mark + gap) / 2, y);
   }
   ctx.restore();
@@ -727,14 +733,15 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
     const x = offsetX + geometry.col * cell, y = offsetY + geometry.top * cell;
     const w = geometry.width * cell, h = geometry.height * cell;
     ctx.save();
-    ctx.shadowColor='#061d20a8';ctx.shadowBlur=cell*.75;ctx.shadowOffsetY=cell*.18;
+    ctx.shadowColor='#031c1fbd';ctx.shadowBlur=cell*.9;ctx.shadowOffsetY=cell*.2;
     const glass=ctx.createLinearGradient(x,y,x+w,y+h);
-    glass.addColorStop(0,'#123d43f5');glass.addColorStop(1,'#102f35f5');
+    glass.addColorStop(0,'#214e4cf8');glass.addColorStop(.55,'#173d41f8');glass.addColorStop(1,'#102d36fa');
     ctx.beginPath();ctx.roundRect(x,y,w,h,cell*.34);
     ctx.fillStyle=glass;ctx.fill();
     ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetY=0;
-    ctx.strokeStyle='#4e8589';ctx.lineWidth=Math.max(1,zoom*.55);ctx.stroke();
-    ctx.fillStyle=accent;ctx.fillRect(x+cell*.45,y+cell*.24,w-cell*.9,Math.max(1,zoom*.5));
+    ctx.strokeStyle='#9dd5bdba';ctx.lineWidth=Math.max(1,zoom*.55);ctx.stroke();
+    ctx.fillStyle=accent;ctx.fillRect(x+cell*.45,y+cell*.22,w-cell*.9,Math.max(2,zoom*.7));
+    ctx.fillStyle='#b9d6cf16';ctx.fillRect(x+cell*.38,y+cell*1.05,w-cell*.76,Math.max(1,zoom*.4));
     ctx.restore();return {x,y,w,h};
   };
   const write = (value: string, x: number, y: number, color: string, size: number, weight = "normal", maxWidth?: number) => {
@@ -751,7 +758,7 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
     ctx.fillText(text, x, y);
   };
   const market = panel(fitPanel(MARKET_PANEL, zoom, offsetX, ctx.canvas.width), "#75f0df");
-  const jobs = panel(fitPanel(OFFERS_PANEL, zoom, offsetX, ctx.canvas.width), "#27d9b3");
+  const jobs = panel(fitPanel(OFFERS_PANEL, zoom, offsetX, ctx.canvas.width), "#f1c782");
   const items = [
     {id:"SP500", label:"S&P 500", decimals:1},
     {id:"DGS10", label:"10Y UST", decimals:2},
@@ -760,7 +767,7 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
   ];
   const gap = cell * 0.34;
   const slot = (market.w - gap * 2) / items.length;
-  write("MARKET BRIEF", market.x + cell * .52, market.y + cell * .55, "#75f0df", 8.3, "700");
+  write("LE POINT MARCHÉS", market.x + cell * .52, market.y + cell * .61, "#aaf2df", 8.6, "700");
   const centered = (text: string, x: number, y: number, color: string, size: number, weight: string) => {
     ctx.font = `${weight} ${Math.max(zoom < .7 ? 5.5 : 9.5, size * zoom)}px Inter, Arial, sans-serif`;
     write(text, x - ctx.measureText(text).width / 2, y, color, size, weight);
@@ -768,14 +775,14 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
   items.forEach((item, index) => {
     const x = market.x + gap + (index + .5) * slot;
     const point = marketPoints.find(reading => reading.series_id === item.id);
-    if (index) {
-      ctx.fillStyle = "#b4c5d31f";
-      ctx.fillRect(x - slot * .5, market.y + cell * 1.15, Math.max(1, zoom * 0.4), cell * 2.25);
-    }
-    centered(item.label, x, market.y + cell * 1.4, "#bdcbe0", 7.3, "600");
+    const wellX = x - slot * .46, wellY = market.y + cell * 1.24;
+    ctx.beginPath(); ctx.roundRect(wellX, wellY, slot * .92, cell * 4.25, cell * .2);
+    ctx.fillStyle = "#071f2a65"; ctx.fill();
+    ctx.strokeStyle = "#9dcbbe30"; ctx.lineWidth = Math.max(.7, zoom * .3); ctx.stroke();
+    centered(item.label, x, market.y + cell * 1.72, "#b8d5d2", 7.3, "600");
     if (!point || !Number.isFinite(point.value)) {
-      centered("—", x, market.y + cell * 2.2, "#e5edf4", 8, "700");
-      centered("N/D", x, market.y + cell * 3.05, "#94a7b8", 5, "500");
+      centered("—", x, market.y + cell * 2.65, "#e5edf4", 8, "700");
+      centered("N/D", x, market.y + cell * 3.5, "#94a7b8", 5, "500");
       return;
     }
     const value = point.value.toLocaleString("en-GB", {minimumFractionDigits:item.decimals, maximumFractionDigits:item.decimals});
@@ -784,13 +791,13 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
         ? `${point.change >= 0 ? "+" : ""}${(point.change * 100).toFixed(0)} bp`
         : `${point.change >= 0 ? "+" : ""}${(point.change / point.previous * 100).toFixed(1)}%`
       : "—";
-    centered(value + (item.id === "DGS10" ? "%" : ""), x, market.y + cell * 2.2, "#f4f7fb", 12.6, "700");
-    centered(delta, x, market.y + cell * 3.05,
+    centered(value + (item.id === "DGS10" ? "%" : ""), x, market.y + cell * 2.65, "#f4f7fb", 12.6, "700");
+    centered(delta, x, market.y + cell * 3.5,
       point.change == null ? "#a8b6c3" : point.change >= 0 ? "#41ecc4" : "#ff665e",
       8, "700");
     if(point.previous != null && Number.isFinite(point.previous)) {
       const rising=point.value>=point.previous;
-      const left=x-slot*.31,right=x+slot*.31,base=market.y+cell*4.35;
+      const left=x-slot*.31,right=x+slot*.31,base=market.y+cell*4.85;
       ctx.strokeStyle='#94b4c72e';ctx.lineWidth=Math.max(1,zoom*.4);
       ctx.beginPath();ctx.moveTo(left,base);ctx.lineTo(right,base);ctx.stroke();
       ctx.strokeStyle=rising?'#41ecc4':'#ff665e';ctx.lineWidth=Math.max(1,zoom*.7);
@@ -801,24 +808,31 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
 
   const x = jobs.x + cell * 0.62;
   const max = jobs.w - cell * 1.25;
-  write("OPPORTUNITÉ DU JOUR", x, jobs.y + cell * 0.55, "#75f0df", 7.8, "700", max);
+  write("OPPORTUNITÉ DU JOUR", x, jobs.y + cell * 0.61, "#f7d7a3", 8.4, "700", max);
   if (!featured) {
     write(internshipError ? "Offres temporairement indisponibles" : "Aucune offre à afficher",
-      x, jobs.y + cell * 2.0, "#c1ccd7", 5, "500", max);
+      x, jobs.y + cell * 2.5, "#d2e0dc", 8, "500", max);
     return;
   }
-  write(featured.company || "Entreprise non indiquée", x, jobs.y + cell * 1.3, "#f2f5fa", 12, "700", max);
+  ctx.beginPath();
+  ctx.roundRect(jobs.x + cell * .38, jobs.y + cell * 1.25, jobs.w - cell * .76, cell * 3.1, cell * .2);
+  ctx.fillStyle = "#071d2866"; ctx.fill();
+  ctx.fillStyle = "#f1c782";
+  ctx.fillRect(jobs.x + cell * .38, jobs.y + cell * 1.5, Math.max(2, zoom * .8), cell * 2.5);
+  write(featured.company || "Entreprise non indiquée", x, jobs.y + cell * 1.65, "#fff8ed", 12.5, "700", max);
   ctx.font = `500 ${Math.max(zoom < .7 ? 5.5 : 9.5, 8.7 * zoom)}px Inter, Arial, sans-serif`;
   const words = featured.title.split(/\s+/);
   let line = "";
   while (words.length && ctx.measureText([line, words[0]].filter(Boolean).join(" ")).width <= max) line += (line ? " " : "") + words.shift();
   if (!line) line = words.shift() || "";
-  write(line, x, jobs.y + cell * 2.05, "#e5eaf2", 8.7, "500", max);
-  write(words.join(" "), x, jobs.y + cell * 2.78, "#e5eaf2", 8.7, "500", max);
-  write(featured.location || "Lieu non indiqué", x, jobs.y + cell * 3.55, "#c5d1e4", 7.5, "500", max);
-  write("Voir l’offre ↗", x, jobs.y + cell * 4.35, "#75f0df", 7.5, "600", max * .5);
+  write(line, x, jobs.y + cell * 2.38, "#e7f0ed", 8.7, "500", max);
+  write(words.join(" "), x, jobs.y + cell * 3.08, "#e7f0ed", 8.7, "500", max);
+  write(featured.location || "Lieu non indiqué", x, jobs.y + cell * 3.87, "#b8d6cf", 7.5, "600", max);
+  const navY = jobs.y + cell * 5.08;
+  ctx.beginPath(); ctx.roundRect(x, navY - cell * .39, cell * 4.35, cell * .78, cell * .16);
+  ctx.fillStyle = "#cceee0"; ctx.fill();
+  write("Voir l’offre ↗", x + cell * .33, navY, "#17443f", 7.6, "700", cell * 3.8);
   if (offerCount > 1) {
-    const navY = jobs.y + cell * 4.35;
     const buttonW = cell * 0.88, buttonH = cell * 0.58;
     const prevX = jobs.x + jobs.w - cell * 2.62;
     const nextX = jobs.x + jobs.w - cell * 1.48;
@@ -827,11 +841,11 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
     ctx.textAlign = "center";
     ctx.font = `700 ${Math.max(6, 5 * zoom)}px Inter, Arial, sans-serif`;
     for (const [label, bx] of [["‹", prevX], ["›", nextX]] as const) {
-      ctx.fillStyle = "#19494f";
-      ctx.fillRect(bx, navY - buttonH / 2, buttonW, buttonH);
-      ctx.strokeStyle = "#83cbd9a0";
+      ctx.fillStyle = "#275653";
+      ctx.beginPath(); ctx.roundRect(bx, navY - buttonH / 2, buttonW, buttonH, cell * .1); ctx.fill();
+      ctx.strokeStyle = "#a9d5c5b0";
       ctx.lineWidth = Math.max(1, zoom * 0.35);
-      ctx.strokeRect(bx, navY - buttonH / 2, buttonW, buttonH);
+      ctx.stroke();
       ctx.fillStyle = "#edf5fa";
       ctx.fillText(label, bx + buttonW / 2, navY);
     }
@@ -1111,9 +1125,9 @@ export function PixelFloorGame(props: Props): React.ReactElement {
           output.beginPath();output.ellipse(x,y+5*scale,10*scale,4*scale,0,0,Math.PI*2);output.stroke();
           output.font='600 12px Inter, "Segoe UI", sans-serif';
           const width=output.measureText(agent.name).width+18,top=y-32*scale-22;
-          output.fillStyle='#0c2136f2';output.fillRect(x-width/2,top,width,22);
-          output.strokeRect(x-width/2,top,width,22);
-          output.textAlign='center';output.textBaseline='middle';output.fillStyle='#e5fbff';
+          output.beginPath();output.roundRect(x-width/2,top,width,22,5);
+          output.fillStyle='#d9f0e8';output.fill();output.stroke();
+          output.textAlign='center';output.textBaseline='middle';output.fillStyle='#173b3d';
           output.fillText(agent.name,x,top+11);output.restore();
         }
         // Billboards face the viewer: keep their type on a flat, legible plane.
@@ -1195,7 +1209,7 @@ export function PixelFloorGame(props: Props): React.ReactElement {
       tileY >= offersPanel.top && tileY <= offersPanel.top + offersPanel.height) {
       const prevX = offersPanel.col + offersPanel.width - 2.62;
       const nextX = offersPanel.col + offersPanel.width - 1.48;
-      if (offers.length > 1 && tileY >= offersPanel.top + 4.06 && tileY <= offersPanel.top + 4.65) {
+      if (offers.length > 1 && tileY >= offersPanel.top + 4.79 && tileY <= offersPanel.top + 5.37) {
         if (tileX >= prevX && tileX <= prevX + 0.88) {
           setOfferIndex((offerIndexRef.current - 1 + offers.length) % offers.length);
           return;
@@ -1254,7 +1268,7 @@ export function PixelFloorGame(props: Props): React.ReactElement {
       const offer = offers[Math.min(offerIndexRef.current, offers.length - 1)];
       const prevX = offersPanel.col + offersPanel.width - 2.62;
       const nextX = offersPanel.col + offersPanel.width - 1.48;
-      const isPager = offers.length > 1 && tileY >= offersPanel.top + 4.06 && tileY <= offersPanel.top + 4.65 &&
+      const isPager = offers.length > 1 && tileY >= offersPanel.top + 4.79 && tileY <= offersPanel.top + 5.37 &&
         (tileX >= prevX && tileX <= prevX + 0.88 || tileX >= nextX && tileX <= nextX + 0.88);
       node.title = isPager ? "Parcourir les offres" : offer
         ? `${offer.company} — ${offer.title}\n${offer.location || "Lieu non indiqué"}\nContrat : ${offer.kind || "non indiqué"}\nDébut : ${offer.start_period || "non indiqué"}\nPublication : ${offer.published ? offer.published_inferred ? `date estimée à la détection (${offer.published})` : offer.published : "non indiquée"}\nSource : ${offer.source || "non indiquée"}${offer.selection_reason ? `\n${offer.selection_reason}` : ""}`
