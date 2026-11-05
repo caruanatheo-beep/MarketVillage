@@ -133,6 +133,15 @@ def test_autonomous_engineer_integrates_validated_code_without_approval(repo, mo
     assert (root/'internships_project/city_sample.py').read_text() == 'value = 2\n'
 
 
+def test_codex_usage_stop_prevents_a_new_worktree(repo, monkeypatch):
+    root, _ = repo
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: coding.CODEX_USAGE_STOP_PERCENT)
+    monkeypatch.setattr(coding, '_execute', lambda *_args: pytest.fail('Codex must stay stopped'))
+    with pytest.raises(CityError, match='60 %'):
+        coding.implement_change('9'*32, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
+    assert not (root/'.city-worktrees'/('9'*32)).exists()
+
+
 def test_autonomous_worktree_resumes_after_main_becomes_clean(repo, monkeypatch):
     root, git = repo
     monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 12)
@@ -205,6 +214,22 @@ def test_dirty_main_requeues_development_and_retry_keeps_task_id(store, monkeypa
     assert retried['id'] == task['id'] and retried['status'] == 'queued'
     with store.db() as db:
         assert db.execute('SELECT scheduled_at FROM city_tasks WHERE id=?', (task['id'],)).fetchone()[0] is None
+
+
+def test_coding_history_is_private_compact_and_keeps_full_detail(store):
+    task = store.create_task('alice', 'job_hunter', 'Corriger une date', {'operation': 'develop'})
+    store.claim_next()
+    store.progress(task['id'], 'Tests ciblés réussis ; intégration en cours.')
+    store.finish(task['id'], result={'plain_summary': 'Date corrigée.', 'integrated': True,
+                                    'files': ['internships_project/city_services.py'], 'diff': 'large diff'})
+    history = store.coding_history('alice')
+    assert len(history['tasks']) == 1
+    assert history['tasks'][0]['result']['plain_summary'] == 'Date corrigée.'
+    assert 'diff' not in history['tasks'][0]['result']
+    assert any(event['task_id'] == task['id'] and 'Tests ciblés' in event['message'] for event in history['events'])
+    assert store.coding_history('bob')['tasks'] == []
+    assert store.task_detail('bob', task['id']) is None
+    assert store.task_detail('alice', task['id'])['result']['diff'] == 'large diff'
 
 
 def test_parallel_coding_claims_are_bounded_per_agent_and_globally(store):
@@ -457,6 +482,8 @@ def test_coding_http_auth_payload_and_manager_preserve_user_request(store):
     request='Ajoute un filtre aux stages affichés'
     with TestClient(app) as client:
         assert client.post('/city/api/develop/city_ui_engineer', json={}).status_code == 401
+        assert client.get('/city/api/coding-history').status_code == 401
+        assert client.get('/city/api/coding-history', headers=headers).status_code == 200
         assert client.post('/city/api/develop/city_ui_engineer', headers={'x-user':'alice'}, json={}).status_code == 403
         assert client.post('/city/api/develop/unknown', headers=headers, json={}).status_code == 404
         for agent_id in AGENT_BY_ID:
@@ -465,6 +492,9 @@ def test_coding_http_auth_payload_and_manager_preserve_user_request(store):
             assert store.cancel_queued('alice', response.json()['task']['id'])
         autonomous = client.post('/city/api/develop/city_ui_engineer', headers=headers, json={})
         assert autonomous.status_code == 201
+        task_id = autonomous.json()['task']['id']
+        assert client.get(f'/city/api/tasks/{task_id}', headers=headers).status_code == 200
+        assert client.get(f'/city/api/tasks/{task_id}', headers={'x-user':'bob'}).status_code == 404
         assert store.cancel_queued('alice', autonomous.json()['task']['id'])
         assert client.post('/city/api/jules/change',json={'request':request}).status_code==401
         assert client.post('/city/api/jules/change',headers={'x-user':'alice'},json={'request':request}).status_code==403
@@ -487,8 +517,10 @@ def test_coding_http_auth_payload_and_manager_preserve_user_request(store):
 def test_market_agent_development_uses_codex_runner_not_market_collector(store, monkeypatch):
     from internships_project import city_coding
     called = []
-    def implement(task_id, proposal, *, agent_id, auto_integrate):
+    def implement(task_id, proposal, *, agent_id, auto_integrate, on_progress=None):
         called.append((agent_id, auto_integrate))
+        if on_progress:
+            on_progress('Tests ciblés réussis ; intégration de la branche en cours.')
         return {'title': 'Développement intégré', 'integrated': True, 'commit': 'fixture', 'text': 'Tests validés'}
     monkeypatch.setattr(city_coding, 'implement_change', implement)
     task = store.create_task('alice', 'market_analyst', 'Améliorer Markets',
@@ -496,6 +528,8 @@ def test_market_agent_development_uses_codex_runner_not_market_collector(store, 
     assert CityWorker(store).run_once()
     result = next(row for row in store.snapshot('alice')['tasks'] if row['id'] == task['id'])
     assert result['status'] == 'completed' and called == [('market_analyst', True)]
+    assert any(event['task_id'] == task['id'] and 'Tests ciblés' in event['message']
+               for event in store.snapshot('alice')['events'])
 
 
 def test_codex_failure_and_missing_completion_never_report_success(monkeypatch,tmp_path):

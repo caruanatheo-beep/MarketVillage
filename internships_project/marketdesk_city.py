@@ -335,8 +335,8 @@ class CityStore:
                      ("innovation_lab", "innovation_review", week + ("-Mon" if moment.weekday() < 3 else "-Thu"), "Deux innovations open source")]
         if date(2026, 11, 4) <= moment.date() < date(2026, 12, 4):
             schedules.extend((agent_id, f'develop:{agent_id}:{slot}', day,
-                              f'Développement autonome {slot}/2 · {AGENT_BY_ID[agent_id]["name"]}')
-                             for agent_id in CODING_AGENTS for slot in (1, 2))
+                              f'Développement autonome {slot}/4 · {AGENT_BY_ID[agent_id]["name"]}')
+                             for agent_id in CODING_AGENTS for slot in (1, 2, 3, 4))
         count = 0
         with self.db() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -588,6 +588,10 @@ class CityStore:
                 f"SELECT agent_id,status,result_json,error FROM city_tasks WHERE username=? AND agent_id IN ({marks}) "
                 "AND json_extract(parameters_json,'$.operation')='develop' AND finished_at>=? "
                 "ORDER BY finished_at LIMIT 16", (username, *DEVELOPMENT_AGENTS, day_start)).fetchall()
+            development_active = db.execute(
+                "SELECT COUNT(*) FROM city_tasks WHERE username=? AND created_at>=? "
+                "AND json_extract(parameters_json,'$.operation')='develop' AND status IN ('queued','running')",
+                (username, day_start)).fetchone()[0]
         lines = [f"### Briefing du {moment:%d/%m/%Y} · Desk Manager", "", "**Derniers résultats enregistrés**"]
         for agent, label in names.items():
             row = latest[agent]
@@ -632,6 +636,8 @@ class CityStore:
         blocked = [row for row in development if row['status'] == 'failed']
         if blocked:
             lines.append(f"- {len(blocked)} mission(s) non intégrée(s) : détails dans Notifications.")
+        if development_active:
+            lines.append(f"- {development_active} mission(s) de code encore en attente ou en cours : suivi dans Missions > Équipe de code.")
         decisions = [row["description"] for row in [*proposals, *waiting]]
         lines.extend(["", "**À décider**"])
         lines.extend(f"- {item[:180]}" for item in decisions[:5])
@@ -675,7 +681,7 @@ class CityStore:
                                              "JOIN city_tasks t ON t.id=s.task_id AND t.username=s.username "
                                              "WHERE s.username=? AND s.period=? AND s.operation LIKE 'develop:%'",
                                              (username, day)).fetchall()
-                    if len(development) < 8 or any(row[0] not in FINAL for row in development):
+                    if (len(development) < 16 or any(row[0] not in FINAL for row in development)) and moment.hour < 20:
                         continue
                 lina = db.execute("SELECT enabled,last_day,last_task_id FROM city_network_schedule WHERE username=?",
                                   (username,)).fetchone()
@@ -1260,6 +1266,14 @@ class CityStore:
             db.execute("UPDATE city_tasks SET heartbeat_at=? WHERE id=? AND status='running'",
                        (_utc(), task_id))
 
+    def progress(self, task_id: str, message: str) -> None:
+        with self.db() as db:
+            task = db.execute("SELECT id,username,agent_id FROM city_tasks WHERE id=? AND status='running'",
+                              (task_id,)).fetchone()
+            if task:
+                db.execute("UPDATE city_tasks SET heartbeat_at=? WHERE id=?", (_utc(), task_id))
+                self._event(db, task, 'running', message)
+
     def defer_coding(self, task_id: str, reason: str, *, delay_minutes: int = 60) -> None:
         next_try = (datetime.now(timezone.utc) + timedelta(minutes=delay_minutes)).isoformat(timespec='seconds')
         with self.db() as db:
@@ -1558,6 +1572,48 @@ class CityStore:
                 self._refresh_workflow(db, row["workflow_id"])
             return len(rows)
 
+    def coding_history(self, username: str) -> dict:
+        """Compact month-long coding feed; full diffs stay behind the task detail route."""
+        since = (datetime.now(timezone.utc) - timedelta(days=31)).isoformat(timespec='seconds')
+        with self.db() as db:
+            rows = db.execute(
+                "SELECT id,agent_id,task_type,description,status,created_at,started_at,finished_at,"
+                "result_json,error,retry_count,parameters_json FROM city_tasks WHERE username=? AND created_at>=? "
+                "AND json_extract(parameters_json,'$.operation') IN ('develop','code_change','prepare_branch') "
+                "ORDER BY created_at DESC,rowid DESC LIMIT 700", (username, since)).fetchall()
+            ids = [row['id'] for row in rows]
+            events = []
+            if ids:
+                marks = ','.join('?' for _ in ids)
+                events = [dict(row) for row in db.execute(
+                    f"SELECT id,agent_id,task_id,status,message,created_at FROM city_events "
+                    f"WHERE username=? AND task_id IN ({marks}) ORDER BY id DESC LIMIT 1800", (username, *ids))]
+        tasks = []
+        for row in rows:
+            result = json.loads(row['result_json'] or '{}')
+            payload = json.loads(row['parameters_json'] or '{}')
+            task = {key: row[key] for key in ('id','agent_id','task_type','description','status',
+                    'created_at','started_at','finished_at','error','retry_count')}
+            task['operation'] = payload.get('operation', '')
+            task['period'] = payload.get('period', '')
+            task['result'] = {key: result[key] for key in ('title','plain_summary','summary','files',
+                              'integrated','commit','branch') if key in result}
+            tasks.append(task)
+        return {'tasks': tasks, 'events': events}
+
+    def task_detail(self, username: str, task_id: str) -> dict | None:
+        with self.db() as db:
+            row = db.execute('SELECT * FROM city_tasks WHERE id=? AND username=?', (task_id, username)).fetchone()
+        if row is None:
+            return None
+        task = dict(row)
+        task['result'] = json.loads(task.pop('result_json') or '{}')
+        payload = json.loads(task.pop('parameters_json') or '{}')
+        task['operation'] = payload.get('operation', '')
+        task.pop('username', None)
+        task.pop('heartbeat_at', None)
+        return task
+
     def snapshot(self, username: str) -> dict:
         self.ensure_agents(username)
         with self.db() as db:
@@ -1820,7 +1876,8 @@ class CityWorker:
             if parameters.get('operation') == 'develop':
                 from .city_coding import implement_change
                 result = implement_change(task['id'], {'coding_request': parameters.get('request', '')},
-                                          agent_id=task['agent_id'], auto_integrate=True)
+                                          agent_id=task['agent_id'], auto_integrate=True,
+                                          on_progress=lambda message: self.store.progress(task['id'], message))
                 self.store.finish(task['id'], result=result)
                 return True
             if task["agent_id"] == "outreach_agent" and task.get("workflow_id"):

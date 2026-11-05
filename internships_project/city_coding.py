@@ -12,11 +12,13 @@ import subprocess
 import sys
 import tempfile
 import threading
+from typing import Callable
 
 from .marketdesk_city import AGENT_BY_ID, CityError
 from .city_specialists import VERSION, git, repo_root, approved_base, branch_context
 
 _integration_lock = threading.Lock()
+CODEX_USAGE_STOP_PERCENT = 60
 
 
 def codex_binary() -> str:
@@ -218,7 +220,8 @@ def _execute(command: list[str], directory: Path, prompt: str, env: dict) -> lis
 
 
 def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunter',
-                     auto_integrate: bool = False) -> dict:
+                     auto_integrate: bool = False,
+                     on_progress: Callable[[str], None] | None = None) -> dict:
     root = repo_root()
     request = str(proposal.get('coding_request') or '').strip()
     if not re.fullmatch(r'[a-f0-9]{32}', task_id) or len(request) > 3000 or (request and len(request) < 10) or (not request and not auto_integrate):
@@ -230,7 +233,7 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
     directory = root/'.city-worktrees'/task_id
     branch = 'marketdesk/'+('jules' if agent_id == 'job_hunter' else agent_id.replace('_', '-'))+'-'+task_id[:12]
     if auto_integrate and directory.exists():
-        return _resume_autonomous_change(root, directory, branch, agent_id)
+        return _resume_autonomous_change(root, directory, branch, agent_id, on_progress)
     revision = git(root, 'rev-parse', 'HEAD') if auto_integrate else approved_base(root, proposal)
     if auto_integrate and git(root, 'status', '--porcelain', '--untracked-files=no'):
         raise CityError('Développement suspendu : le dépôt courant contient des modifications locales suivies.')
@@ -242,8 +245,8 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
     site_packages = root/'.venv'/'Lib'/'site-packages'
     if site_packages.is_dir():
         env['MARKETDESK_TEST_SITE_PACKAGES'] = str(site_packages)
-    if auto_integrate and codex_usage_percent(binary, env) >= 70:
-        raise CityError('Développement reporté : plus de 70 % d’une fenêtre de quota Codex est utilisé.')
+    if auto_integrate and codex_usage_percent(binary, env) >= CODEX_USAGE_STOP_PERCENT:
+        raise CityError('Développement reporté : le seuil de 60 % du quota Codex est atteint.')
     if directory.exists():
         raise CityError('Un espace existe déjà pour cette mission. Consulte-le ou soumets une nouvelle demande.')
     directory.parent.mkdir(exist_ok=True)
@@ -299,6 +302,8 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
               f'Python disponible : {sys.executable}. Utilise ce chemin absolu pour lancer les tests '
               '(python peut être un alias Windows sans interpréteur). '
               'Réponds en français avec le schéma JSON demandé.\n\nDemande utilisateur :\n'+request)
+    if on_progress:
+        on_progress('Codex examine le projet et prépare une modification.')
     events = _execute(command, directory, prompt, env)
     try:
         result = json.loads(report.read_text(encoding='utf-8'))
@@ -340,7 +345,10 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
               for item in commands][-25:]
     usage = next((event.get('usage',{}) for event in reversed(events) if event.get('type')=='turn.completed'),{})
     context = branch_context(root,revision)
-    integration = _auto_integrate(root, directory, branch, revision, files, agent_id) if auto_integrate else {}
+    if auto_integrate and on_progress:
+        on_progress('Modification prête ; vérification des fichiers et des tests.')
+    integration = _auto_integrate(root, directory, branch, revision, files, agent_id,
+                                  on_progress=on_progress) if auto_integrate else {}
     if integration:
         (directory/'.jules-complete.json').unlink(missing_ok=True)
         context['base_note'] = ('La branche a \u00e9t\u00e9 adapt\u00e9e aux autres changements, puis rev\u00e9rifi\u00e9e et int\u00e9gr\u00e9e.'
@@ -358,7 +366,8 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
                     'Modifications locales à examiner ; aucun commit, push ou merge effectué par City.')+'\n\n'+context['base_note']}
 
 
-def _resume_autonomous_change(root: Path, directory: Path, branch: str, agent_id: str) -> dict:
+def _resume_autonomous_change(root: Path, directory: Path, branch: str, agent_id: str,
+                              on_progress: Callable[[str], None] | None = None) -> dict:
     """Finish a completed Codex worktree after a temporary integration block."""
     if git(directory, 'branch', '--show-current') != branch:
         raise CityError('Branche de travail inattendue : intégration suspendue.')
@@ -391,7 +400,10 @@ def _resume_autonomous_change(root: Path, directory: Path, branch: str, agent_id
         except (UnicodeError, OSError):
             continue
         diff += '\n'+''.join(difflib.unified_diff([], lines, fromfile='/dev/null', tofile=name))
-    integration = _auto_integrate(root, directory, branch, revision, files, agent_id, committed=committed)
+    if on_progress:
+        on_progress('Travail Codex retrouvé ; vérifications relancées sans nouvel appel.')
+    integration = _auto_integrate(root, directory, branch, revision, files, agent_id,
+                                  committed=committed, on_progress=on_progress)
     context = branch_context(root, revision)
     context['base_note'] = ('La branche a été adaptée aux autres changements, puis revérifiée et intégrée.'
                             if integration['rebased'] else 'La branche a été vérifiée et intégrée.')
@@ -411,7 +423,8 @@ def _resume_autonomous_change(root: Path, directory: Path, branch: str, agent_id
 
 
 def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
-                    files: list[str], agent_id: str, *, committed: bool = False) -> dict:
+                    files: list[str], agent_id: str, *, committed: bool = False,
+                    on_progress: Callable[[str], None] | None = None) -> dict:
     """Validate in the worktree, then integrate one completed branch at a time."""
     allowed = ('internships_project/', 'tests/', 'scripts/', '.github/workflows/')
     for name in files:
@@ -422,6 +435,8 @@ def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
         if path.stat().st_size > 2_000_000:
             raise CityError('Intégration suspendue : fichier trop volumineux. La branche reste disponible.')
     test_file = _integration_checks(root, directory, files, agent_id, committed=committed)
+    if on_progress:
+        on_progress('Tests ciblés réussis ; intégration de la branche en cours.')
     with _integration_lock:
         if git(root, 'status', '--porcelain', '--untracked-files=no'):
             raise CityError('Intégration suspendue : le dépôt courant contient des modifications locales suivies.')
@@ -436,6 +451,8 @@ def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
                 git(directory, 'rebase', '--abort')
                 raise CityError('Intégration suspendue : conflit avec une autre mission. La branche reste disponible.') from exc
             _integration_checks(root, directory, files, agent_id, committed=True)
+            if on_progress:
+                on_progress('Branche adaptée au dépôt actuel ; tests confirmés.')
         if git(root, 'rev-parse', 'HEAD') != current or git(root, 'status', '--porcelain', '--untracked-files=no'):
             raise CityError('Le dépôt a changé pendant les vérifications : intégration suspendue. La branche reste disponible.')
         commit = git(directory, 'rev-parse', 'HEAD')

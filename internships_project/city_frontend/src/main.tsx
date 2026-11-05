@@ -33,7 +33,7 @@ type Task = {
   created_at: string; started_at?: string; finished_at?: string; result: Result;
   error?: string; xp_awarded: number; input_tokens: number; output_tokens: number; api_cost_usd: number;
   workflow_id?: string; priority?: number; retry_count?: number; max_retries?: number; depends_on?: string[];
-  delegated_by?: string; retry_of?: string; operation?: string;
+  delegated_by?: string; retry_of?: string; operation?: string; period?: string;
 };
 type Workflow = {id:string;template:string;request:string;status:AgentStatus;priority:number;created_at:string;
   updated_at:string;steps:{id:string;agent_id:string;description:string;status:AgentStatus;error?:string;
@@ -151,9 +151,16 @@ async function api<T>(path: string, payload?: object): Promise<T> {
 function App(): React.ReactElement {
   const [notificationView,setNotificationView]=useState({filter:"all",agent:""});
   const [missionFilter,setMissionFilter]=useState("active");
+  const [missionView,setMissionView]=useState<'missions'|'code'>('missions');
+  const [codeHistory,setCodeHistory]=useState<{tasks:Task[];events:Event[]}|null>(null);
+  const [codeHistoryError,setCodeHistoryError]=useState('');
+  const [codeAgent,setCodeAgent]=useState('all');
+  const [codeFilter,setCodeFilter]=useState<'all'|'active'|'applied'|'blocked'>('all');
+  const [codeVisible,setCodeVisible]=useState(30);
   const [changeFilter,setChangeFilter]=useState<'all'|'applied'|'not_applied'|'waiting'>('all');
   const [showAllChanges,setShowAllChanges]=useState(false);
   const [resultTaskId,setResultTaskId]=useState<string|null>(null);
+  const [resultTaskDetail,setResultTaskDetail]=useState<Task|null>(null);
   const [launchingSite,setLaunchingSite]=useState<string|null>(null);
   const [siteError,setSiteError]=useState("");
   const [commandQuery,setCommandQuery]=useState("");
@@ -275,6 +282,16 @@ function App(): React.ReactElement {
     const interval = window.setInterval(() => { if (!document.hidden) void loadInternshipHighlight(); }, 60000);
     return () => window.clearInterval(interval);
   }, [loadInternshipHighlight]);
+
+  useEffect(() => {
+    if(windowMode!=='missions'||missionView!=='code')return;
+    let active=true;
+    const load=async()=>{try{const history=await api<{tasks:Task[];events:Event[]}>('/city/api/coding-history');if(active){setCodeHistory(history);setCodeHistoryError('');}}
+      catch(exc){if(active)setCodeHistoryError(exc instanceof Error?exc.message:'Suivi indisponible.');}};
+    void load();
+    const interval=window.setInterval(()=>{if(!document.hidden)void load();},15000);
+    return()=>{active=false;window.clearInterval(interval);};
+  },[windowMode,missionView]);
 
   useEffect(() => {
     void loadChat("desk_manager");
@@ -559,7 +576,36 @@ function App(): React.ReactElement {
   async function reviewProposal(taskId:string,approved:boolean) {
     try {await api(`/city/api/proposals/${taskId}/review`,{approved});await refresh();setError(approved?"Proposition transmise à Jules.":"Proposition refusée.");} catch(error){setError(error instanceof Error?error.message:"Validation impossible.");}
   }
-  function showResult(task:Task):void {setResultTaskId(task.id);setOpenedTaskId(task.id);setSelectedId(task.agent_id);setWindowMode("none");}
+  function showResult(task:Task):void {setResultTaskDetail(null);setResultTaskId(task.id);setOpenedTaskId(task.id);setSelectedId(task.agent_id);setWindowMode("none");}
+  async function showCodeResult(task:Task):Promise<void> {
+    try {
+      const detail=await api<Task>(`/city/api/tasks/${task.id}`);
+      setResultTaskDetail(detail);setResultTaskId(task.id);setOpenedTaskId(task.id);setSelectedId(task.agent_id);setWindowMode('none');
+    } catch(exc) {setError(exc instanceof Error?exc.message:'Résultat indisponible.');}
+  }
+
+  function codePanel():React.ReactElement {
+    const tasks=codeHistory?.tasks||snapshot?.tasks.filter(task=>['develop','code_change','prepare_branch'].includes(task.operation||''))||[];
+    const events=codeHistory?.events||snapshot?.events||[];
+    const coders=groupedAgents(snapshot?.agents||[]).code;
+    const today=new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Paris'});
+    const todayTasks=tasks.filter(task=>task.period===today&&task.operation==='develop');
+    const applied=tasks.filter(task=>codeChangeState(task)==='applied').length;
+    const active=tasks.filter(task=>['queued','running'].includes(task.status)).length;
+    const blocked=tasks.filter(task=>task.status==='failed').length;
+    const stage=(task:Task)=>events.find(event=>event.task_id===task.id)?.message||
+      (task.status==='running'?'Codex examine le projet.':task.status==='queued'?'Mission en file.':'');
+    const visible=tasks.filter(task=>(codeAgent==='all'||task.agent_id===codeAgent)&&
+      (codeFilter==='all'||codeFilter==='active'&&['queued','running'].includes(task.status)||
+       codeFilter==='applied'&&codeChangeState(task)==='applied'||codeFilter==='blocked'&&['failed','cancelled'].includes(task.status)));
+    return <div className="code-team-panel">
+      <section className="code-team-hero"><div><span className="mission-team-label">ATELIER DE DÉVELOPPEMENT</span><h2>Ton équipe de code</h2><p>Chaque agent choisit ses améliorations. Jusqu’à quatre missions par jour et par agent ; City suspend les nouveaux départs dès que 60 % d’une fenêtre de quota Codex est utilisée.</p></div><div className="code-team-metrics"><div><strong>{active}</strong><span>en file ou en cours</span></div><div><strong>{applied}</strong><span>changements appliqués</span></div><div><strong>{blocked}</strong><span>missions à examiner</span></div></div></section>
+      {codeHistoryError&&<p className="error-copy" role="alert">{codeHistoryError}</p>}
+      <section className="code-team-roster" aria-label="Programmeurs"><div className="section-heading"><div><h3>Les programmeurs</h3><small>Progression du jour · {todayTasks.length} mission(s) planifiée(s) ou lancée(s)</small></div></div><div className="code-team-roster-grid">{coders.map(agent=>{const own=todayTasks.filter(task=>task.agent_id===agent.id);const current=own.find(task=>task.status==='running')||own.find(task=>task.status==='queued');return <button type="button" className={`code-team-person ${codeAgent===agent.id?'selected':''}`} key={agent.id} onClick={()=>{setCodeAgent(codeAgent===agent.id?'all':agent.id);setCodeVisible(30)}}><span className={`roster-avatar pixel-agent-avatar ${agent.id}`} aria-hidden="true"><i className="agent-sprite"/></span><span className="code-team-person-copy"><strong>{agent.name}</strong><small>{current?`${LABELS[current.status]} · ${stage(current)}`:`${own.filter(task=>task.status==='completed').length} terminée(s) aujourd’hui`}</small><span className="code-team-progress"><i style={{width:`${Math.min(100,own.length*25)}%`}}/></span></span><b>{own.length}/4</b></button>})}</div></section>
+      <section className="code-team-feed"><div className="section-heading"><div><h3>Travaux et modifications</h3><small>Historique des 31 derniers jours · ouvre une mission pour voir son résultat complet</small></div><span>{visible.length} mission(s)</span></div><div className="code-team-filters" role="group" aria-label="Filtrer les travaux">{([['all','Tout'],['active','En cours'],['applied','Appliqué'],['blocked','À examiner']] as const).map(([id,label])=><button type="button" key={id} aria-pressed={codeFilter===id} onClick={()=>{setCodeFilter(id);setCodeVisible(30)}}>{label}</button>)}</div>
+        {!visible.length?<p className="code-team-empty">Aucune mission pour ce filtre.</p>:<div className="code-team-feed-list">{visible.slice(0,codeVisible).map(task=>{const state=codeChangeState(task),ownEvents=events.filter(event=>event.task_id===task.id).sort((a,b)=>a.id-b.id);return <article className={`code-team-work ${state}`} key={task.id}><header><div><span className={`roster-avatar pixel-agent-avatar ${task.agent_id}`} aria-hidden="true"><i className="agent-sprite"/></span><span><strong>{snapshot?.agents.find(agent=>agent.id===task.agent_id)?.name||task.agent_id}</strong><small>{dateTime(task.finished_at||task.created_at)} · #{task.id.slice(0,10)}</small></span></div><span className={`task-chip ${task.status}`}>{state==='applied'?'Appliqué':task.status==='queued'&&stage(task).includes('quota')?'Pause quota':LABELS[task.status]}</span></header><h4>{task.description}</h4><p>{codeChangeSummary(task)}</p>{['queued','running'].includes(task.status)&&<p className="code-team-stage">◷ {stage(task)}</p>}{task.error&&<p className="code-team-error">{task.error}</p>}{!!task.result.files?.length&&<details><summary>{task.result.files.length} fichier(s) modifié(s)</summary><ul>{task.result.files.map(file=><li key={file}><code>{file}</code></li>)}</ul></details>}{!!ownEvents.length&&<details><summary>Étapes de la mission</summary><ol>{ownEvents.map(event=><li key={event.id}><time>{dateTime(event.created_at)}</time><span>{event.message}</span></li>)}</ol></details>}<div className="code-team-work-actions">{['completed','failed'].includes(task.status)&&<button type="button" onClick={()=>void showCodeResult(task)}>Voir le résultat complet →</button>}{task.status==='failed'&&<button type="button" disabled={busy} onClick={()=>void retry(task.id)}>Réessayer</button>}</div></article>})}</div>}{visible.length>codeVisible&&<button type="button" className="code-team-more" onClick={()=>setCodeVisible(codeVisible+30)}>Afficher 30 missions de plus</button>}</section>
+    </div>;
+  }
 
   function managerPanel(): React.ReactElement {
     const allTasks = snapshot?.tasks || [];
@@ -774,7 +820,8 @@ function App(): React.ReactElement {
     {windowMode==="contacts"&&<NetworkContactsWindow onClose={()=>setWindowMode("none")}/>}
     {windowMode==="missions"&&<section className="game-popup game-mission-control" aria-label="Mission Control">
       <div className="game-popup-heading"><div><strong>Mission Control</strong><small>{activeCount} en cours &middot; {pendingCount} à valider</small></div><button type="button" onClick={()=>setWindowMode("none")} aria-label="Fermer">&times;</button></div>
-      {managerPanel()}</section>}
+      <div className="mission-view-tabs" role="tablist" aria-label="Vues des missions"><button type="button" role="tab" aria-selected={missionView==='missions'} onClick={()=>setMissionView('missions')}>Toutes les missions</button><button type="button" role="tab" aria-selected={missionView==='code'} onClick={()=>setMissionView('code')}>Équipe de code <span>{(snapshot?.tasks||[]).filter(task=>agentGroup(task.agent_id)==='Développement'&&['queued','running'].includes(task.status)).length}</span></button></div>
+      {missionView==='code'?codePanel():managerPanel()}</section>}
     {windowMode==="activity"&&<NotificationCenter key={`${notificationView.filter}-${notificationView.agent}`} initialFilter={notificationView.filter} initialAgent={notificationView.agent} tasks={snapshot?.tasks||[]} events={snapshot?.events||[]} agents={snapshot?.agents||[]} readThrough={notificationReadThrough}
       onClose={()=>setWindowMode("none")} onOpen={id=>{const task=snapshot?.tasks.find(t=>t.id===id);if(task)showResult(task);else setError("Cette mission n'est plus dans les données chargées.");}}
       onRead={async()=>{const result=await api<{last_read_event_id:number}>("/city/api/notifications/read",{read_through:Math.max(0,...(snapshot?.events||[]).map(e=>e.id))});setNotificationReadThrough(result.last_read_event_id);}}
@@ -783,8 +830,8 @@ function App(): React.ReactElement {
       onRetry={id=>api(`/city/api/tasks/${id}/retry`,{})} onRefresh={refresh}/>}
     {error&&<div className="city-toast" role="alert"><span>{error}</span><button type="button" onClick={()=>setError("")} aria-label="Fermer">&times;</button></div>}
     {siteError&&<div className="city-toast" role="alert"><span>{siteError}</span><button type="button" onClick={()=>setSiteError("")} aria-label="Fermer">&times;</button></div>}
-    {resultTaskId&&<section className={`game-popup mission-results-window ${snapshot?.tasks.find(t=>t.id===resultTaskId)?.agent_id==='market_analyst'?'market-brief-window':''} ${snapshot?.tasks.find(t=>t.id===resultTaskId)?.result.branch?'code-results-window':''}`} role="dialog" aria-label="Résultat de mission"><div className="game-popup-heading"><div><strong>Résultat de mission</strong><small>Contributions enregistrées par les agents</small></div><button type="button" onClick={()=>setResultTaskId(null)} aria-label="Fermer le résultat">×</button></div><div className="mission-results-body">
-      {(()=>{const root=snapshot?.tasks.find(t=>t.id===resultTaskId);if(!root)return <p>Cette mission n’est plus disponible dans les données chargées.</p>;
+    {resultTaskId&&<section className={`game-popup mission-results-window ${(resultTaskDetail||snapshot?.tasks.find(t=>t.id===resultTaskId))?.agent_id==='market_analyst'?'market-brief-window':''} ${(resultTaskDetail||snapshot?.tasks.find(t=>t.id===resultTaskId))?.result.branch?'code-results-window':''}`} role="dialog" aria-label="Résultat de mission"><div className="game-popup-heading"><div><strong>Résultat de mission</strong><small>Contributions enregistrées par les agents</small></div><button type="button" onClick={()=>{setResultTaskId(null);setResultTaskDetail(null);}} aria-label="Fermer le résultat">×</button></div><div className="mission-results-body">
+      {(()=>{const root=resultTaskDetail||snapshot?.tasks.find(t=>t.id===resultTaskId);if(!root)return <p>Cette mission n’est plus disponible dans les données chargées.</p>;
         const parts=root.workflow_id?(snapshot?.tasks||[]).filter(t=>t.workflow_id===root.workflow_id):[root];
         return <><h2>{root.description}</h2>{parts.map(task=><article className={`mission-result-part ${task.agent_id==='market_analyst'?'market-brief-result':''}`} key={task.id}><header><strong>{snapshot?.agents.find(a=>a.id===task.agent_id)?.name||task.agent_id}</strong><span className={`task-chip ${task.status}`}>{LABELS[task.status]}</span></header><h3>{task.description}</h3><small>{dateTime(task.finished_at||task.created_at)} · ID {task.id}</small>
           {task.error&&<p className="error-copy">{task.error}</p>}

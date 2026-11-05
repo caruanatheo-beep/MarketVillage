@@ -98,6 +98,23 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
             return denied()
         return JSONResponse(store.snapshot(username), headers={"Cache-Control": "private, no-store"})
 
+    @server.get("/city/api/coding-history")
+    def city_coding_history(request: Request):
+        username = owner(request)
+        if not username:
+            return denied()
+        return JSONResponse(store.coding_history(username), headers={"Cache-Control": "private, no-store"})
+
+    @server.get("/city/api/tasks/{task_id}")
+    def city_task_detail(task_id: str, request: Request):
+        username = owner(request)
+        if not username:
+            return denied()
+        task = store.task_detail(username, task_id)
+        if task is None:
+            return JSONResponse({"detail": "Mission introuvable."}, status_code=404)
+        return JSONResponse(task, headers={"Cache-Control": "private, no-store"})
+
     @server.get("/city/api/memory")
     def city_memory(request: Request):
         username = owner(request)
