@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import mimetypes
 import threading
@@ -59,7 +60,7 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
         html = (ASSETS / "city.html").read_text(encoding="utf-8")
         for name in ("city.css", "city.js"):
             asset = ASSETS / name
-            version = f"{asset.stat().st_mtime_ns:x}-{asset.stat().st_size:x}"
+            version = hashlib.sha256(asset.read_bytes()).hexdigest()
             html = html.replace(f'/city/{name}"', f'/city/{name}?v={version}"')
         return HTMLResponse(html, headers={"Cache-Control": "private, no-store",
                                            "X-Frame-Options": "SAMEORIGIN"})
