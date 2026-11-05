@@ -2,8 +2,10 @@
 
 from dataclasses import replace
 from datetime import datetime, timezone
+import json
 
 import pytest
+from starlette.responses import JSONResponse
 
 from internships_project import city_services
 from src.models import MarketPoint, NewsItem
@@ -96,3 +98,35 @@ def test_overflowing_moves_do_not_produce_market_signals(series):
     result = city_services._market_sentiment([point], [])
 
     assert result == city_services._market_sentiment([], [])
+
+
+@pytest.mark.parametrize("field", ["value", "previous", "change"])
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), float("-inf")])
+def test_invalid_reading_does_not_hide_valid_market_quotes(field, invalid):
+    today = datetime.now(timezone.utc).date().isoformat()
+    valid = MarketPoint("SP500", "S&P 500", "Risk", 102, 100, 2,
+                        today, "index", "daily", "latest available", "Fixture",
+                        "https://example.org/SP500")
+    damaged = replace(valid, series_id="VIXCLS", **{field: invalid})
+
+    readings = city_services._market_readings([damaged, valid])
+    # City uses a strict JSON response: one non-finite value used to make
+    # serialization fail and the route return an empty market panel.
+    response = JSONResponse({"points": readings})
+
+    assert json.loads(response.body)["points"] == city_services._market_readings([valid])
+    assert [point["series_id"] for point in readings] == ["SP500"]
+
+
+def test_missing_previous_reading_preserves_current_market_quote():
+    point = MarketPoint("SP500", "S&P 500", "Risk", 102, None, None,
+                        "2026-11-05", "index", "daily", "latest available", "Fixture",
+                        "https://example.org/SP500")
+
+    response = JSONResponse({"points": city_services._market_readings([point])})
+
+    reading, = json.loads(response.body)["points"]
+    assert reading["value"] == 102
+    assert reading["previous"] is None
+    assert reading["change"] is None
+    assert reading["change_display"] == "N/A"

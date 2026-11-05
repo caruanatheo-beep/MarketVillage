@@ -261,6 +261,11 @@ def _market_readings(points: list) -> list[dict]:
     wanted = {"DGS2", "DGS10", "DEXUSEU", "DEXUSUK", "SP500", "VIXCLS", "BAMLH0A0HYM2", "DCOILWTICO"}
     for point in points:
         if getattr(point, "series_id", "") in wanted and getattr(point, "value", None) is not None:
+            # A malformed observation must not break JSON serialization of
+            # the entire market panel. Missing historical values remain valid.
+            if not all(math.isfinite(value) for value in (point.value, point.previous, point.change)
+                       if value is not None):
+                continue
             selected.append({"series_id": point.series_id, "label": point.label,
                              "value": float(point.value), "unit": point.unit,
                              "previous": float(point.previous) if point.previous is not None else None,
