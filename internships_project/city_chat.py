@@ -93,7 +93,9 @@ async def stream_chat(store: CityStore, username: str, agent_id: str, message: s
                 store.append_chat_message(username, agent_id, "user", user_message)
                 agent = build_agent(agent_id, model)
                 chunks: list[str] = []
-                async with agent.run_stream(message, deps=deps, message_history=history,
+                # The provider timeout does not cover stalled tools or an entire
+                # streamed turn. Cancel those too when the chat deadline expires.
+                async with asyncio.timeout(timeout), agent.run_stream(message, deps=deps, message_history=history,
                                             conversation_id=store.conversation_id(username, agent_id),
                                             usage_limits=_limits(), timeout=timeout,
                                             model_settings={"max_tokens": 1300}) as run:

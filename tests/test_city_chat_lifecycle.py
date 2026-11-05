@@ -71,6 +71,54 @@ def test_closing_chat_waits_for_producer_cleanup(chat, monkeypatch, after_delta)
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("after_delta", [False, True])
+def test_chat_deadline_cancels_stalled_agent_and_reports_error(chat, monkeypatch, after_delta):
+    store, messages = chat
+    monkeypatch.setenv("MARKETDESK_CITY_CHAT_TIMEOUT", "15")
+    real_timeout = asyncio.timeout
+
+    def short_timeout(delay):
+        assert delay == 15
+        return real_timeout(0.02)
+
+    monkeypatch.setattr(city_chat.asyncio, "timeout", short_timeout)
+
+    async def scenario():
+        stopped = asyncio.Event()
+        producers = []
+
+        async def stream_text(**kwargs):
+            yield "Partial answer"
+            await asyncio.Event().wait()
+
+        @asynccontextmanager
+        async def run_stream(*args, **kwargs):
+            producers.append(asyncio.current_task())
+            try:
+                if not after_delta:
+                    # A stalled tool may prevent the stream from even opening.
+                    await asyncio.Event().wait()
+                yield SimpleNamespace(stream_text=stream_text)
+            finally:
+                stopped.set()
+
+        monkeypatch.setattr(city_chat, "build_agent", lambda *args: SimpleNamespace(run_stream=run_stream))
+
+        async def collect():
+            return [json.loads(event) async for event in
+                    city_chat.stream_chat(store, "test-user", "desk_manager", "Hello")]
+
+        events = await asyncio.wait_for(collect(), 1)
+        assert [event["type"] for event in events] == (
+            ["status", "delta", "error"] if after_delta else ["status", "error"])
+        assert "15 secondes" in events[-1]["text"]
+        assert stopped.is_set()
+        assert producers[0].done()
+        assert [row[2] for row in messages] == ["user"]
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize("cancel_waiting", [False, True])
 def test_http_stream_closes_inner_chat_on_disconnect(chat, monkeypatch, cancel_waiting):
     store, _ = chat
