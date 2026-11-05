@@ -56,6 +56,7 @@ TASK_REFRESH = "refresh_opportunities"
 ACTIVE = ("queued", "running", "waiting_approval")
 FINAL = ("completed", "failed", "cancelled")
 CITY_MODELS = ("gpt-4o-mini", "gpt-4.1-mini", "gpt-4o")
+MAX_SAVED_WORKFLOWS = 50
 
 _MEMORY_SYNONYMS = {
     "sales": {"commercial", "vente", "coverage", "origination", "salesperson"},
@@ -1033,8 +1034,8 @@ class CityStore:
             if not existing:
                 saved_count = db.execute("SELECT COUNT(*) FROM city_workflow_definitions WHERE username=?",
                                          (username,)).fetchone()[0]
-                if saved_count >= 50:
-                    raise CityError("Limite de 50 workflows enregistrés atteinte.")
+                if saved_count >= MAX_SAVED_WORKFLOWS:
+                    raise CityError(f"Limite de {MAX_SAVED_WORKFLOWS} workflows enregistrés atteinte.")
             created = existing["created_at"] if existing else now
             db.execute("INSERT INTO city_workflow_definitions(id,username,name,steps_json,created_at,updated_at) "
                        "VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,"
@@ -1047,7 +1048,8 @@ class CityStore:
     def workflow_definitions(self, username: str) -> list[dict]:
         with self.db() as db:
             rows = db.execute("SELECT id,name,steps_json,created_at,updated_at FROM city_workflow_definitions "
-                              "WHERE username=? AND role_version=2 ORDER BY updated_at DESC LIMIT 30", (username,)).fetchall()
+                              "WHERE username=? AND role_version=2 ORDER BY updated_at DESC LIMIT ?",
+                              (username, MAX_SAVED_WORKFLOWS)).fetchall()
         return [{"id": row[0], "name": row[1], "steps": json.loads(row[2]),
                  "created_at": row[3], "updated_at": row[4]} for row in rows]
 
