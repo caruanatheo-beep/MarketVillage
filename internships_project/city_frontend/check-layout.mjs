@@ -162,13 +162,22 @@ export async function checkLayout() {
   // The actual seats move with their departments, not only the painted shell.
   for(const [id,col,row] of [
     ['marketdesk-chair-market_analyst',3,15], ['marketdesk-chair-finance_tutor',36,14],
-    ['marketdesk-chair-job_hunter',3,24],
+    ['marketdesk-chair-job_hunter',2,22],
   ]){
     const seat=office.seats.get(id);
     assert.deepEqual([seat?.seatCol,seat?.seatRow],[col,row],`Shifted workstation ${id}`);
   }
   const workstations = [...office.seats].filter(([id]) => /^marketdesk-(chair-|manager-chair$)/.test(id));
   assert.equal(workstations.length, 13, "Expected thirteen assigned workstations");
+  for(const [id,deskType] of [
+    ['job_hunter','MD_TECH_DESK'],['city_ui_engineer','MD_TECH_DESK'],
+    ['internships_engineer','MD_TECH_DESK'],['quality_engineer','MD_TECH_DESK'],
+    ['networker','MD_NETWORK_DESK'],['securities_scout','MD_NETWORK_DESK'],
+  ]){
+    assert.equal(office.layout.furniture.find(item=>item.uid===`marketdesk-desk-${id}`)?.type,deskType,
+      `${id} needs a dedicated desk with visible computers`);
+    assert.ok(office.seats.has(`marketdesk-chair-${id}`),`${id} needs a dedicated chair`);
+  }
   for (const [id, seat] of workstations) {
     const blocked = new Set(office.blockedTiles);
     // The engine unblocks an agent's own chair when leaving or returning to it.

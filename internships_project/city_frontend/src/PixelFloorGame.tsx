@@ -319,10 +319,10 @@ export function buildOfficeLayout(): OfficeLayout {
     // shared lounge, while the three support teams form a compact lower wing.
     { label: "GLOBAL MARKETS", color: "#77d8e7", agent: ROSTER[0], desk: "MD_GLOBAL_MARKETS_DESK", x0: 3, x1: 14, y0: 10, y1: 18, col: 3, row: 12 },
     { label: "QUANT RESEARCH", color: "#9b8bea", agent: ROSTER[1], desk: "MD_RESEARCH_DESK", x0: 32, x1: 46, y0: 10, y1: 18, col: 34, row: 12 },
-    { label: "TECH LAB", color: "#70cbb7", agent: ROSTER[2], desk: "MD_TECH_DESK", x0: 1, x1: 14, y0: 22, y1: 30, col: 2, row: 24 },
+    { label: "ATELIER CODE", color: "#70cbb7", agent: ROSTER[2], desk: "MD_TECH_DESK", x0: 1, x1: 14, y0: 22, y1: 30, col: 1, row: 22 },
     { label: "INTERVIEW STUDIO", color: "#a995e5", agent: ROSTER[5], desk: "MD_CAREER_DESK", x0: 16, x1: 23, y0: 22, y1: 30, col: 17, row: 23 },
     { label: "INNOVATION LAB", color: "#70cbb7", agent: ROSTER[6], desk: "MD_RESEARCH_DESK", x0: 24, x1: 31, y0: 22, y1: 30, col: 25, row: 23 },
-    { label: "NETWORK", color: "#70cbb7", agent: ROSTER[3], desk: "MD_NETWORK_DESK", x0: 33, x1: 46, y0: 22, y1: 26, col: 34, row: 22 },
+    { label: "BIBLIOTHÈQUE RÉSEAU", color: "#70cbb7", agent: ROSTER[3], desk: "MD_NETWORK_DESK", x0: 33, x1: 46, y0: 22, y1: 26, col: 34, row: 22 },
     { label: "OUTREACH", color: "#77d8e7", agent: ROSTER[4], desk: "MD_OUTREACH_DESK", x0: 33, x1: 46, y0: 27, y1: 30, col: 34, row: 27 },
   ];
   // A furnished shared atrium replaces the long corridors and connects every wing.
@@ -409,10 +409,12 @@ export function buildOfficeLayout(): OfficeLayout {
     put(`desk-${station.agent}`, station.desk, station.col, station.row);
     put(`chair-${station.agent}`, "MARKET_ERGO_CHAIR", station.col + 2, station.row + 2);
   }
-  put("chair-internship_scout", "MARKET_ERGO_CHAIR", 10, 26);
-  for (const [id, col] of [["city_ui_engineer", 2], ["internships_engineer", 6], ["quality_engineer", 10]] as const) {
-    put(`desk-${id}`, "DESK_FRONT", col, 28);
-    put(`chair-${id}`, "MARKET_ERGO_CHAIR", col + 1, 30);
+  put("chair-internship_scout", "MARKET_ERGO_CHAIR", 21, 29);
+  for (const [id, col, row] of [
+    ["city_ui_engineer", 8, 22], ["internships_engineer", 1, 26], ["quality_engineer", 8, 26],
+  ] as const) {
+    put(`desk-${id}`, "MD_TECH_DESK", col, row);
+    put(`chair-${id}`, "MARKET_ERGO_CHAIR", col + 2, row + 2);
   }
   // Panoramic windows form aligned glazed bands only on the north-facing facades.
   // The central manager screen wall stays clear, and career/network doors remain open.
@@ -475,18 +477,17 @@ export function buildOfficeLayout(): OfficeLayout {
   put("research-second-desk", "MD_RESEARCH_MEETING", 40, 12); put("research-plant", "PLANT_2", 33, 16);
   put("research-lounge-sofa", "MD_CENTRAL_LOUNGE_SOFA", 43, 15);
   put("research-lounge-table", "MD_LOUNGE_COFFEE_TABLE", 40, 16);
-  put("technology-server-rack", "MD_SERVER_RACK", 1, 23); put("technology-server-rack-east", "MD_SERVER_RACK", 13, 23);
-  put("technology-board", "MD_CAREER_BOARD", 9, 22);
-  put("desk-internship_scout", "MD_CAREER_DESK", 8, 24);
+  put("technology-server-rack-east", "MD_SERVER_RACK", 13, 23);
+  put("technology-board", "MD_CAREER_BOARD", 9, 21);
+  put("desk-internship_scout", "MD_CAREER_DESK", 19, 27);
   put("career-board", "MD_CAREER_BOARD", 16, 22); 
   put("career-cabinet", "MD_CAREER_CABINET", 16, 28);
   put("career-books", "BOOKSHELF", 29, 28);
-  put("network-table", "MD_NETWORK_CONFERENCE", 40, 23);
-  put("chair-securities_scout", "MARKET_ERGO_CHAIR", 43, 25);
+  put("desk-securities_scout", "MD_NETWORK_DESK", 41, 22);
+  put("chair-securities_scout", "MARKET_ERGO_CHAIR", 43, 24);
   put("network-world-map", "MD_NETWORK_WORLD_MAP", 40, 20);
-  
-  
-  put("network-library", "BOOKSHELF", 44, 22); put("network-plant", "PLANT_2", 45, 24);
+  put("network-library-west", "BOOKSHELF", 33, 25);
+  put("network-library-east", "BOOKSHELF", 45, 24);
   put("outreach-board", "MD_OUTREACH_DISPLAY", 40, 27); put("outreach-phone", "MD_CONTACT_PHONE", 38, 29);
   put("outreach-books", "BOOKSHELF", 33, 29); put("outreach-table", "SMALL_TABLE_FRONT", 41, 29);
   put("outreach-plant", "PLANT", 45, 29);
@@ -686,10 +687,10 @@ function renderZoneLabels(ctx: CanvasRenderingContext2D, zoom: number, offsetX: 
     { text: "HEAD OF DESK", color: "#75f0df", col: 24, row: 8.15 },
     { text: "GLOBAL MARKETS", color: "#77d8e7", col: 5.5, row: 16.45 },
     { text: "QUANT RESEARCH", color: "#8cc4b7", col: 39.5, row: 15.45 },
-    { text: "ENGINEERING", color: "#70cbb7", col: 6.5, row: 29.1 },
+    { text: "ATELIER CODE", color: "#70cbb7", col: 6.5, row: 29.1 },
     { text: "INTERVIEWS", color: "#9ad6c8", col: 20, row: 29.1 },
     { text: "INNOVATION", color: "#70cbb7", col: 28, row: 29.1 },
-    { text: "NETWORK", color: "#70cbb7", col: 40, row: 25.45 },
+    { text: "BIBLIOTHÈQUE RÉSEAU", color: "#70cbb7", col: 40, row: 25.45 },
     { text: "OUTREACH", color: "#77d8e7", col: 40, row: 29.1 },
   ];
   ctx.save();
