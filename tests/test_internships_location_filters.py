@@ -54,3 +54,37 @@ class LocationFilterTests(unittest.TestCase):
         self.assertIn('data-offer-url="https://example.invalid/offer"', board)
         self.assertIn("Fontenay sous Bois", board)
         self.assertIn("Offres 1–1 sur 1", board)
+
+    def test_international_filter_excludes_french_region_typography_variants(self):
+        for location in [
+            "Lyon, Auvergne Rhône Alpes", "Lyon, AUVERGNE–RHÔNE–ALPES",
+            "Dijon, Bourgogne Franche Comté", "Lille, Hauts de France",
+            "Bordeaux, Nouvelle Aquitaine", "Nantes, Pays-de-la-Loire",
+            "Marseille, Provence Alpes Côte d’Azur",
+        ]:
+            offer = replace(self.offer, location=location)
+            with self.subTest(location=location):
+                self.assertEqual(matching_opportunities(
+                    [offer], category="Stages International",
+                ), [])
+                self.assertEqual(matching_opportunities([offer]), [offer])
+
+    def test_international_filter_keeps_foreign_offers(self):
+        for location in ["London, UK", "New York, USA", "Zürich, Switzerland"]:
+            offer = replace(self.offer, location=location)
+            with self.subTest(location=location):
+                self.assertEqual(matching_opportunities(
+                    [offer], category="Stages International",
+                ), [offer])
+
+    def test_international_board_excludes_french_regions_before_pagination(self):
+        french = replace(self.offer, location="Lyon, Auvergne Rhône Alpes", score=20)
+        foreign = replace(self.offer, location="London, UK",
+                          url="https://example.invalid/foreign")
+        board = render_opportunities(
+            [french, foreign], [], datetime(2026, 11, 4, tzinfo=timezone.utc),
+            category="Stages International", delayed_updates=True, page_size=1,
+        )
+        self.assertNotIn('data-offer-url="https://example.invalid/offer"', board)
+        self.assertIn('data-offer-url="https://example.invalid/foreign"', board)
+        self.assertIn("Offres 1–1 sur 1", board)

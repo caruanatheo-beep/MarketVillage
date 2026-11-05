@@ -533,6 +533,7 @@ def _is_paris(location: str) -> bool:
 def _is_international_location(location: str) -> bool:
     text = "".join(char for char in unicodedata.normalize("NFKD", location.casefold())
                    if not unicodedata.combining(char))
+    region_text = _offer_search_text(location)
     french_regions = (
         "auvergne-rhone-alpes", "bourgogne-franche-comte", "bretagne", "centre-val de loire",
         "corse", "grand est", "hauts-de-france", "normandie", "nouvelle-aquitaine",
@@ -540,7 +541,7 @@ def _is_international_location(location: str) -> bool:
         "île-de-france",
     )
     if (not text or _is_paris(location) or "france" in text or re.search(r"(?:,\s*fr|\bfrance)\s*$", text)
-            or any(region in text for region in french_regions)):
+            or any(_offer_search_text(region) in region_text for region in french_regions)):
         return False
     return any(hub in text for hub in HUBS if hub != "paris") or bool(
         re.search(r",\s*[a-z][a-z .'-]{1,40}$", text)
