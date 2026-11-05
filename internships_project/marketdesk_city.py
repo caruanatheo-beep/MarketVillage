@@ -163,6 +163,8 @@ def _due_schedule_periods(operation: str, known: list[str], today: date) -> list
 class CityStore:
     def __init__(self, path: Path | None = None):
         self.path = Path(path) if path is not None else state_store.USER_DB_PATH
+        self.active_revision = ''
+        self.active_commits: set[str] = set()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.db() as db:
             db.executescript("""
@@ -1639,8 +1641,11 @@ class CityStore:
             task['period'] = payload.get('period', '')
             task['result'] = {key: result[key] for key in ('title','plain_summary','summary','files',
                               'integrated','already_present','commit','branch') if key in result}
+            if result.get('integrated'):
+                task['result']['live'] = (result.get('commit') in self.active_commits
+                                          if self.active_revision else None)
             tasks.append(task)
-        return {'tasks': tasks, 'events': events}
+        return {'tasks': tasks, 'events': events, 'active_revision': self.active_revision}
 
     def task_detail(self, username: str, task_id: str) -> dict | None:
         with self.db() as db:
@@ -2025,7 +2030,9 @@ class CityWorker:
             elif (parameters.get('operation') == 'develop' and isinstance(exc, CityError)
                     and safe in ('Développement suspendu : le dépôt courant contient des modifications locales suivies.',
                                  'Intégration suspendue : le dépôt courant contient des modifications locales suivies.',
-                                 'Le dépôt a changé pendant les vérifications : intégration suspendue. La branche reste disponible.')):
+                                 'Le dépôt a changé pendant les vérifications : intégration suspendue. La branche reste disponible.',
+                                 'Git indisponible pour cette opération. Vérifie le clone local du dépôt.',
+                                 'Dépôt Git inaccessible ou délai dépassé.')):
                 self.store.defer_coding(task['id'], safe, delay_minutes=5)
             elif task['agent_id'] == 'market_analyst' and isinstance(exc, CityError) and safe.startswith("Markets n'a retourné aucune observation"):
                 self.store.defer_coding(task['id'], safe)

@@ -265,6 +265,18 @@ def test_coding_history_is_private_compact_and_keeps_full_detail(store):
     assert compact['result']['already_present'] is True
 
 
+def test_coding_history_distinguishes_integrated_from_live(store):
+    task = store.create_task('alice', 'job_hunter', 'Corriger un affichage', {'operation': 'develop'})
+    store.claim_next()
+    store.finish(task['id'], result={'integrated': True, 'commit': 'abc123', 'files': ['internships_project/city_services.py']})
+    store.active_revision = 'older'
+    store.active_commits = {'older'}
+    assert store.coding_history('alice')['tasks'][0]['result']['live'] is False
+    store.active_revision = 'newer'
+    store.active_commits = {'older', 'abc123', 'newer'}
+    assert store.coding_history('alice')['tasks'][0]['result']['live'] is True
+
+
 def test_parallel_coding_claims_are_bounded_per_agent_and_globally(store):
     from internships_project.city_specialists import VERSION
     for user in ('alice', 'bob'):

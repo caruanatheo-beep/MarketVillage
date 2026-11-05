@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import subprocess
 import threading
 import time
 from collections import defaultdict, deque
@@ -173,6 +174,17 @@ def startup():
     if len(secret) < 32:
         raise RuntimeError("Définis MARKETDESK_CITY_SESSION_KEY avec une valeur aléatoire d'au moins 32 caractères pour un hébergement public.")
     _key = secret.encode()
+    repository = Path(__file__).resolve().parents[1]
+    try:
+        revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=repository, capture_output=True,
+                                  text=True, timeout=5, check=True).stdout.strip()
+        history = subprocess.run(['git', 'rev-list', revision], cwd=repository, capture_output=True,
+                                 text=True, timeout=10, check=True).stdout
+        store.active_revision = revision
+        store.active_commits = set(history.splitlines())
+    except (OSError, subprocess.SubprocessError):
+        store.active_revision = ''
+        store.active_commits = set()
     if configured:
         add_registration_routes(app, configured)
     worker = CityWorker(store)

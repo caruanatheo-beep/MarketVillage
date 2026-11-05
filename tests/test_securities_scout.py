@@ -109,6 +109,21 @@ def test_clara_uses_one_codex_search_when_public_engines_fail(tmp_path, monkeypa
     assert network.list_contacts('bob') == []
 
 
+def test_clara_uses_codex_when_public_engines_return_no_people(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
+    monkeypatch.setattr(network, 'search_public', lambda *_args, **_kwargs: [])
+    calls = []
+    def fallback():
+        calls.append(True)
+        return [{'name': 'Luc Bernard', 'role': 'Securities Lending Sales',
+                 'company': 'CACEIS', 'source_url': 'https://example.org/speakers',
+                 'source_excerpt': 'Luc Bernard, Securities Lending Sales at CACEIS.'}]
+    monkeypatch.setattr(network, '_search_service_contacts_with_codex', fallback)
+    report = network.discover_service_contacts('alice')
+    assert report['count'] == 1 and len(calls) == 1
+    assert network.list_contacts('alice')[0]['source_url'] == 'https://example.org/speakers'
+
+
 def test_clara_codex_fallback_obeys_subscription_stop(tmp_path, monkeypatch):
     from internships_project import city_coding
     from internships_project.marketdesk_city import CityError
