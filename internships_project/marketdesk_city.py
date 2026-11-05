@@ -1934,6 +1934,8 @@ class CityWorker:
                                           agent_id=task['agent_id'], auto_integrate=True,
                                           on_progress=lambda message: self.store.progress(task['id'], message))
                 self.store.finish(task['id'], result=result)
+                if result.get('integrated') and os.getenv('MARKETDESK_CITY_SUPERVISED') == '1':
+                    self._stop.set()  # Drain other running missions before the launcher activates this commit.
                 return True
             if task["agent_id"] == "outreach_agent" and task.get("workflow_id"):
                 dependencies = json.loads(task.get("depends_on_json") or "[]")

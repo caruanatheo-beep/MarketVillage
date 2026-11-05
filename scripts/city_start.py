@@ -30,8 +30,9 @@ def missions_running() -> bool:
 
 def supervise() -> None:
     current = revision()
+    child_env = {**os.environ, 'MARKETDESK_CITY_SUPERVISED': '1'}
     child = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--serve'], cwd=root,
-                             env=os.environ.copy())
+                             env=child_env)
     try:
         while True:
             time.sleep(5)
@@ -44,7 +45,7 @@ def supervise() -> None:
                     child.wait(timeout=15)
                     current = latest
                     child = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--serve'], cwd=root,
-                                             env=os.environ.copy())
+                                             env=child_env)
             except (OSError, sqlite3.Error, subprocess.SubprocessError):
                 continue  # Keep serving; retry activation when Git and the task store are readable.
     finally:

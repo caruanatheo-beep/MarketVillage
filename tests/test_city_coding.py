@@ -593,6 +593,17 @@ def test_market_agent_development_uses_codex_runner_not_market_collector(store, 
                for event in store.snapshot('alice')['events'])
 
 
+def test_supervised_worker_drains_after_integrating_code(store, monkeypatch):
+    from internships_project import city_coding
+    monkeypatch.setenv('MARKETDESK_CITY_SUPERVISED', '1')
+    monkeypatch.setattr(city_coding, 'implement_change', lambda *_args, **_kwargs:
+                        {'integrated': True, 'commit': 'fixture'})
+    store.create_task('alice', 'job_hunter', 'Améliorer City', {'operation': 'develop'}, auto_run=True)
+    worker = CityWorker(store)
+    assert worker.run_once()
+    assert worker._stop.is_set()
+
+
 def test_codex_failure_and_missing_completion_never_report_success(monkeypatch,tmp_path):
     class Process:
         returncode=1
