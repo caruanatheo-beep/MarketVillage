@@ -163,6 +163,32 @@ def test_autonomous_worktree_resumes_after_main_becomes_clean(repo, monkeypatch)
     assert len(calls) == 1
 
 
+def test_autonomous_worktree_resumes_after_branch_commit(repo, monkeypatch):
+    root, git = repo
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 12)
+    monkeypatch.setattr(coding, '_integration_checks', lambda *_args, **_kwargs: 'focused tests')
+    def execute(command, directory, prompt, env):
+        target = directory/'internships_project/city_sample.py'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('value = 2\n')
+        Path(command[command.index('--output-last-message') + 1]).write_text(json.dumps(
+            {'summary': 'Une valeur a été corrigée.', 'tests': 'Test ciblé réussi.', 'limitations': 'Aucune.'}))
+        (root/'sample.py').write_text('value = 9\n')
+        return [{'type': 'turn.completed'}]
+    monkeypatch.setattr(coding, '_execute', execute)
+    task_id = 'f'*32
+    with pytest.raises(CityError, match='modifications locales suivies'):
+        coding.implement_change(task_id, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
+    directory = root/'.city-worktrees'/task_id
+    coding.git(directory, 'add', '--', 'internships_project/city_sample.py')
+    coding.git(directory, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Improve MarketDesk with job_hunter')
+    (root/'sample.py').write_text('value = 1\n')
+    monkeypatch.setattr(coding, '_execute', lambda *_args: pytest.fail('Codex must not run again'))
+    result = coding.implement_change(task_id, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
+    assert result['integrated'] and result['commit'] == git('rev-parse', 'HEAD')
+    assert 'internships_project/city_sample.py' in result['files']
+
+
 def test_dirty_main_requeues_development_and_retry_keeps_task_id(store, monkeypatch):
     task = store.create_task('alice', 'job_hunter', 'Développement autonome', {'operation': 'develop'})
     def blocked(*_args, **_kwargs):

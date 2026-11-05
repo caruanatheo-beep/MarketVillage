@@ -370,14 +370,18 @@ def _resume_autonomous_change(root: Path, directory: Path, branch: str, agent_id
             raise ValueError()
     except (OSError, ValueError) as exc:
         raise CityError('Travail Codex non terminé : la branche reste disponible pour examen.') from exc
-    revision = git(directory, 'rev-parse', 'HEAD')
-    tracked = git(directory, 'diff', '--name-only', '--no-renames', 'HEAD').splitlines()
+    head = git(directory, 'rev-parse', 'HEAD')
+    committed = git(directory, 'log', '-1', '--format=%s') == 'Improve MarketDesk with '+agent_id
+    revision = git(directory, 'rev-parse', 'HEAD^') if committed else head
+    tracked = (git(directory, 'diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD').splitlines()
+               if committed else git(directory, 'diff', '--name-only', '--no-renames', 'HEAD').splitlines())
     added = [name for name in git(directory, 'ls-files', '--others', '--exclude-standard').splitlines()
              if name not in {'.jules-result.json', '.jules-schema.json', '.jules-complete.json'}]
     files = sorted(set(tracked + added))
     if not files:
         raise CityError('Aucune modification à reprendre dans la branche de travail.')
-    diff = git(directory, 'diff', '--no-ext-diff', '--no-textconv', '--no-renames', 'HEAD', '--', '.')
+    diff = git(directory, 'show', '--format=', '--no-ext-diff', '--no-textconv', 'HEAD', '--', '.') if committed else (
+        git(directory, 'diff', '--no-ext-diff', '--no-textconv', '--no-renames', 'HEAD', '--', '.'))
     for name in added:
         path = directory/name
         if path.is_symlink() or not path.resolve().is_relative_to(directory.resolve()) or path.stat().st_size > 100_000:
@@ -387,7 +391,7 @@ def _resume_autonomous_change(root: Path, directory: Path, branch: str, agent_id
         except (UnicodeError, OSError):
             continue
         diff += '\n'+''.join(difflib.unified_diff([], lines, fromfile='/dev/null', tofile=name))
-    integration = _auto_integrate(root, directory, branch, revision, files, agent_id)
+    integration = _auto_integrate(root, directory, branch, revision, files, agent_id, committed=committed)
     context = branch_context(root, revision)
     context['base_note'] = ('La branche a été adaptée aux autres changements, puis revérifiée et intégrée.'
                             if integration['rebased'] else 'La branche a été vérifiée et intégrée.')
@@ -407,7 +411,7 @@ def _resume_autonomous_change(root: Path, directory: Path, branch: str, agent_id
 
 
 def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
-                    files: list[str], agent_id: str) -> dict:
+                    files: list[str], agent_id: str, *, committed: bool = False) -> dict:
     """Validate in the worktree, then integrate one completed branch at a time."""
     allowed = ('internships_project/', 'tests/', 'scripts/', '.github/workflows/')
     for name in files:
@@ -417,12 +421,13 @@ def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
             raise CityError('Intégration suspendue : fichier hors du code autorisé. La branche reste disponible.')
         if path.stat().st_size > 2_000_000:
             raise CityError('Intégration suspendue : fichier trop volumineux. La branche reste disponible.')
-    test_file = _integration_checks(root, directory, files, agent_id)
+    test_file = _integration_checks(root, directory, files, agent_id, committed=committed)
     with _integration_lock:
         if git(root, 'status', '--porcelain', '--untracked-files=no'):
             raise CityError('Intégration suspendue : le dépôt courant contient des modifications locales suivies.')
-        git(directory, 'add', '--', *files)
-        git(directory, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Improve MarketDesk with '+agent_id)
+        if not committed:
+            git(directory, 'add', '--', *files)
+            git(directory, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Improve MarketDesk with '+agent_id)
         current = git(root, 'rev-parse', 'HEAD')
         if current != revision:
             try:

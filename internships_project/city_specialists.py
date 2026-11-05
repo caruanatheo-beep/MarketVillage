@@ -92,7 +92,8 @@ def git(root: Path, *args: str) -> str:
     try:
         completed = subprocess.run(["git", "-c", "core.longpaths=true", "-c", "core.hooksPath=NUL" if os.name == "nt" else "core.hooksPath=/dev/null",
                                     *args], cwd=root, capture_output=True, text=True, encoding="utf-8",
-                                   errors="replace", timeout=25, check=False)
+                                   errors="replace", timeout=120 if args and args[0] in {'rebase', 'merge'} else 25,
+                                   check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise CityError("Dépôt Git inaccessible ou délai dépassé.") from exc
     if completed.returncode:
