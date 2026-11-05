@@ -1785,7 +1785,11 @@ def _bpce_open_data_jobs(_slug: str = "", _company: str = "") -> list[Opportunit
         if parsed.scheme != "https" or parsed.hostname != "recrutement.bpce.fr" or not parsed.path.startswith("/job/"):
             continue
         if re.fullmatch(r"\d{2}/\d{2}/\d{4}", published):
-            published = datetime.strptime(published, "%d/%m/%Y").date().isoformat()
+            try:
+                published = datetime.strptime(published, "%d/%m/%Y").date().isoformat()
+            except ValueError:
+                # One invalid source date must not discard the entire feed.
+                published = ""
         job = _opportunity(title, company, location, contract, link, published,
                            _start_period(description) or _title_period(title))
         if job:
