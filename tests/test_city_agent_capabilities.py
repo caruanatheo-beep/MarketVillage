@@ -144,6 +144,74 @@ def test_jules_filters_contract_and_searches_all_pages_and_description(monkeypat
     assert not any(refreshes)
 
 
+def test_manager_searches_next_internship_page_with_filters(monkeypatch):
+    import asyncio
+    from internships_project import internships
+    from pydantic_ai.models.test import TestModel
+
+    jobs = [internships.Opportunity(
+        "FX Sales", "Banque Étude", "Paris", "Stage",
+        f"https://example.com/{i:03}", "2026-10-01", 80,
+        start_period="January 2027") for i in range(10)]
+    jobs.extend([
+        internships.Opportunity("FX Sales", company, location, contract,
+                                f"https://example.com/excluded-{i}", "2026-10-01", 80,
+                                start_period=start)
+        for i, (company, location, contract, start) in enumerate([
+            ("Other Bank", "Paris", "Stage", "January 2027"),
+            ("Banque Étude", "London", "Stage", "January 2027"),
+            ("Banque Étude", "Paris", "VIE", "January 2027"),
+            ("Banque Étude", "Paris", "Stage", "June 2027"),
+        ])
+    ])
+    refreshes = []
+
+    def load(refresh=False):
+        refreshes.append(refresh)
+        return jobs, [], datetime.now(timezone.utc)
+
+    monkeypatch.setattr(internships, "load_opportunities", load)
+    tool = city_agents.build_agent("desk_manager", TestModel())._function_toolset.tools[
+        "search_internship_cache"].function
+    ctx = SimpleNamespace(deps=city_agents.ChatDeps("owner", None))
+    result = asyncio.run(tool(ctx, "FX", bank="etude", location="Paris",
+                              start="January", contract="internship", page=2))
+
+    assert result["status"] == "completed"
+    data = result["data"]
+    assert data["total_matches"] == 10
+    assert data["page"] == 2 and not data["has_more"]
+    assert len(data["offers"]) == 2
+    assert {offer["url"] for offer in data["offers"]} == {
+        "https://example.com/001", "https://example.com/000"}
+    assert refreshes == [False]
+
+    # Existing callers can still search without supplying optional filters.
+    result = asyncio.run(tool(ctx, "FX"))
+    assert result["data"]["total_matches"] == 14
+    assert result["data"]["page"] == 1
+    assert result["data"]["has_more"]
+    assert refreshes == [False, False]
+
+
+@pytest.mark.parametrize("page", [0, -1, True, 1.5, "2"])
+def test_manager_rejects_invalid_internship_page_without_loading(monkeypatch, page):
+    import asyncio
+    from internships_project import internships
+    from pydantic_ai.models.test import TestModel
+
+    monkeypatch.setattr(internships, "load_opportunities",
+                        lambda **kwargs: pytest.fail("Invalid pages must not load offers"))
+    tool = city_agents.build_agent("desk_manager", TestModel())._function_toolset.tools[
+        "search_internship_cache"].function
+    ctx = SimpleNamespace(deps=city_agents.ChatDeps("owner", None))
+
+    result = asyncio.run(tool(ctx, page=page))
+
+    assert result["status"] == "unavailable"
+    assert "entier positif" in result["reason"]
+
+
 def test_lina_paginates_accent_insensitive_fx_matches_with_evidence(account):
     state_store.save_user_data("owner", "mail_contacts", {
         str(i): {"name": f"Contact {i:03}", "role": "FX", "company": "Crédit Banque"} for i in range(29)})

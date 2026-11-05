@@ -289,9 +289,17 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
                 auto_run=operation == 'develop'))
 
         @agent.tool
-        async def search_internship_cache(ctx: RunContext[ChatDeps], query: str = "") -> dict:
-            """Read internships as a shared dashboard service, never assigned to Jules."""
-            return await _tool(ctx, "Internships · cache", lambda: _cached_jobs(_bounded(query, 120)))
+        async def search_internship_cache(ctx: RunContext[ChatDeps], query: str = "",
+                                          bank: str = "", location: str = "", start: str = "",
+                                          contract: str = "", page: int = 1) -> dict:
+            """Search cached offers by keywords, bank, location, start period and contract.
+
+            Pages start at 1; request the next page with the same filters when has_more
+            is true. This shared dashboard service never starts a collection.
+            """
+            return await _tool(ctx, "Internships · cache", lambda: _cached_jobs(
+                _bounded(query, 120), bank=_bounded(bank, 80), location=_bounded(location, 80),
+                start=_bounded(start, 80), contract=_bounded(contract, 60), page=page))
 
         @agent.tool
         async def collect_dashboard_data(ctx: RunContext[ChatDeps], dashboard: str) -> dict:
