@@ -1,9 +1,12 @@
 """Deduplication checks using synthetic offers, without source or data reads."""
 
 from dataclasses import replace
+from itertools import permutations
 import unittest
 
-from internships_project.internships import Opportunity, _deduplicate_opportunities
+from internships_project.internships import (
+    Opportunity, _deduplicate_opportunities, matching_opportunities,
+)
 
 
 class DeduplicationTests(unittest.TestCase):
@@ -21,6 +24,49 @@ class DeduplicationTests(unittest.TestCase):
             with self.subTest(order=[job.kind for job in ordered]):
                 result = _deduplicate_opportunities(ordered)
                 self.assertCountEqual(result, offers)
+
+    def test_distinct_start_cohorts_remain_available_to_date_filters(self):
+        april = replace(self.offer, start_period="avril 2027")
+        september = replace(self.offer, start_period="September 2027",
+                            url="https://example.invalid/september")
+        unknown = replace(self.offer, url="https://example.invalid/unknown")
+        for ordered in permutations([april, september, unknown]):
+            with self.subTest(order=[job.url for job in ordered]):
+                result = _deduplicate_opportunities(list(ordered))
+                self.assertCountEqual(result, [april, september, unknown])
+                self.assertEqual(matching_opportunities(result, earliest="2027-09"),
+                                 [september])
+
+    def test_same_start_month_merges_date_formats_and_undated_duplicate(self):
+        april = replace(self.offer, start_period="April 2027")
+        duplicate = replace(april, start_period="01/04/2027",
+                            url="https://example.invalid/april")
+        for ordered in permutations([self.offer, april, duplicate]):
+            with self.subTest(order=[job.url for job in ordered]):
+                result = _deduplicate_opportunities(list(ordered))
+                self.assertEqual(len(result), 1)
+                self.assertIn(result[0], [april, duplicate])
+
+    def test_jobteaser_different_start_cohort_survives_direct_source_preference(self):
+        april = replace(self.offer, start_period="April 2027")
+        teaser = replace(self.offer, start_period="September 2027",
+                         source="JobTeaser · sitemap",
+                         url="https://example.invalid/teaser-september")
+        for ordered in [[april, teaser], [teaser, april]]:
+            with self.subTest(order=[job.url for job in ordered]):
+                self.assertCountEqual(_deduplicate_opportunities(ordered), [april, teaser])
+
+    def test_undated_description_does_not_erase_the_only_known_start(self):
+        april = replace(self.offer, start_period="April 2027")
+        detailed = replace(self.offer, description="Trading desk internship details",
+                           url="https://example.invalid/detailed")
+        for ordered in [[april, detailed], [detailed, april]]:
+            with self.subTest(order=[job.url for job in ordered]):
+                result = _deduplicate_opportunities(ordered)
+                self.assertEqual(len(result), 1)
+                self.assertEqual(result[0].description, detailed.description)
+                self.assertEqual(result[0].start_period, april.start_period)
+                self.assertEqual(matching_opportunities(result, earliest="2027-04"), result)
 
     def test_same_contract_still_merges_normalized_title_and_paris_area(self):
         duplicate = replace(self.offer, title="Stage - Assistant Trading",

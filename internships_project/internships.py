@@ -2309,7 +2309,7 @@ def _collect_source(name: str, loader: object, args: tuple, force: bool) -> tupl
 
 def _deduplicate_opportunities(jobs: list[Opportunity]) -> list[Opportunity]:
     jobs = _without_jobteaser_duplicates(jobs)
-    unique: dict[tuple[str, str, str, str], Opportunity] = {}
+    grouped: dict[tuple[str, str, str, str], list[Opportunity]] = {}
     for job in jobs:
         if (_excluded_employer(job.company) or not _market_relevant_with_context(job.title, job.description)
                 or (job.source != "JobTeaser · sitemap" and not _plausible_location(job.location))):
@@ -2317,12 +2317,27 @@ def _deduplicate_opportunities(jobs: list[Opportunity]) -> list[Opportunity]:
         location_key = "paris-area" if _is_paris(job.location) else _normalized_offer_text(job.location)
         # Identical role names can advertise separate internship, VIE or work-study contracts.
         key = (_canonical_title(job.title), _canonical_company(job.company), location_key, job.kind)
-        previous = unique.get(key)
-        if previous is None or (previous.source == "JobTeaser · sitemap" and job.source != "JobTeaser · sitemap") or (
-            previous.source == job.source and not previous.start_period and job.start_period
-        ) or (previous.source == job.source and not previous.description and job.description):
-            unique[key] = job
-    return sorted(unique.values(), key=_opportunity_sort_key)
+        grouped.setdefault(key, []).append(job)
+    deduplicated: list[Opportunity] = []
+    for group in grouped.values():
+        months = {month for job in group if (month := start_month(job.start_period))}
+        unique: dict[str, Opportunity] = {}
+        for job in group:
+            # An unknown start can join one known cohort, but must not join two
+            # different cohorts or make their survival depend on source order.
+            month = start_month(job.start_period)
+            if not month and len(months) == 1:
+                month = next(iter(months))
+            previous = unique.get(month)
+            if previous is None or (previous.source == "JobTeaser · sitemap" and job.source != "JobTeaser · sitemap") or (
+                previous.source == job.source and not previous.start_period and job.start_period
+            ) or (previous.source == job.source and not previous.description and job.description):
+                if previous is not None and previous.source == job.source:
+                    job = replace(job, start_period=job.start_period or previous.start_period,
+                                  description=job.description or previous.description)
+                unique[month] = job
+        deduplicated.extend(unique.values())
+    return sorted(deduplicated, key=_opportunity_sort_key)
 
 
 def _date_detected_offer(job: Opportunity, previous: Opportunity | None, today: date) -> Opportunity:
