@@ -7,7 +7,9 @@ from html.parser import HTMLParser
 import hashlib
 import json
 import os
+from pathlib import Path
 import re
+import tempfile
 import time
 import unicodedata
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -609,6 +611,88 @@ def import_assisted_page(username: str, payload: dict) -> dict:
                    f'{len(leads)} contacts de marché repérés ; {len(excluded)} profils écartés.'}
 
 
+def _search_service_contacts_with_codex() -> list[dict]:
+    """One subscription-backed search when both free public engines are unavailable."""
+    from .marketdesk_city import CityError
+    from .city_coding import (CODEX_USAGE_STOP_PERCENT, _execute, codex_binary,
+                              codex_environment, codex_usage_percent, require_chatgpt)
+
+    binary, env = codex_binary(), codex_environment()
+    require_chatgpt(binary, env)
+    if codex_usage_percent(binary, env) >= CODEX_USAGE_STOP_PERCENT:
+        raise CityError('Recherche de Clara reportée : limite de consommation Codex atteinte.')
+    with tempfile.TemporaryDirectory(prefix='clara-search-') as temporary:
+        directory = Path(temporary)
+        schema = directory / 'schema.json'
+        report = directory / 'result.json'
+        fields = ('name', 'role', 'company', 'source_url')
+        schema.write_text(json.dumps({'type': 'object', 'additionalProperties': False,
+            'required': ['contacts'], 'properties': {'contacts': {'type': 'array', 'maxItems': 12,
+                'items': {'type': 'object', 'additionalProperties': False, 'required': list(fields),
+                          'properties': {field: {'type': 'string'} for field in fields}}}}}), encoding='utf-8')
+        command = [binary, '--search', '--sandbox', 'read-only', '-a', 'never', 'exec',
+                   '--ignore-user-config', '--ephemeral', '--skip-git-repo-check',
+                   '--disable', 'apps', '--disable', 'plugins', '-c', 'features.shell_tool=false',
+                   '-c', 'forced_login_method="chatgpt"', '-C', str(directory),
+                   '--model', 'gpt-6.1-sol', '-c', 'model_reasoning_effort="low"',
+                   '--json', '--output-schema', str(schema), '--output-last-message', str(report), '-']
+        entities = [{'entity': name, 'activities': activities} for name, _, activities in SECURITIES_ENTITIES]
+        prompt = ('Tu es Clara. Fais une recherche Web publique et limitée sur ces services titres. '
+                  'Trouve au plus 10 personnes nommées avec poste professionnel et établissement dans '
+                  'collateral, securities financing/lending, repo, FX, settlement ou treasury. '
+                  'Priorise les entités françaises. Pour chaque personne, source_url doit être une URL '
+                  'présente dans les résultats de recherche, dont le titre ou l’extrait contient '
+                  'explicitement le nom complet, le poste exact et l’entité. Copie le poste depuis '
+                  'l’extrait ; ne déduis pas un emploi actuel. Si ces preuves manquent, omets la personne. '
+                  'Pas de connexion LinkedIn, de shell, de fichiers, de données privées ni d’autre outil. '
+                  'Réponds uniquement selon le schéma JSON. Entités : '
+                  + json.dumps(entities, ensure_ascii=False))
+        events = _execute(command, directory, prompt, env, timeout_seconds=180)
+        try:
+            candidates = json.loads(report.read_text(encoding='utf-8'))['contacts']
+            if not isinstance(candidates, list):
+                raise ValueError()
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise CityError('Recherche Codex de Clara sans résultat structuré exploitable.') from exc
+    sources = {}
+    for event in events:
+        item = event.get('item') or {}
+        if event.get('type') != 'item.completed' or item.get('type') != 'web_search':
+            continue
+        for result in item.get('results') or []:
+            url = source_url(result.get('url', ''))
+            if url:
+                sources[url] = {'title': str(result.get('title') or ''),
+                                'snippet': str(result.get('snippet') or '')}
+    if not sources:
+        raise CityError('Recherche Codex de Clara sans source Web vérifiable.')
+    leads = []
+    for candidate in candidates[:12]:
+        if not isinstance(candidate, dict) or any(not isinstance(candidate.get(field), str) for field in fields):
+            continue
+        name, role, company = (candidate[field].strip() for field in ('name', 'role', 'company'))
+        url = source_url(candidate['source_url'])
+        source = sources.get(url)
+        if not source or not 2 <= len(name.split()) <= 7 or not role or not company:
+            continue
+        evidence = normalized(source['title'] + ' ' + source['snippet'])
+        entity = next((entity for entity, aliases, _ in SECURITIES_ENTITIES
+                       if any(alias in normalized(company) for alias in aliases)
+                       and any(alias in evidence for alias in aliases)), None)
+        if (not entity or normalized(name) not in evidence or normalized(role) not in evidence
+                or not (MARKETS.search(normalized(role)) or SERVICE_MARKETS.search(normalized(role)))
+                or EXCLUDED.search(normalized(role))):
+            continue
+        lead = {'name': name[:160], 'role': role[:240], 'company': entity,
+                'location': '', 'linkedin_url': linkedin_url(url), 'source_url': url,
+                'source_title': source['title'][:500], 'source_excerpt': source['snippet'][:1400],
+                'source_type': 'Résultat Web public', 'employment_status': 'Poste actuel à confirmer',
+                'origin': 'securities_public_search', 'search_engine': 'Codex Web Search'}
+        if contact_focus(lead)['contact_segment'] in {'sales', 'secondary'}:
+            leads.append(lead)
+    return leads
+
+
 def discover_service_contacts(username: str) -> dict:
     """Find sourced, less visible securities-services profiles without a paid API."""
     from .marketdesk_city import CityError
@@ -640,12 +724,16 @@ def discover_service_contacts(username: str) -> dict:
             leads.extend(found)
             if warning:
                 warnings.append(warning)
+    used_codex = False
     if len(warnings) == len(queries):
-        raise CityError('Recherche publique de Clara indisponible : ' + warnings[0] + '. Aucun contact ajouté.')
+        leads = _search_service_contacts_with_codex()
+        used_codex = True
+        warnings = ['Moteurs publics directs indisponibles ; recherche Web Codex utilisée.']
     added, duplicates = save_leads(username, leads, limit=10)
     return {'title': 'Clara · services titres', 'contacts': added, 'count': len(added),
             'duplicates': duplicates, 'target': 10, 'entities_searched': len(queries),
-            'warnings': warnings[:3], 'source': 'Profils publics indexés · DuckDuckGo / Bing RSS',
+            'warnings': warnings[:3], 'source': ('Codex · recherche Web sur abonnement ChatGPT' if used_codex
+                                              else 'Profils publics indexés · DuckDuckGo / Bing RSS'),
             'text': f'{len(added)} nouveaux contacts enregistrés en services titres ; '
                     f'{duplicates} doublons écartés. Postes actuels à confirmer.'}
 

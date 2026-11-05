@@ -73,3 +73,56 @@ def test_clara_without_summary_keeps_network_directory_available(tmp_path, monke
         response = client.get('/city/api/network', headers={'x-test-user': 'alice'})
     assert response.status_code == 200
     assert response.json()['clara']['summary'] == ''
+
+
+def test_clara_uses_one_codex_search_when_public_engines_fail(tmp_path, monkeypatch):
+    import json
+    from pathlib import Path
+    from internships_project import city_coding
+
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
+    monkeypatch.setattr(network, 'search_public', lambda *_args, **_kwargs:
+                        (_ for _ in ()).throw(ValueError('Source bloquée')))
+    monkeypatch.setattr(city_coding, 'codex_binary', lambda: 'codex')
+    monkeypatch.setattr(city_coding, 'codex_environment', lambda: {'PATH': 'safe'})
+    monkeypatch.setattr(city_coding, 'require_chatgpt', lambda *_args: None)
+    monkeypatch.setattr(city_coding, 'codex_usage_percent', lambda *_args: 20)
+    calls = []
+    url = 'https://example.org/caceis-speakers'
+    def execute(command, directory, prompt, env, *, timeout_seconds):
+        calls.append((command, prompt, env, timeout_seconds))
+        Path(command[command.index('--output-last-message')+1]).write_text(json.dumps({'contacts': [
+            {'name': 'Luc Bernard', 'role': 'Securities Lending Sales', 'company': 'CACEIS', 'source_url': url},
+            {'name': 'Invented Person', 'role': 'Collateral Manager', 'company': 'CACEIS', 'source_url': url},
+        ]}))
+        return [{'type': 'item.completed', 'item': {'type': 'web_search', 'results': [
+            {'url': url, 'title': 'CACEIS speakers',
+             'snippet': 'Luc Bernard, Securities Lending Sales at CACEIS.'}]}}]
+    monkeypatch.setattr(city_coding, '_execute', execute)
+
+    report = network.discover_service_contacts('alice')
+
+    assert report['count'] == 1 and len(calls) == 1
+    assert '--search' in calls[0][0] and calls[0][3] == 180
+    assert 'OPENAI_API_KEY' not in calls[0][2]
+    assert network.list_contacts('alice')[0]['origin'] == 'securities_public_search'
+    assert network.list_contacts('bob') == []
+
+
+def test_clara_codex_fallback_obeys_subscription_stop(tmp_path, monkeypatch):
+    from internships_project import city_coding
+    from internships_project.marketdesk_city import CityError
+    import pytest
+
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
+    monkeypatch.setattr(network, 'search_public', lambda *_args, **_kwargs:
+                        (_ for _ in ()).throw(ValueError('Source bloquée')))
+    monkeypatch.setattr(city_coding, 'codex_binary', lambda: 'codex')
+    monkeypatch.setattr(city_coding, 'codex_environment', lambda: {})
+    monkeypatch.setattr(city_coding, 'require_chatgpt', lambda *_args: None)
+    monkeypatch.setattr(city_coding, 'codex_usage_percent', lambda *_args: 60)
+    monkeypatch.setattr(city_coding, '_execute', lambda *_args, **_kwargs:
+                        pytest.fail('Codex must not run at the quota stop'))
+
+    with pytest.raises(CityError, match='limite de consommation Codex'):
+        network.discover_service_contacts('alice')

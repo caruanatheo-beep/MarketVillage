@@ -182,7 +182,8 @@ def review_repository() -> dict:
                    'dans une branche séparée avec Codex. Analyse et développement consomment les limites Codex de ton compte.'}
 
 
-def _execute(command: list[str], directory: Path, prompt: str, env: dict) -> list[dict]:
+def _execute(command: list[str], directory: Path, prompt: str, env: dict,
+             *, timeout_seconds: int = 900) -> list[dict]:
     """Bound execution time and kill descendants on timeout, including on Windows."""
     try:
         process = subprocess.Popen(command, cwd=directory, env=env, stdin=subprocess.PIPE,
@@ -191,7 +192,7 @@ def _execute(command: list[str], directory: Path, prompt: str, env: dict) -> lis
                                    start_new_session=os.name != 'nt',
                                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         try:
-            stdout, _ = process.communicate(prompt, timeout=900)
+            stdout, _ = process.communicate(prompt, timeout=timeout_seconds)
         except subprocess.TimeoutExpired:
             if os.name == 'nt':
                 subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'], capture_output=True, timeout=15)
@@ -200,7 +201,7 @@ def _execute(command: list[str], directory: Path, prompt: str, env: dict) -> lis
                 os.killpg(process.pid, signal.SIGKILL)
             process.kill()
             process.communicate()
-            raise CityError('Codex a dépassé 15 minutes. Examine l’espace de la mission avant de réessayer.')
+            raise CityError(f'Codex a dépassé {timeout_seconds // 60} minutes. Examine l’espace de la mission avant de réessayer.')
     except OSError as exc:
         raise CityError('Codex n’a pas pu démarrer. Vérifie son installation et sa connexion ChatGPT.') from exc
     if process.returncode:
