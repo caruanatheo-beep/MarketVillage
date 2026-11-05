@@ -11,9 +11,9 @@ export function worldY(row:number):number {
 export function wingPosition(col:number,row:number):{col:number;row:number} {
   // North walls and their glazing follow exactly the same setback as the room.
   if (row===9 && col>=3 && col<=14) return {col:col-2,row:worldY(row)};
-  if (row===9 && col>=32) return {col,row:worldY(row)-1};
+  if (row===9 && col>=32 && col<=46) return {col,row:worldY(row)-1};
   if (row>=10 && row<=16 && col<=15) return {col:col-2,row:worldY(row)};
   if (row>=22 && row<=30 && col>=1 && col<=14) return {col:col-1,row:worldY(row)};
-  if (row>=10 && row<=16 && col>=32) return {col,row:worldY(row)-1};
+  if (row>=10 && row<=16 && col>=32 && col<=46) return {col,row:worldY(row)-1};
   return {col,row:worldY(row)};
 }

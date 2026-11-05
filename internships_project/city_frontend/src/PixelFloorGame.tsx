@@ -10,7 +10,7 @@ import { renderFrame, renderTileGrid, type SelectionRenderState } from "../vendo
 import { Direction, TILE_SIZE, TileType, type OfficeLayout, type SpriteData } from "../vendor/pixel-agents/webview-ui/src/office/types";
 import { type AgentStatus } from "./types";
 import { AMBIENT_LAMPS, renderNightLight } from "./nightLighting";
-import { GolfPractice, GOLF_BAYS, GOLF_ROWS } from "./GolfPractice";
+import { GolfPractice, GOLF_BAYS, GOLF_BOUNDS, GOLF_PORTAL, GOLF_ROWS, OFFICE_PORTAL } from "./GolfPractice";
 import { worldY, wingPosition } from "./worldGeometry";
 import { loadTowerArchitecture, renderTowerArchitecture, renderTowerBackdrop, renderTowerRelief } from "./TowerArchitecture";
 import { renderTowerPerspective, projectTowerX, unprojectTowerX, unprojectTowerY, towerDisplayRows } from "./TowerPerspective";
@@ -309,7 +309,7 @@ async function loadEnvironmentSprites(): Promise<void> {
 }
 
 export function buildOfficeLayout(): OfficeLayout {
-  const cols = 48, rows = 40;
+  const cols = 67, rows = 33;
   const tiles: OfficeLayout["tiles"] = [];
   const tileColors: Array<{ h: number; s: number; b: number; c: number } | null> = [];
   // A single pale-oak finish keeps the floor visually continuous across rooms.
@@ -346,9 +346,9 @@ export function buildOfficeLayout(): OfficeLayout {
   const shortLink = (col: number, row: number) =>
     // Setback terraces join the executive floor at its west/east thresholds.
     (((col >= 4 && col <= 14) || (col >= 33 && col <= 43)) && row >= 7 && row <= 8) ||
-    // The central Career doorway continues outdoors; no teleport or fake room.
-    (col >= 22 && col <= 25 && row >= 30 && row <= 34) ||
-    (col >= 1 && col <= 46 && row >= 33 && row <= 39) ||
+    (col >= 22 && col <= 25 && row >= 30 && row <= 31) ||
+    (col === OFFICE_PORTAL.col && row === 28) ||
+    (col >= GOLF_BOUNDS.left && col <= GOLF_BOUNDS.right && row >= 8 && row <= 31) ||
     // Shared access gallery: required by the Tech Lab's alternate approach.
     (((col >= 6 && col <= 8) || col === 39 || (col >= 22 && col <= 25)) && row >= 19 && row <= 20) ||
     // Manager suite to lounge, and a compact three-prong route to the lower wing.
@@ -492,21 +492,20 @@ export function buildOfficeLayout(): OfficeLayout {
   put("outreach-books", "BOOKSHELF", 33, 29); put("outreach-table", "SMALL_TABLE_FRONT", 41, 29);
   put("outreach-plant", "PLANT", 45, 29);
 
-  put("golf-central-entry", "MD_DOUBLE_GLASS_DOOR", 22, 31);
   for (const bay of GOLF_BAYS) {
-    put(`golf-mat-${bay.index}`, "MD_GOLF_MAT", bay.matCol, 35);
-    put(`golf-bag-${bay.index}`, "MD_GOLF_BAG", bay.matCol+5, 36);
-    put(`golf-basket-${bay.index}`, "MD_GOLF_BASKET", bay.matCol+4, 38);
+    put(`golf-mat-${bay.index}`, "MD_GOLF_MAT", bay.matCol, bay.matRow);
+    put(`golf-bag-${bay.index}`, "MD_GOLF_BAG", bay.matCol+5, bay.matRow+1);
+    put(`golf-basket-${bay.index}`, "MD_GOLF_BASKET", bay.matCol+4, bay.matRow+3);
   }
-  put("golf-putting-green", "MD_GOLF_GREEN", 42, 35);
-  for(const col of [1,8,15,26,33,40,46])put(`golf-lantern-${col}`,"MD_GOLF_LANTERN",col,33);
-  for(const col of [2,12,28,37])put(`golf-bench-${col}`,"MD_GOLF_BENCH",col,39);
-  for(const col of [7,17,32,43])put(`golf-planter-${col}`,"MD_GOLF_PLANTER",col,39);
+  put("golf-putting-green", "MD_GOLF_GREEN", 59, 29);
+  for(const col of [50,58,66])put(`golf-lantern-${col}`,"MD_GOLF_LANTERN",col,8);
+  for(const col of [52,56])put(`golf-bench-${col}`,"MD_GOLF_BENCH",col,30);
+  put("golf-planter", "MD_GOLF_PLANTER", 51, 29);
 
   // Facade bands are real non-walkable gaps, crossed only by the stairs.
   const projectedTiles = Array(GOLF_ROWS*cols).fill(TileType.VOID);
   const projectedColors: typeof tileColors = Array(GOLF_ROWS*cols).fill(null);
-  for(let row=0;row<40;row++) {
+  for(let row=0;row<rows;row++) {
     if(row===17||row===18)continue;
     for(let col=0;col<cols;col++) {
       if(tiles[row*cols+col]===TileType.VOID)continue;
@@ -538,6 +537,9 @@ export function buildOfficeLayout(): OfficeLayout {
   const floorAt=(col:number,row:number)=>{
     const index=row*cols+col;projectedTiles[index]=TileType.FLOOR_1;projectedColors[index]=oak;
   };
+  // Projection skips two office facade rows; the detached golf deck stays whole.
+  for(let row=GOLF_BOUNDS.top;row<=GOLF_BOUNDS.bottom;row++)
+    for(let col=GOLF_BOUNDS.left;col<=GOLF_BOUNDS.right;col++) floorAt(col,row);
   for(let row=worldY(10);row<=worldY(30);row++) floorAt(14,row);
   for(let row=worldY(10);row<=worldY(16);row++) floorAt(15,row);
   // A two-tile gallery joins all three landings, without isolated skyline holes.
@@ -916,7 +918,7 @@ export function validateAgentRoutes(office: OfficeState): void {
   }
   const walkable = new Set(office.walkableTiles.map(tile => `${tile.col},${tile.row}`));
   const links = [
-    [23,30],[23,31],[23,32],[23,33],[23,34],
+    [23,30],[23,31],
     [23, 9], [23, 10], [15, 14], [32, 14],
     [23, 19], [23, 20], [23, 21],
     [7, 19], [7, 20], [7, 21], [39, 19], [39, 20], [39, 21],

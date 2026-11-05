@@ -16,7 +16,7 @@ export async function checkLayout() {
         export { buildTowerStructure } from './src/TowerArchitecture';
         export { TileType } from './vendor/pixel-agents/webview-ui/src/office/types';
         export { projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows } from './src/TowerPerspective';
-        export { GolfPractice, GOLF_BAYS } from './src/GolfPractice';
+        export { GolfPractice, GOLF_BAYS, GOLF_BOUNDS, OFFICE_PORTAL, GOLF_PORTAL } from './src/GolfPractice';
         export { OfficeState } from './vendor/pixel-agents/webview-ui/src/office/engine/officeState';
         export { findPath } from './vendor/pixel-agents/webview-ui/src/office/layout/tileMap';`,
       resolveDir: base,
@@ -24,7 +24,7 @@ export async function checkLayout() {
     },
     bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
   });
-  const { loadFurniture, buildOfficeLayout, validateAgentRoutes, OfficeState, findPath, GolfPractice, GOLF_BAYS, worldY,
+  const { loadFurniture, buildOfficeLayout, validateAgentRoutes, OfficeState, findPath, GolfPractice, GOLF_BAYS, GOLF_BOUNDS, OFFICE_PORTAL, GOLF_PORTAL, worldY,
     projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows, buildTowerStructure, TileType,
     notificationRows, isPendingProposal, needsDecision, parisDay, cockpitData, resultSummary } =
     await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString("base64")}`);
@@ -104,7 +104,12 @@ export async function checkLayout() {
         pending.push({x:x+dx,y:y+dy});
     }
   }
-  assert.equal(connected.size,floorCells.length,'No disconnected floor fragment anywhere in the building');
+  const officeCells=floorCells.filter(({x})=>x<GOLF_BOUNDS.left);
+  assert.equal(connected.size,officeCells.length,'Every desk remains on the connected office floor');
+  assert.ok(connected.has(`${OFFICE_PORTAL.col},${OFFICE_PORTAL.row}`),'Office portal must be reachable');
+  assert.ok(!connected.has(`${GOLF_PORTAL.col},${GOLF_PORTAL.row}`),'Golf requires the portal crossing');
+  const golfCells=floorCells.filter(({x})=>x>=GOLF_BOUNDS.left);
+  assert.equal(golfCells.length,(GOLF_BOUNDS.right-GOLF_BOUNDS.left+1)*(GOLF_BOUNDS.bottom-GOLF_BOUNDS.top+1),'Golf deck has no gaps');
   // Regression: visible corridors and plate interiors cannot contain sky holes.
   for(const [x0,x1,y0,y1]of [[1,12,11,17],[16,31,11,17],[0,13,20,28],[16,31,20,28],[33,46,20,28],
     [14,14,11,28],[0,46,18,19]])
@@ -184,10 +189,13 @@ export async function checkLayout() {
     blocked.delete(`${seat.seatCol},${seat.seatRow}`);
     assert.ok(findPath(23, worldY(19), seat.seatCol, seat.seatRow, office.tileMap, blocked).length, `Cannot reach ${id}`);
     assert.ok(findPath(seat.seatCol, seat.seatRow, 23, worldY(19), office.tileMap, blocked).length, `Cannot leave ${id}`);
-    for (const bay of GOLF_BAYS) {
-      assert.ok(findPath(seat.seatCol,seat.seatRow,bay.col,bay.row,office.tileMap,blocked).length,`Cannot reach golf bay ${bay.index} from ${id}`);
-      assert.ok(findPath(bay.col,bay.row,seat.seatCol,seat.seatRow,office.tileMap,blocked).length,`Cannot return from golf bay ${bay.index} to ${id}`);
-    }
+    assert.ok(findPath(seat.seatCol,seat.seatRow,OFFICE_PORTAL.col,OFFICE_PORTAL.row,office.tileMap,blocked).length,`Cannot reach office portal from ${id}`);
+    assert.ok(findPath(OFFICE_PORTAL.col,OFFICE_PORTAL.row,seat.seatCol,seat.seatRow,office.tileMap,blocked).length,`Cannot return from office portal to ${id}`);
+    assert.equal(findPath(seat.seatCol,seat.seatRow,GOLF_PORTAL.col,GOLF_PORTAL.row,office.tileMap,blocked).length,0,'Crossing golf without portal must be impossible');
+  }
+  for(const bay of GOLF_BAYS){
+    assert.ok(findPath(GOLF_PORTAL.col,GOLF_PORTAL.row,bay.col,bay.row,office.tileMap,office.blockedTiles).length,`Cannot reach golf bay ${bay.index} from portal`);
+    assert.ok(findPath(bay.col,bay.row,GOLF_PORTAL.col,GOLF_PORTAL.row,office.tileMap,office.blockedTiles).length,`Cannot leave golf bay ${bay.index}`);
   }
   const roster=['market_analyst','finance_tutor','job_hunter','networker','outreach_agent','developer','innovation_lab','internship_scout','city_ui_engineer','internships_engineer','quality_engineer','securities_scout','desk_manager'];
   roster.forEach((id,index)=>{office.addAgent(index,index%6,0,id==='desk_manager'?'marketdesk-manager-chair':`marketdesk-chair-${id}`,true);office.setAgentPinned(index,true);office.setAgentActive(index,false);});
@@ -198,7 +206,7 @@ export async function checkLayout() {
   for(let step=0;step<1800;step++) {
     if(step%100===0)golf.sync(idle,[]);
     golf.update(.05);office.update(.05);
-    assert.ok(golf.visits.size<=5,'At most five reserved mats');
+    assert.ok(golf.visits.size<=6,'At most six reserved mats');
     assert.equal(new Set([...golf.visits.values()].map(v=>v.bay)).size,golf.visits.size,'No shared mat');
     maxVisitors=Math.max(maxVisitors,golf.visits.size);
     for(const [index,visit]of golf.visits)if(visit.stage==='playing')played.add(index);
@@ -209,12 +217,12 @@ export async function checkLayout() {
   const ch=office.characters.get(visitor),before=[ch.x,ch.y];
   golf.sync(idle,[{agent_id:roster[visitor],status:'queued'}]);
   assert.ok(!golf.visits.has(visitor),'A queued mission interrupts the ambient pause immediately');
-  assert.deepEqual([ch.x,ch.y],before,'Mission return never teleports an agent');
+  if(before[0]>=GOLF_BOUNDS.left*16)assert.deepEqual([ch.tileCol,ch.tileRow],[OFFICE_PORTAL.col,OFFICE_PORTAL.row],'Mission brings golfer back through office portal');
   const seat=office.seats.get(ch.seatId);
   assert.deepEqual(ch.path.at(-1),{col:seat.seatCol,row:seat.seatRow},'Mission sends the agent to the real workstation');
   for(let step=0;step<800;step++){golf.update(.05);office.update(.05);}
   assert.equal(golf.visits.size,0,'Stale backend state stops ambient activity');
-  console.log(`Golf OK: 90 round-trip paths, ${played.size} animated visitors, max ${maxVisitors} mats, mission interruption and stale-state protection.`);
+  console.log(`Golf OK: ${GOLF_BAYS.length} bays behind two portals, ${played.size} animated visitors, max ${maxVisitors} mats, mission interruption and stale-state protection.`);
   console.log(`Layout OK: ${assets.catalog.length} assets, ${office.layout.furniture.length} objects, all ${workstations.length} workstations reachable (${workstations.length*2} engine routes); perspective and inverse hit tests validated.`);
 }
 

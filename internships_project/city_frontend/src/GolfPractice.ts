@@ -3,11 +3,16 @@ import type { OfficeState } from '../vendor/pixel-agents/webview-ui/src/office/e
 import type { AgentStatus } from './types';
 import { worldY } from './worldGeometry';
 
-// The five left-side stance areas all strike east. Reservations are local
+// The six stance areas all strike east. Reservations are local
 // ambient animation only: never create tasks, tool events or backend statuses.
-export const GOLF_BAYS = [2,9,16,27,34].map((col,index)=>({index,col:col+1,row:worldY(36),matCol:col}));
-export const GOLF_ROWS = worldY(40);
-type Visit = { bay:number; stage:'walking'|'playing'|'returning'; elapsed:number; swing:number };
+export const OFFICE_PORTAL = {col:47,row:worldY(28)};
+export const GOLF_PORTAL = {col:64,row:worldY(28)};
+export const GOLF_BOUNDS = {left:50,right:66,top:worldY(8),bottom:worldY(31)};
+export const GOLF_BAYS = [12,20,25].flatMap((matRow)=>[51,59].map(matCol=>({
+  index:0,col:matCol+1,row:worldY(matRow+2),matCol,matRow,
+}))).map((bay,index)=>({...bay,index}));
+export const GOLF_ROWS = worldY(33);
+type Visit = { bay:number; stage:'to_portal'|'walking'|'playing'|'to_exit'|'returning'; elapsed:number; swing:number };
 type Agent = {id:string;status:AgentStatus};
 type Task = {agent_id:string;status?:string};
 const BLOCKING = new Set(['queued','running','waiting_approval']);
@@ -39,8 +44,17 @@ export class GolfPractice {
   private eligible(index:number):boolean{
     return this.age<35 && IDLE.has(this.statuses.get(this.roster[index])||'unknown') && !this.tasked.has(this.roster[index]);
   }
+  private teleport(index:number, col:number, row:number):void{
+    const ch=this.office.characters.get(index);
+    if(!ch)return;
+    ch.tileCol=col;ch.tileRow=row;
+    ch.x=col*TILE_SIZE+TILE_SIZE/2;ch.y=row*TILE_SIZE+TILE_SIZE/2;
+    ch.path=[];ch.moveProgress=0;ch.state=CharacterState.IDLE;
+  }
   interrupt(index:number):void{
     if(!this.visits.has(index))return;
+    const ch=this.office.characters.get(index);
+    if(ch&&ch.tileCol>=GOLF_BOUNDS.left)this.teleport(index,OFFICE_PORTAL.col,OFFICE_PORTAL.row);
     this.visits.delete(index);this.office.setAgentPinned(index,true);
     this.office.sendToSeat(index);this.cooldown.set(index,this.time+100+index*7);
   }
@@ -52,6 +66,11 @@ export class GolfPractice {
       if(!this.eligible(index)||collaborators.has(index)){this.interrupt(index);continue;}
       const bay=GOLF_BAYS[visit.bay];
       visit.elapsed+=dt;
+      if(visit.stage==='to_portal' && ch.path.length===0 && ch.tileCol===OFFICE_PORTAL.col && ch.tileRow===OFFICE_PORTAL.row){
+        this.teleport(index,GOLF_PORTAL.col,GOLF_PORTAL.row);
+        visit.stage='walking';visit.elapsed=0;
+        if(!this.office.walkToTile(index,bay.col,bay.row))this.interrupt(index);
+      }
       if(visit.stage==='walking' && ch.path.length===0 && ch.tileCol===bay.col && ch.tileRow===bay.row){
         visit.stage='playing';visit.elapsed=0;
       }
@@ -59,11 +78,19 @@ export class GolfPractice {
         // Freeze the idle wander FSM while the original character faces the tee.
         ch.state=CharacterState.IDLE;ch.dir=Direction.RIGHT;ch.wanderTimer=Infinity;ch.frame=0;
         visit.swing+=dt;
-        if(visit.elapsed>32){visit.stage='returning';this.office.setAgentPinned(index,true);this.office.sendToSeat(index);}
+        if(visit.elapsed>32){
+          visit.stage='to_exit';visit.elapsed=0;
+          if(!this.office.walkToTile(index,GOLF_PORTAL.col,GOLF_PORTAL.row))this.interrupt(index);
+        }
+      }
+      if(visit.stage==='to_exit' && ch.path.length===0 && ch.tileCol===GOLF_PORTAL.col && ch.tileRow===GOLF_PORTAL.row){
+        this.teleport(index,OFFICE_PORTAL.col,OFFICE_PORTAL.row);
+        visit.stage='returning';visit.elapsed=0;
+        this.office.setAgentPinned(index,true);this.office.sendToSeat(index);
       }
       if(visit.stage==='returning' && ch.path.length===0){
         this.visits.delete(index);this.cooldown.set(index,this.time+110+index*7);
-      }else if(visit.stage==='walking' && visit.elapsed>55)this.interrupt(index);
+      }else if(['to_portal','walking','to_exit'].includes(visit.stage) && visit.elapsed>55)this.interrupt(index);
     }
     for(let index=0;index<this.roster.length;index++){
       if(this.visits.has(index)||collaborators.has(index)||!this.eligible(index)||this.time<(this.cooldown.get(index)??(18+index*9)))continue;
@@ -73,46 +100,56 @@ export class GolfPractice {
         ![...this.office.characters.values()].some(other=>other.id!==index&&other.tileCol===item.col&&other.tileRow===item.row));
       if(!bay)break;
       this.office.setAgentPinned(index,false);
-      if(this.office.walkToTile(index,bay.col,bay.row))this.visits.set(index,{bay:bay.index,stage:'walking',elapsed:0,swing:0});
+      if(this.office.walkToTile(index,OFFICE_PORTAL.col,OFFICE_PORTAL.row))this.visits.set(index,{bay:bay.index,stage:'to_portal',elapsed:0,swing:0});
       else{this.office.setAgentPinned(index,true);this.cooldown.set(index,this.time+30);}
     }
   }
 
   renderFloor(ctx:CanvasRenderingContext2D,ox:number,oy:number,zoom:number):void{
     ctx.save();ctx.imageSmoothingEnabled=false;
-    const cell=16*zoom,x=ox+cell,y=oy+worldY(33)*cell,w=46*cell,h=7*cell;
+    const cell=16*zoom,x=ox+GOLF_BOUNDS.left*cell,y=oy+GOLF_BOUNDS.top*cell;
+    const w=(GOLF_BOUNDS.right-GOLF_BOUNDS.left+1)*cell,h=(GOLF_BOUNDS.bottom-GOLF_BOUNDS.top+1)*cell;
     ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
     ctx.fillStyle='#34454a';ctx.fillRect(x,y,w,h);
     const deck=this.assets.md_golf_deck;
-    if(deck)for(let row=33;row<40;row+=4)for(let col=1;col<47;col+=8)
-      ctx.drawImage(deck,ox+col*cell,oy+worldY(row)*cell,128*zoom,64*zoom);
+    if(deck)for(let row=GOLF_BOUNDS.top;row<=GOLF_BOUNDS.bottom;row+=4)for(let col=GOLF_BOUNDS.left;col<=GOLF_BOUNDS.right;col+=8)
+      ctx.drawImage(deck,ox+col*cell,oy+row*cell,128*zoom,64*zoom);
     ctx.fillStyle='#0c1d2970';ctx.fillRect(x,y,w,cell*.7);
     ctx.restore();
-    // A netted skyline on the rear boundary, with an actual central doorway.
+    // A netted skyline gives the separate practice terrace its own boundary.
     const skyline=this.assets.md_golf_skyline;
     if(skyline){ctx.save();ctx.imageSmoothingEnabled=false;
-      for(const [left,right] of [[1,22],[26,47]]){
-        ctx.save();ctx.beginPath();ctx.rect(ox+left*cell,oy+worldY(31.7)*cell,(right-left)*cell,1.3*cell);ctx.clip();
-        for(let col=left;col<right;col+=6)ctx.drawImage(skyline,ox+col*cell,oy+worldY(31)*cell,96*zoom,32*zoom);
-        ctx.restore();
-      }ctx.restore();
+      ctx.beginPath();ctx.rect(x,y,w,cell*1.2);ctx.clip();
+      for(let col=50;col<67;col+=6)ctx.drawImage(skyline,ox+col*cell,oy+(GOLF_BOUNDS.top-.7)*cell,96*zoom,32*zoom);
+      ctx.restore();
     }
   }
 
   render(ctx:CanvasRenderingContext2D,ox:number,oy:number,zoom:number):void{
     ctx.save();const cell=TILE_SIZE*zoom;
-    // Real fine-mesh fence follows the rear terrace edge, with a central entry.
+    // The portals are animated in-world; their walkable tiles stay on separate islands.
+    for(const [portal,label] of [[OFFICE_PORTAL,'GOLF'],[GOLF_PORTAL,'DESKS']] as const){
+      const px=ox+(portal.col+.5)*cell,py=oy+(portal.row+.5)*cell;
+      const glow=ctx.createRadialGradient(px,py,0,px,py,cell*1.55);
+      glow.addColorStop(0,'#94ffe4bb');glow.addColorStop(.55,'#48d6bd66');glow.addColorStop(1,'#48d6bd00');
+      ctx.fillStyle=glow;ctx.fillRect(px-cell*1.55,py-cell*1.55,cell*3.1,cell*3.1);
+      ctx.strokeStyle='#a8ffe9';ctx.lineWidth=Math.max(2,zoom*1.8);
+      ctx.beginPath();ctx.ellipse(px,py-cell*.2,cell*.48,cell*.85,0,0,Math.PI*2);ctx.stroke();
+      ctx.font=`700 ${Math.max(7,6*zoom)}px "Segoe UI",sans-serif`;
+      ctx.textAlign='center';ctx.fillStyle='#e6fff5';ctx.fillText(label,px,py-cell*1.1);
+    }
+    // Fine mesh encloses the practice terrace without blocking its portal.
     const net=this.assets['practice-net'];
-    if(net)for(const [left,right]of [[1,22],[26,47]]){
-      ctx.save();ctx.beginPath();ctx.rect(ox+left*cell,oy+worldY(33)*cell,(right-left)*cell,.9*cell);ctx.clip();
-      for(let x=left;x<right;x+=4)ctx.drawImage(net,ox+x*cell,oy+worldY(33)*cell,4*cell,.9*cell);
+    if(net){
+      ctx.save();ctx.beginPath();ctx.rect(ox+50*cell,oy+GOLF_BOUNDS.top*cell,17*cell,.9*cell);ctx.clip();
+      for(let x=50;x<67;x+=4)ctx.drawImage(net,ox+x*cell,oy+GOLF_BOUNDS.top*cell,4*cell,.9*cell);
       ctx.restore();
     }
     // Local additive light pools brighten wood, characters and the green.
-    ctx.beginPath();ctx.rect(ox+cell,oy+worldY(33)*cell,46*cell,7*cell);ctx.clip();
+    ctx.beginPath();ctx.rect(ox+50*cell,oy+GOLF_BOUNDS.top*cell,17*cell,(GOLF_BOUNDS.bottom-GOLF_BOUNDS.top+1)*cell);ctx.clip();
     ctx.globalCompositeOperation='screen';
-    for(const col of [1,8,15,26,33,40,46]){
-      const x=ox+(col+.5)*cell,y=oy+(worldY(33)+.35)*cell,r=cell*2.8;
+    for(const col of [50,58,66]){
+      const x=ox+(col+.5)*cell,y=oy+(GOLF_BOUNDS.top+.35)*cell,r=cell*2.8;
       const glow=ctx.createRadialGradient(x,y,0,x,y,r);
       glow.addColorStop(0,'#ffd181b0');glow.addColorStop(.35,'#f69b3e50');glow.addColorStop(1,'#e8781200');
       ctx.fillStyle=glow;ctx.fillRect(x-r,y-r,r*2,r*2);
@@ -141,8 +178,8 @@ export class GolfPractice {
     }
     ctx.restore();
     ctx.save();ctx.font=`600 ${Math.max(7,7*zoom)}px "Segoe UI",sans-serif`;ctx.textAlign='center';
-    ctx.fillStyle='#e8d3a6';ctx.fillText('GOLF PRACTICE',ox+24*cell,oy+worldY(38.5)*cell);
+    ctx.fillStyle='#e8d3a6';ctx.fillText('GOLF PRACTICE',ox+58*cell,oy+worldY(10)*cell);
     ctx.font=`${Math.max(6,5*zoom)}px "Segoe UI",sans-serif`;ctx.fillStyle='#b3b9b2';
-    ctx.fillText('Pause détente · aucune mission IA',ox+24*cell,oy+worldY(39.15)*cell);ctx.restore();
+    ctx.fillText('Pause détente · aucune mission IA',ox+58*cell,oy+worldY(11)*cell);ctx.restore();
   }
 }
