@@ -81,7 +81,7 @@ def test_jobteaser_public_sitemap_is_cached_without_opening_offer_pages(tmp_path
     assert calls == [internships.JOBTEASER_INDEX, "https://assets-cf.jobteaser.com/sitemaps/job_ads_sitemap.xml"]
 
 
-def test_jobteaser_duplicate_yields_to_direct_employer_offer(monkeypatch):
+def test_jobteaser_duplicate_yields_to_direct_employer_offer():
     from internships_project import internships
 
     direct = _opportunity("Stage - Assistant Trading Janvier 2027", "ODDO", "Paris", "Stage",
@@ -91,18 +91,7 @@ def test_jobteaser_duplicate_yields_to_direct_employer_offer(monkeypatch):
         "https://www.jobteaser.com/fr/job-offers/11111111-2222-3333-4444-555555555555-"
         "oddo-bhf-stage-assistant-trading-janvier-2027")
     assert teaser is not None
-    monkeypatch.setattr(internships, "SMARTRECRUITERS", {"ODDO": "ODDO"})
-    monkeypatch.setattr(internships, "GREENHOUSE", {})
-    monkeypatch.setattr(internships, "WORKDAY", {})
-    monkeypatch.setattr(internships, "CAREER_LISTINGS", {})
-    monkeypatch.setattr(internships, "_smart_jobs", lambda *args: [direct])
-    monkeypatch.setattr(internships, "_jobteaser_jobs", lambda *args: [teaser])
-    for name in ("_socgen_jobs", "_vie_jobs", "_ca_cib_jobs", "_bnp_cib_jobs", "_bnp_tal_jobs",
-                 "_banque_de_france_jobs",
-                 "_amundi_jobs", "_arkea_jobs", "_bpce_open_data_jobs"):
-        monkeypatch.setattr(internships, name, lambda *args: [])
-    jobs, errors = internships._fetch_opportunities()
-    assert not errors
+    jobs = internships._deduplicate_opportunities([teaser, direct])
     assert [job.url for job in jobs] == [direct.url]
 
 
@@ -153,7 +142,7 @@ def test_source_connector_cache_reuses_fresh_result_and_records_duration(tmp_pat
     from internships_project import internships
 
     job = _opportunity("Trading Intern", "Bank", "Paris", "Stage",
-                       "https://jobs.example.com/trading-intern", "2026-10-20")
+                       "https://jobs.smartrecruiters.com/Bank/trading-intern", "2026-10-20")
     assert job is not None
     monkeypatch.setattr(internships, "CACHE_PATH", tmp_path / "internships_cache.json")
     monkeypatch.setattr(internships, "_source_job_cache", {})

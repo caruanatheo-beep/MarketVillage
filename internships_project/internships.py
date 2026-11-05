@@ -477,7 +477,8 @@ def _publication_sort_value(published: str) -> int:
 
 def _opportunity_sort_key(job: Opportunity) -> tuple:
     published = _publication_sort_value(job.published)
-    return (-int(_priority_start(job)), -job.score, -published, job.company.casefold(),
+    return (-int(_priority_start(job)), start_month(job.start_period) or "9999-99",
+            -job.score, -published, job.company.casefold(),
             job.title.casefold(), job.url.casefold())
 
 

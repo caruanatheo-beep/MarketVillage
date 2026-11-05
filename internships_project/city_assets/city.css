@@ -1586,3 +1586,9 @@ body { overflow:hidden; }
 .code-change-more { justify-self:start; border:0; padding:3px 0; background:none; color:#a6f2d5; font:600 12px system-ui,sans-serif; cursor:pointer; }
 .code-change-more:hover { text-decoration:underline; }
 @media(max-width:900px) { .code-change-list { grid-template-columns:1fr; } }
+.mission-integration-proof { padding:10px 12px; border:1px solid #6fbe9e; border-radius:9px; background:#194e43; color:#dcffeb; font-size:12px; line-height:1.5; }
+.mission-result-part details li { margin:5px 0; color:#e2f8eb; }
+.mission-result-part details li code { display:inline-block; max-width:100%; padding:2px 5px; border-radius:5px; background:#0c3233; color:#d6ffeb; overflow-wrap:anywhere; }
+.mission-result-part .jules-code-diff,.mission-result-part .jules-code-diff code { color:#e6f4ef; }
+.game-app .code-results-window { width:min(1040px,calc(100vw - 52px)); height:min(900px,calc(100dvh - 32px)); max-height:none; }
+.game-app .code-results-window .jules-code-diff { overflow:auto; overflow-wrap:normal; }

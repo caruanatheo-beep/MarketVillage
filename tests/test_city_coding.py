@@ -105,6 +105,8 @@ def test_coding_runs_only_after_human_approval_and_keeps_main_untouched(repo,sto
 
 def test_autonomous_engineer_integrates_validated_code_without_approval(repo, monkeypatch):
     root, git = repo
+    packages = root/'.venv'/'Lib'/'site-packages'
+    packages.mkdir(parents=True)
     monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 12)
     original_run = subprocess.run
     def run(command, **kwargs):
@@ -115,6 +117,8 @@ def test_autonomous_engineer_integrates_validated_code_without_approval(repo, mo
     def execute(command, directory, prompt, env):
         assert '--model' in command and command[command.index('--model') + 1] == 'gpt-6.1-sol'
         assert 'Sacha' in prompt
+        assert 'scripts/city_test.py' in prompt
+        assert env['MARKETDESK_TEST_SITE_PACKAGES'] == str(packages)
         target = directory/'internships_project/city_sample.py'
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text('value = 2\n')
@@ -125,6 +129,7 @@ def test_autonomous_engineer_integrates_validated_code_without_approval(repo, mo
     result = coding.implement_change('c'*32, {'coding_request': ''},
                                     agent_id='internships_engineer', auto_integrate=True)
     assert result['integrated'] and result['commit'] == git('rev-parse', 'HEAD')
+    assert 'intégrée' in result['base_note']
     assert (root/'internships_project/city_sample.py').read_text() == 'value = 2\n'
 
 
@@ -234,6 +239,7 @@ def test_autonomous_engineer_rebases_after_another_mission_integrates(repo, monk
     result = coding.implement_change('d'*32, {'coding_request': ''},
                                     agent_id='internships_engineer', auto_integrate=True)
     assert result['integrated'] and result['commit'] == git('rev-parse', 'HEAD')
+    assert result['rebased'] and 'adaptée' in result['base_note']
     assert (root/'other.py').exists() and (root/'internships_project/city_sample.py').exists()
 
 

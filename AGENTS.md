@@ -4,6 +4,7 @@ This repository contains three separate applications: Markets (`app.py`), Intern
 
 - Start with a narrow `rg --files` or `rg -n` search and read only the files needed for the task. Do not dump entire directories, generated assets, caches, or logs.
 - For cross-file questions, query the local Graphify index first: `.codex-tools/python312/python.exe scripts/graphify.py query "<question>" --budget 1200`. Use source files to verify the answer. Run `update .` only after relevant code changes or when the index is stale.
+- In isolated `.city-worktrees/` checkouts, ignored `.codex-tools/` and `graphify-out/` are unavailable. Use `rg` and the checked-out source files there; do not retry Graphify or install it in the worktree.
 - Reuse existing components, services, and tests. Make the smallest complete change, including necessary callers and validation; avoid duplicate implementations and speculative scaffolding.
 - Keep `.env`, user data, CVs, exports, and authentication material out of search output, Graphify, and commits. Graphify exclusions live in `.graphifyignore`.
 - Run the focused test or build for the touched area. Expand testing only to resolve a concrete risk.
