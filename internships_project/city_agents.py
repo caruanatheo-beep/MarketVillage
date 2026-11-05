@@ -10,10 +10,11 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable, Literal
+from zoneinfo import ZoneInfo
 
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
@@ -93,7 +94,7 @@ async def _tool(ctx: RunContext[ChatDeps], name: str, operation: Callable[[], An
 
 def _cached_jobs(query: str = "", bank: str = "", location: str = "", start: str = "",
                  recent_only: bool = False, contract: str = "", page: int = 1) -> dict:
-    from .internships import load_opportunities
+    from .internships import _published_this_week, load_opportunities
     from .city_services import search_text
     if not isinstance(page, int) or isinstance(page, bool) or page < 1:
         raise CityError("La page doit être un entier positif.")
@@ -104,7 +105,7 @@ def _cached_jobs(query: str = "", bank: str = "", location: str = "", start: str
     terms = [part for part in search_text(_bounded(query, 120)).split() if len(part) > 1]
     bank, location, start = (search_text(_bounded(value, 80)) for value in (bank, location, start))
     matching = []
-    recent_cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
+    today = datetime.now(ZoneInfo("Europe/Paris")).date()
     for job in jobs:
         haystack = search_text(f"{job.title} {job.company} {job.location} {job.family} {job.description}")
         if (terms and not all(term in haystack for term in terms)) or (bank and bank not in search_text(job.company)):
@@ -113,7 +114,7 @@ def _cached_jobs(query: str = "", bank: str = "", location: str = "", start: str
             continue
         if contract and search_text(job.kind) != contract:
             continue
-        if recent_only and (not job.published or job.published[:10] < recent_cutoff):
+        if recent_only and (job.published_inferred or not _published_this_week(job.published, today)):
             continue
         matching.append(job)
     matching.sort(key=lambda job: (job.published or "", job.score, job.company.casefold(), job.title.casefold(), job.url), reverse=True)
@@ -291,15 +292,19 @@ def build_agent(agent_id: str, model: Any) -> Agent[ChatDeps, str]:
         @agent.tool
         async def search_internship_cache(ctx: RunContext[ChatDeps], query: str = "",
                                           bank: str = "", location: str = "", start: str = "",
-                                          contract: str = "", page: int = 1) -> dict:
+                                          contract: str = "", page: int = 1,
+                                          recent_only: bool = False) -> dict:
             """Search cached offers by keywords, bank, location, start period and contract.
 
             Pages start at 1; request the next page with the same filters when has_more
             is true. This shared dashboard service never starts a collection.
+            recent_only selects confirmed publications from today and the preceding
+            six calendar days in Europe/Paris, excluding dates of first detection.
             """
             return await _tool(ctx, "Internships · cache", lambda: _cached_jobs(
                 _bounded(query, 120), bank=_bounded(bank, 80), location=_bounded(location, 80),
-                start=_bounded(start, 80), contract=_bounded(contract, 60), page=page))
+                start=_bounded(start, 80), contract=_bounded(contract, 60), page=page,
+                recent_only=recent_only))
 
         @agent.tool
         async def collect_dashboard_data(ctx: RunContext[ChatDeps], dashboard: str) -> dict:

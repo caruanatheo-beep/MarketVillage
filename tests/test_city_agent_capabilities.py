@@ -194,6 +194,58 @@ def test_manager_searches_next_internship_page_with_filters(monkeypatch):
     assert refreshes == [False, False]
 
 
+def test_manager_recent_internships_require_confirmed_dates_and_preserve_pagination(monkeypatch):
+    import asyncio
+    from internships_project import internships
+    from pydantic_ai.models.test import TestModel
+
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            # Already November 6 in Paris, still November 5 in UTC.
+            return cls(2026, 11, 5, 23, 30, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(city_agents, "datetime", FixedDatetime)
+
+    def offer(index, published, inferred=False):
+        return internships.Opportunity(
+            "FX Sales", "Bank", "Paris", "Stage", f"https://example.com/{index:03}",
+            published, 80, published_inferred=inferred)
+
+    jobs = [offer(i, day) for i, day in enumerate([
+        "2026-11-06", "2026-11-05", "2026-11-04", "2026-11-03", "2026-11-02",
+        "2026-11-01", "2026-10-31", "2026-11-06", "2026-11-05", "2026-11-04",
+    ])]
+    excluded = [offer(20 + i, day) for i, day in enumerate([
+        "2026-10-30", "2026-11-07", "", "unknown", "2026-11-00", "2026-11-31",
+    ])] + [offer(30, "2026-11-06", inferred=True)]
+    refreshes = []
+
+    def load(refresh=False):
+        refreshes.append(refresh)
+        return jobs + excluded, [], FixedDatetime.now(timezone.utc)
+
+    monkeypatch.setattr(internships, "load_opportunities", load)
+    tool = city_agents.build_agent("desk_manager", TestModel())._function_toolset.tools[
+        "search_internship_cache"].function
+    ctx = SimpleNamespace(deps=city_agents.ChatDeps("owner", None))
+    results = [asyncio.run(tool(ctx, "FX", recent_only=True, page=page)) for page in (1, 2)]
+
+    assert all(result["status"] == "completed" for result in results)
+    pages = [result["data"] for result in results]
+    assert all(page["total_matches"] == 10 and page["recent_window_days"] == 7 for page in pages)
+    assert [len(page["offers"]) for page in pages] == [8, 2]
+    assert [page["has_more"] for page in pages] == [True, False]
+    urls = [item["url"] for page in pages for item in page["offers"]]
+    assert len(urls) == len(set(urls)) == 10
+    assert set(urls) == {job.url for job in jobs}
+
+    unfiltered = asyncio.run(tool(ctx, "FX"))["data"]
+    assert unfiltered["total_matches"] == len(jobs + excluded)
+    assert unfiltered["recent_window_days"] is None
+    assert refreshes == [False, False, False]
+
+
 @pytest.mark.parametrize("page", [0, -1, True, 1.5, "2"])
 def test_manager_rejects_invalid_internship_page_without_loading(monkeypatch, page):
     import asyncio
