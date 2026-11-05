@@ -1,6 +1,7 @@
 """Persistent City collaboration without external sends or model requests."""
 
 from datetime import datetime, timezone
+from contextlib import contextmanager
 import threading
 import time
 
@@ -93,6 +94,72 @@ def test_standalone_retry_links_new_attempt_to_failed_mission(tmp_path, monkeypa
     assert tasks[original["id"]]["status"] == "failed"
     assert tasks[retried["id"]]["status"] == "queued"
     assert tasks[retried["id"]]["retry_of"] == original["id"]
+
+
+@pytest.mark.parametrize("interleaving", ["retry", "cancel", "exhaust"])
+def test_workflow_retry_rechecks_concurrent_changes_through_api(tmp_path, monkeypatch, interleaving):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from internships_project.city_routes import add_city_routes
+
+    store = _workspace(tmp_path, monkeypatch)
+    project = store.create_custom_workflow("theo", "Review", "Review markets and contacts", [
+        {"id": "market", "agent_id": "market_analyst", "description": "Review markets", "depends_on": []},
+        {"id": "contacts", "agent_id": "networker", "description": "Review contacts", "depends_on": []},
+    ])
+    task = store.claim_next()
+    store.finish(task["id"], error="Temporary source failure")
+    other = CityStore(store.path)
+    with other.db() as db:
+        db.execute("UPDATE city_tasks SET max_retries=1 WHERE id=?", (task["id"],))
+
+    original_db = store.db
+    pending = True
+    expected = {}
+
+    class InterleavedConnection:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def execute(self, sql, *args):
+            nonlocal pending
+            if pending and sql == "BEGIN IMMEDIATE":
+                pending = False
+                # A second connection acts just before the write lock is taken.
+                # This also covers cancellation after the old project check.
+                if interleaving == "cancel":
+                    assert other.cancel_workflow("theo", project["id"])
+                else:
+                    other.retry_task("theo", task["id"])
+                    if interleaving == "exhaust":
+                        # The concurrent attempt fails before this request resumes.
+                        assert other.claim_next()["id"] == task["id"]
+                        other.finish(task["id"], error="Source still unavailable")
+                expected.update(other.snapshot("theo"))
+            return self.connection.execute(sql, *args)
+
+    @contextmanager
+    def interleaved_db():
+        with original_db() as db:
+            yield InterleavedConnection(db)
+
+    monkeypatch.setattr(store, "db", interleaved_db)
+    worker = CityWorker(store)
+    starts = []
+    monkeypatch.setattr(worker, "start", lambda: starts.append(True))
+    app = FastAPI()
+    add_city_routes(app, lambda request: "theo", store, worker)
+    with TestClient(app) as client:
+        response = client.post(f'/city/api/tasks/{task["id"]}/retry',
+                               headers={"X-MarketDesk-City": "1"})
+
+    assert response.status_code == 409
+    assert "detail" in response.json()
+    assert starts == []
+    actual = other.snapshot("theo")
+    # Rejection must preserve the project, dependent steps, counter and events.
+    for key in ("tasks", "workflows", "events"):
+        assert actual[key] == expected[key]
 
 
 def test_manager_tool_is_registered_and_workflow_requires_profile(tmp_path, monkeypatch):

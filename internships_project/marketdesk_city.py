@@ -1569,14 +1569,19 @@ class CityStore:
             return {'id':task_id,'status':'queued','reused_approval':True}
         if row["workflow_id"]:
             with self.db() as db:
+                # Recheck the task and its project under the same write lock:
+                # another request may have retried or cancelled them meanwhile.
+                db.execute("BEGIN IMMEDIATE")
+                row = db.execute("SELECT * FROM city_tasks WHERE id=? AND username=? AND status='failed'",
+                                 (task_id, username)).fetchone()
+                if row is None:
+                    raise CityError("Cette mission a déjà été relancée.")
                 workflow = db.execute("SELECT status FROM city_workflows WHERE id=? AND username=?",
                                       (row["workflow_id"], username)).fetchone()
-            if workflow is None or workflow["status"] == "cancelled":
-                raise CityError("Ce projet a été annulé. Lance un nouveau projet pour recommencer.")
-            if row["retry_count"] >= row["max_retries"]:
-                raise CityError("Le nombre maximal de tentatives est atteint.")
-            with self.db() as db:
-                db.execute("BEGIN IMMEDIATE")
+                if workflow is None or workflow["status"] == "cancelled":
+                    raise CityError("Ce projet a été annulé. Lance un nouveau projet pour recommencer.")
+                if row["retry_count"] >= row["max_retries"]:
+                    raise CityError("Le nombre maximal de tentatives est atteint.")
                 db.execute("UPDATE city_tasks SET status='queued',error=NULL,started_at=NULL,finished_at=NULL,"
                            "retry_count=retry_count+1 WHERE id=? AND username=? AND status='failed'",
                            (task_id, username))
