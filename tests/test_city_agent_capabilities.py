@@ -29,6 +29,30 @@ def test_mira_preserves_observation_age_and_unknown_dates():
     assert readings and all("observed_at" in p and "date_status" in p for p in readings)
 
 
+@pytest.mark.parametrize("observed,age,status", [
+    ("2026-01-03T00:30:00+02:00", 0, "dated"),
+    ("2026-01-01T23:30:00-02:00", 0, "dated"),
+    ("2026-01-02T23:30:00-02:00", -1, "future"),
+    ("2026-01-02T00:30:00+02:00", 1, "dated"),
+    ("2026-01-02T00:30:00Z", 0, "dated"),
+    ("2026-01-02T00:30:00", 0, "dated"),
+    ("2026-01-02 18:18 UTC", 0, "dated"),
+    ("2026-01-02", 0, "dated"),
+    ("0001-01-01T00:00:00+01:00", None, "unknown"),
+    ("9999-12-31T23:30:00-01:00", None, "unknown"),
+])
+def test_mira_observation_age_uses_utc_calendar_dates(monkeypatch, observed, age, status):
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 1, 2, 12, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(city_services, "datetime", FixedDatetime)
+    result = city_services._observation_age(observed)
+    assert result["age_days"] == age
+    assert result["date_status"] == status
+
+
 def test_mira_news_sorted_deduplicated_with_unknown_dates_last(monkeypatch):
     from src import news
     def article(title, date, url):

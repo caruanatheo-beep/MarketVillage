@@ -38,9 +38,13 @@ def redact_diagnostic(value: object) -> str:
 
 def _observation_age(value: object) -> dict:
     try:
-        observed = datetime.fromisoformat(str(value).replace(" UTC", "+00:00").replace("Z", "+00:00")).date()
-        age = (datetime.now(timezone.utc).date() - observed).days
-    except (ValueError, TypeError):
+        observed = datetime.fromisoformat(str(value).replace(" UTC", "+00:00").replace("Z", "+00:00"))
+        # Use the same calendar as the UTC reference date, including near midnight.
+        # Dates and timestamps without an offset retain their supplied calendar date.
+        if observed.tzinfo is not None:
+            observed = observed.astimezone(timezone.utc)
+        age = (datetime.now(timezone.utc).date() - observed.date()).days
+    except (ValueError, TypeError, OverflowError):
         return {"age_days": None, "date_status": "unknown"}
     return {"age_days": age, "date_status": "future" if age < 0 else "dated",
             "note": "Âge calendaire de l'observation, pas une cotation temps réel."}
