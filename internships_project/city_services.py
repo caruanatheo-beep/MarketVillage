@@ -57,7 +57,8 @@ def market_news() -> dict:
     for item in items:
         raw_date = str(item.published or "")
         try:
-            stamp = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+            # News providers emit "YYYY-MM-DD HH:MM UTC"; accept ISO dates too.
+            stamp = datetime.fromisoformat(raw_date.replace(" UTC", "+00:00").replace("Z", "+00:00"))
             stamp = stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None else stamp
             timestamp = stamp.timestamp()
         except ValueError:

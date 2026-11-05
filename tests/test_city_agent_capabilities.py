@@ -70,6 +70,27 @@ def test_mira_news_sorted_deduplicated_with_unknown_dates_last(monkeypatch):
     assert "private-value" not in str(result)
 
 
+def test_mira_news_recognizes_provider_utc_dates_before_deduplication(monkeypatch):
+    from src import news
+    from src.models import NewsItem
+
+    provider_date = "2026-11-05 18:18 UTC"
+    monkeypatch.setattr(news, "load_news", lambda: ([
+        NewsItem("older copy", "Fixture", "2026-11-05T18:00:00Z", "https://news.example/a"),
+        NewsItem("unknown", "Fixture", "time unavailable", "https://news.example/b"),
+        NewsItem("provider", "Fixture", provider_date, "https://news.example/a#latest"),
+        NewsItem("offset", "Fixture", "2026-11-05T20:19:00+02:00", "https://news.example/c"),
+        NewsItem("undated", "Fixture", "", "https://news.example/d"),
+    ], []))
+
+    result = city_services.market_news()
+
+    assert [a["title"] for a in result["articles"]] == ["offset", "provider", "unknown", "undated"]
+    assert [a["date_known"] for a in result["articles"]] == [True, True, False, False]
+    assert result["articles"][1]["published"] == provider_date
+    assert result["total_unique"] == 4
+
+
 @pytest.mark.parametrize("dates,values", [
     (("", ""), (3, 4)),
     (("2026-10-01", "2026-10-02"), (3, 4)),
