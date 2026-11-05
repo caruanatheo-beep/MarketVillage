@@ -257,6 +257,13 @@ def test_coding_history_is_private_compact_and_keeps_full_detail(store):
     assert store.task_detail('bob', task['id']) is None
     assert store.task_detail('alice', task['id'])['result']['diff'] == 'large diff'
 
+    duplicate = store.create_task('alice', 'city_ui_engineer', 'Corriger les dates', {'operation': 'develop'})
+    store.claim_next()
+    store.finish(duplicate['id'], result={'plain_summary': 'Correction déjà présente dans le projet.',
+                                          'already_present': True, 'files': []})
+    compact = next(task for task in store.coding_history('alice')['tasks'] if task['id'] == duplicate['id'])
+    assert compact['result']['already_present'] is True
+
 
 def test_parallel_coding_claims_are_bounded_per_agent_and_globally(store):
     from internships_project.city_specialists import VERSION

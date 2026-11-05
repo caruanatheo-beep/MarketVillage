@@ -26,7 +26,7 @@ type Result = { title?: string; text?: string; summary?: string; market_points?:
   updated_at?: string; as_of?: string; market_data?: MarketReading[]; featured_offer?: (Offer & { detected_at?: string; selection_reason?: string }) | null;
   offers?: Offer[]; contacts?: {id:string;name:string;role:string;company:string;verification:string;linkedin_url:string}[];
   equity?: {date:string;value:number}[]; approval_required?:boolean; branch?:string; role_version?:number; review_decision?:string; revision?:string; blockage?:string; file?:string;
-  files?:string[];diff?:string;diff_truncated?:boolean;checks?:{command:string;exit_code:number|null}[]; integrated?:boolean; plain_summary?:string; commit?:string; base_note?:string;
+  files?:string[];diff?:string;diff_truncated?:boolean;checks?:{command:string;exit_code:number|null}[]; integrated?:boolean; already_present?:boolean; plain_summary?:string; commit?:string; base_note?:string;
   errors?: {source:string;status:string;error:string}[]; contact?: {name?:string;company?:string}; };
 type Task = {
   id: string; agent_id: string; task_type: string; description: string; status: AgentStatus;
@@ -128,7 +128,7 @@ function codeChangeSummary(task:Task):string {
   if(task.status==='queued')return 'Le travail attend son démarrage.';
   if(task.status==='running')return 'L’agent travaille sur le changement.';
   if(task.status==='waiting_approval')return 'Le changement attend une décision.';
-  if(codeChangeState(task)==='no_change')return 'L’agent n’a pas trouvé de changement fiable à faire.';
+  if(codeChangeState(task)==='no_change'&&!task.result.already_present)return 'L’agent n’a pas trouvé de changement fiable à faire.';
   const raw=task.result.plain_summary||task.result.summary||task.result.text?.split(/\n\s*\n/)[0]||'';
   const clean=raw.replace(/[`*_#]/g,'').replace(/\s+/g,' ').trim();
   return clean.length>180?clean.slice(0,177).replace(/\s+\S*$/,'')+'…':clean||'Le compte rendu est disponible dans la mission.';

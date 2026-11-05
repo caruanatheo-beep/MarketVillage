@@ -1632,7 +1632,7 @@ class CityStore:
             task['operation'] = payload.get('operation', '')
             task['period'] = payload.get('period', '')
             task['result'] = {key: result[key] for key in ('title','plain_summary','summary','files',
-                              'integrated','commit','branch') if key in result}
+                              'integrated','already_present','commit','branch') if key in result}
             tasks.append(task)
         return {'tasks': tasks, 'events': events}
 
