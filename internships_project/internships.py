@@ -2949,8 +2949,12 @@ def import_tracking(payload: str, state: dict | None) -> tuple[dict, str]:
     for url, entry in list(incoming.items())[:100]:
         if not isinstance(url, str) or not isinstance(entry, dict):
             continue
-        parsed = urlparse(url)
-        if parsed.scheme != "https" or not parsed.hostname or len(url) > 2000:
+        try:
+            parsed = urlparse(url)
+            if parsed.scheme != "https" or not parsed.hostname or len(url) > 2000:
+                continue
+        except ValueError:
+            # Malformed hostnames must not abort the rest of the backup import.
             continue
         status = normalize_status(entry.get("status"))
         def safe_date(key: str) -> str:
