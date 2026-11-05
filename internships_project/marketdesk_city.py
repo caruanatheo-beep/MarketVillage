@@ -468,9 +468,10 @@ class CityStore:
         if not task:
             return {"status": "idle"}
         result = json.loads(task['result_json'] or '{}')
+        summary = str(result.get('text') or result.get('summary') or '').splitlines()
         return {"id": task['id'], "status": task['status'], "created_at": task['created_at'],
                 "finished_at": task['finished_at'], "error": task['error'],
-                "summary": str(result.get('text') or result.get('summary') or '').splitlines()[0][:300]}
+                "summary": summary[0][:300] if summary else ''}
 
     def enqueue_network_daily(self, username: str | None = None, *, manual: bool = False) -> int:
         if manual:

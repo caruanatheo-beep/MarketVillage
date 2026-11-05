@@ -56,3 +56,20 @@ def test_clara_runs_on_request_and_deduplicates_bp2s_in_shared_contacts(tmp_path
 
     second = network.discover_service_contacts('alice')
     assert second['count'] == 0 and second['duplicates'] == 2
+
+
+def test_clara_without_summary_keeps_network_directory_available(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from internships_project.city_routes import add_city_routes
+
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path / 'accounts.sqlite3')
+    store = CityStore(state_store.USER_DB_PATH)
+    store.create_task('alice', 'securities_scout', 'Recherche en attente',
+                      {'operation': 'discover_service_contacts'}, auto_run=False)
+    app = FastAPI()
+    add_city_routes(app, lambda request: request.headers.get('x-test-user'), store, CityWorker(store))
+    with TestClient(app) as client:
+        response = client.get('/city/api/network', headers={'x-test-user': 'alice'})
+    assert response.status_code == 200
+    assert response.json()['clara']['summary'] == ''
