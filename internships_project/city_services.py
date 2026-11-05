@@ -231,6 +231,10 @@ def _market_sentiment(points: list, news: list) -> dict:
     for item in news:
         if not item.url.startswith(('https://', 'http://')) or not any(name in item.source.casefold() for name in trusted):
             continue
+        # Apply the same UTC calendar freshness window as the price signals.
+        age = _observation_age(item.published)['age_days']
+        if age is None or not 0 <= age <= 4:
+            continue
         lead = re.split(r"[,;:]|\b(?:as|while|but|despite)\b", item.title, maxsplit=1, flags=re.I)[0]
         if topic.search(lead) and ((direction == -1 and down.search(lead) and not up.search(lead))
                                    or (direction == 1 and up.search(lead) and not down.search(lead))):
