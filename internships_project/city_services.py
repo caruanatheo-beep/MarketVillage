@@ -191,20 +191,26 @@ def _market_sentiment(points: list, news: list) -> dict:
     signals = []
     spx, vix, hy = (values.get(key) for key in ("SP500", "VIXCLS", "BAMLH0A0HYM2"))
     def recent(point) -> bool:
+        # An unusable observation must not contribute a directional signal.
+        if point.value is None or not all(
+            math.isfinite(value) for value in (point.value, point.previous, point.change)
+            if value is not None
+        ):
+            return False
         age = _observation_age(point.date)['age_days']
         return age is not None and 0 <= age <= 4
 
     if spx and recent(spx) and spx.previous and spx.change is not None:
         move = spx.change / spx.previous * 100
-        if abs(move) >= 0.5:
+        if math.isfinite(move) and abs(move) >= 0.5:
             signals.append(("Actions", -1 if move < 0 else 1, f"S&P 500 {move:+.2f}%"))
     if vix and recent(vix) and vix.previous and vix.change is not None:
         move = vix.change / vix.previous * 100
-        if abs(move) >= 5:
+        if math.isfinite(move) and abs(move) >= 5:
             signals.append(("Volatilité", -1 if move > 0 else 1, f"VIX {move:+.2f}%"))
     if hy and recent(hy) and hy.change is not None:
         move = hy.change * 100
-        if abs(move) >= 3:
+        if math.isfinite(move) and abs(move) >= 3:
             signals.append(("Crédit", -1 if move > 0 else 1, f"spread HY {move:+.1f} pb"))
     defensive = sum(direction < 0 for _, direction, _ in signals)
     constructive = sum(direction > 0 for _, direction, _ in signals)

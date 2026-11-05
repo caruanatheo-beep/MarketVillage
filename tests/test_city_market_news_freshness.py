@@ -1,5 +1,6 @@
 """News must be dated and recent before corroborating City's market sentiment."""
 
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
@@ -52,3 +53,46 @@ def test_only_recent_dated_news_can_strengthen_sentiment(monkeypatch, published,
         "title": headline.title, "url": headline.url, "source": headline.source,
         "published": published,
     }] if eligible else [])
+
+
+@pytest.mark.parametrize("series", ["SP500", "VIXCLS", "BAMLH0A0HYM2"])
+@pytest.mark.parametrize("field,value", [
+    ("value", None),
+    ("value", float("nan")),
+    ("value", float("inf")),
+    ("previous", float("inf")),
+    ("change", float("inf")),
+    ("change", float("-inf")),
+    ("change", float("nan")),
+])
+def test_invalid_observations_cannot_strengthen_market_sentiment(series, field, value):
+    today = datetime.now(timezone.utc).date().isoformat()
+    points = [
+        MarketPoint(key, key, "Risk", current, previous, current - previous,
+                    today, "index", "daily", "latest available", "Fixture",
+                    f"https://example.org/{key}")
+        for key, previous, current in [
+            ("SP500", 100, 98), ("VIXCLS", 20, 23), ("BAMLH0A0HYM2", 3, 3.1),
+        ]
+    ]
+    damaged = [replace(point, **{field: value}) if point.series_id == series else point
+               for point in points]
+
+    expected = city_services._market_sentiment(
+        [point for point in points if point.series_id != series], [])
+    result = city_services._market_sentiment(damaged, [])
+
+    assert len(expected["signals"]) == 2
+    assert result == expected
+
+
+@pytest.mark.parametrize("series", ["SP500", "VIXCLS", "BAMLH0A0HYM2"])
+def test_overflowing_moves_do_not_produce_market_signals(series):
+    today = datetime.now(timezone.utc).date().isoformat()
+    point = MarketPoint(series, series, "Risk", 1e308, 0.1, 1e308,
+                        today, "index", "daily", "latest available", "Fixture",
+                        f"https://example.org/{series}")
+
+    result = city_services._market_sentiment([point], [])
+
+    assert result == city_services._market_sentiment([], [])
