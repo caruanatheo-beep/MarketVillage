@@ -228,8 +228,9 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
     if not re.fullmatch(r'[a-f0-9]{32}', task_id) or len(request) > 3000 or (request and len(request) < 10) or (not request and not auto_integrate):
         raise CityError('Demande de développement invalide.')
     if auto_integrate and not request:
-        request = ('Analyse ton périmètre dans le dépôt actuel, choisis toi-même un défaut ou une amélioration '
-                   'utile et circonscrite, puis implémente-la avec une vérification adaptée. '
+        request = ('Analyse ton périmètre dans le dépôt actuel, choisis toi-même une amélioration utile et complète '
+                   'pour le produit ou sa fiabilité, puis implémente-la de bout en bout avec ses appelants et '
+                   'les tests pertinents. Évite les retouches cosmétiques et les tests déjà couverts. '
                    'Si aucun changement fiable ne se justifie, explique pourquoi sans modifier de fichier.')
     directory = root/'.city-worktrees'/task_id
     branch = 'marketdesk/'+('jules' if agent_id == 'job_hunter' else agent_id.replace('_', '-'))+'-'+task_id[:12]

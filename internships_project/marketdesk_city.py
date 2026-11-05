@@ -115,6 +115,7 @@ def _default_city_model(agent_id: str) -> str:
 MODEL_DEFAULTS = {agent["id"]: _default_city_model(agent["id"]) for agent in AGENTS}
 DEFAULT_SETTINGS = {"provider": "openai", "models": MODEL_DEFAULTS, "daily_limit_usd": 1.0,
                     "monthly_limit_usd": 15.0, "max_concurrent_tasks": 2, "auto_tasks": True}
+CODING_SLOTS_PER_DAY = 6
 
 
 def _utc() -> str:
@@ -334,9 +335,12 @@ class CityStore:
                      ("internship_scout", "refresh_internships", day, "Nouveaux stages détectés aujourd’hui"),
                      ("innovation_lab", "innovation_review", week + ("-Mon" if moment.weekday() < 3 else "-Thu"), "Deux innovations open source")]
         if date(2026, 11, 4) <= moment.date() < date(2026, 12, 4):
+            minutes = moment.hour * 60 + moment.minute
             schedules.extend((agent_id, f'develop:{agent_id}:{slot}', day,
-                              f'Développement autonome {slot}/4 · {AGENT_BY_ID[agent_id]["name"]}')
-                             for agent_id in CODING_AGENTS for slot in (1, 2, 3, 4))
+                              f'Développement autonome {slot}/{CODING_SLOTS_PER_DAY} · {AGENT_BY_ID[agent_id]["name"]}')
+                             for index, agent_id in enumerate(CODING_AGENTS)
+                             for slot in range(1, CODING_SLOTS_PER_DAY + 1)
+                             if minutes >= 6 * 60 + (slot - 1) * 150 + index * 20)
         count = 0
         with self.db() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -686,6 +690,7 @@ class CityStore:
     def enqueue_daily_digest(self, now: datetime | None = None) -> int:
         """Publish one free, persisted manager digest after today's scheduled work finishes."""
         from zoneinfo import ZoneInfo
+        from .city_specialists import CODING_AGENTS
         moment = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Paris"))
         if moment.hour < 8:
             return 0
@@ -716,7 +721,8 @@ class CityStore:
                                              "JOIN city_tasks t ON t.id=s.task_id AND t.username=s.username "
                                              "WHERE s.username=? AND s.period=? AND s.operation LIKE 'develop:%'",
                                              (username, day)).fetchall()
-                    if (len(development) < 16 or any(row[0] not in FINAL for row in development)) and moment.hour < 20:
+                    if (len(development) < CODING_SLOTS_PER_DAY * len(CODING_AGENTS)
+                            or any(row[0] not in FINAL for row in development)) and moment.hour < 22:
                         continue
                 lina = db.execute("SELECT enabled,last_day,last_task_id FROM city_network_schedule WHERE username=?",
                                   (username,)).fetchone()

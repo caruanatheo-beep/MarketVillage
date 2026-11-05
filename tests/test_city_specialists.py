@@ -58,14 +58,21 @@ def test_scheduler_once_per_day_and_week_and_disabled_accounts(store):
     with store.db() as db:
         db.execute("UPDATE city_tasks SET status='completed'")
     assert store.enqueue_specialist_schedules(moment) == 0
-    # Thursday starts Nova's second weekly slot and four development runs per engineer.
+    # Development slots arrive throughout the day, staggered across engineers.
     thursday = datetime(2026, 11, 5, 9, tzinfo=timezone.utc)
-    assert store.enqueue_specialist_schedules(thursday) == 20
+    assert store.enqueue_specialist_schedules(thursday) == 12
     assert store.enqueue_specialist_schedules(thursday) == 0
     with store.db() as db:
         development = db.execute("SELECT agent_id,COUNT(*) FROM city_tasks WHERE json_extract(parameters_json,'$.operation')='develop' GROUP BY agent_id").fetchall()
     assert {agent: count for agent, count in development} == {
-        'job_hunter': 4, 'city_ui_engineer': 4, 'internships_engineer': 4, 'quality_engineer': 4}
+        'job_hunter': 2, 'city_ui_engineer': 2, 'internships_engineer': 2, 'quality_engineer': 2}
+    evening = datetime(2026, 11, 5, 19, tzinfo=timezone.utc)
+    assert store.enqueue_specialist_schedules(evening) == 16
+    assert store.enqueue_specialist_schedules(evening) == 0
+    with store.db() as db:
+        development = db.execute("SELECT agent_id,COUNT(*) FROM city_tasks WHERE json_extract(parameters_json,'$.operation')='develop' GROUP BY agent_id").fetchall()
+    assert {agent: count for agent, count in development} == {
+        'job_hunter': 6, 'city_ui_engineer': 6, 'internships_engineer': 6, 'quality_engineer': 6}
     store.ensure_agents('bob')
     settings = store.get_settings('bob')
     settings['auto_tasks'] = False
@@ -93,8 +100,8 @@ def test_coding_slots_are_shared_across_accounts_and_queued_duplicates_stop(stor
                         "JOIN city_tasks t ON t.id=s.task_id WHERE s.period=? AND s.operation LIKE 'develop:%' "
                         "AND t.status!='cancelled' GROUP BY t.agent_id,s.username",(period,)).fetchall()
     assert {row[0]: (row[1],row[2]) for row in rows} == {
-        'job_hunter': ('bob',4), 'city_ui_engineer': ('bob',4),
-        'internships_engineer': ('bob',4), 'quality_engineer': ('bob',4)}
+        'job_hunter': ('bob',2), 'city_ui_engineer': ('bob',2),
+        'internships_engineer': ('bob',2), 'quality_engineer': ('bob',2)}
 
 
 def test_one_manager_digest_after_scheduled_work(store):
@@ -102,7 +109,7 @@ def test_one_manager_digest_after_scheduled_work(store):
     store.ensure_agents('alice')
     store.network_schedule('alice', False)
     from zoneinfo import ZoneInfo
-    moment = datetime.now(ZoneInfo('Europe/Paris')).replace(hour=9, minute=0).astimezone(timezone.utc)
+    moment = datetime.now(ZoneInfo('Europe/Paris')).replace(hour=20, minute=0).astimezone(timezone.utc)
     store.enqueue_specialist_schedules(moment)
     assert store.enqueue_daily_digest(moment) == 0
 
@@ -136,7 +143,7 @@ def test_manager_digest_still_arrives_when_coding_waits_for_quota(store):
     from zoneinfo import ZoneInfo
     store.ensure_agents('alice')
     store.network_schedule('alice', False)
-    evening = datetime.now(ZoneInfo('Europe/Paris')).replace(hour=20, minute=0).astimezone(timezone.utc)
+    evening = datetime.now(ZoneInfo('Europe/Paris')).replace(hour=22, minute=0).astimezone(timezone.utc)
     store.enqueue_specialist_schedules(evening)
     with store.db() as db:
         db.execute("UPDATE city_tasks SET status='completed',finished_at=? "
@@ -152,7 +159,7 @@ def test_manager_digest_reports_failed_collection(store):
     store.ensure_agents('alice')
     store.network_schedule('alice', False)
     from zoneinfo import ZoneInfo
-    moment = datetime.now(ZoneInfo('Europe/Paris')).replace(hour=9, minute=0).astimezone(timezone.utc)
+    moment = datetime.now(ZoneInfo('Europe/Paris')).replace(hour=20, minute=0).astimezone(timezone.utc)
     store.enqueue_specialist_schedules(moment)
     with store.db() as db:
         db.execute("UPDATE city_tasks SET status='completed',finished_at=? "
@@ -182,7 +189,7 @@ def test_old_weekly_nova_review_counts_as_first_slot(store):
         db.execute('INSERT INTO city_specialist_schedule VALUES(?,?,?,?)',('alice','innovation_review','2026-W45','old-nova'))
     assert store.enqueue_specialist_schedules(datetime(2026,11,2,9,tzinfo=timezone.utc))==3
     assert not any(t['agent_id']=='innovation_lab' for t in store.snapshot('alice')['tasks'])
-    assert store.enqueue_specialist_schedules(datetime(2026,11,5,9,tzinfo=timezone.utc))==17
+    assert store.enqueue_specialist_schedules(datetime(2026,11,5,9,tzinfo=timezone.utc))==9
 
 
 def test_offline_periods_are_grouped_persisted_and_never_queued_twice(store):
@@ -194,7 +201,7 @@ def test_offline_periods_are_grouped_persisted_and_never_queued_twice(store):
         db.execute("UPDATE city_tasks SET status='completed'")
     restart=datetime(2026,11,16,9,tzinfo=timezone.utc)
     with ThreadPoolExecutor(max_workers=3) as pool:
-        assert sum(pool.map(lambda _:store.enqueue_specialist_schedules(restart),range(3)))==20
+        assert sum(pool.map(lambda _:store.enqueue_specialist_schedules(restart),range(3)))==12
     with store.db() as db:
         tasks=db.execute("SELECT agent_id,parameters_json FROM city_tasks WHERE status='queued'").fetchall()
     details={row[0]:json.loads(row[1]) for row in tasks
@@ -219,7 +226,7 @@ def test_offline_periods_are_grouped_persisted_and_never_queued_twice(store):
 def test_catchup_waits_for_active_task_and_respects_pause(store):
     store.ensure_agents('alice')
     store.enqueue_specialist_schedules(datetime(2026,11,2,9,tzinfo=timezone.utc))
-    assert store.enqueue_specialist_schedules(datetime(2026,11,16,9,tzinfo=timezone.utc))==16
+    assert store.enqueue_specialist_schedules(datetime(2026,11,16,9,tzinfo=timezone.utc))==8
     with store.db() as db:
         db.execute("UPDATE city_tasks SET status='completed'")
     store.save_settings('alice',{'auto_tasks':False})
