@@ -26,14 +26,14 @@ type Result = { title?: string; text?: string; summary?: string; market_points?:
   updated_at?: string; as_of?: string; market_data?: MarketReading[]; featured_offer?: (Offer & { detected_at?: string; selection_reason?: string }) | null;
   offers?: Offer[]; contacts?: {id:string;name:string;role:string;company:string;verification:string;linkedin_url:string}[];
   equity?: {date:string;value:number}[]; approval_required?:boolean; branch?:string; role_version?:number; review_decision?:string; revision?:string; blockage?:string; file?:string;
-  files?:string[];diff?:string;diff_truncated?:boolean;checks?:{command:string;exit_code:number|null}[];
+  files?:string[];diff?:string;diff_truncated?:boolean;checks?:{command:string;exit_code:number|null}[]; integrated?:boolean; plain_summary?:string;
   errors?: {source:string;status:string;error:string}[]; contact?: {name?:string;company?:string}; };
 type Task = {
   id: string; agent_id: string; task_type: string; description: string; status: AgentStatus;
   created_at: string; started_at?: string; finished_at?: string; result: Result;
   error?: string; xp_awarded: number; input_tokens: number; output_tokens: number; api_cost_usd: number;
   workflow_id?: string; priority?: number; retry_count?: number; max_retries?: number; depends_on?: string[];
-  delegated_by?: string; retry_of?: string;
+  delegated_by?: string; retry_of?: string; operation?: string;
 };
 type Workflow = {id:string;template:string;request:string;status:AgentStatus;priority:number;created_at:string;
   updated_at:string;steps:{id:string;agent_id:string;description:string;status:AgentStatus;error?:string;
@@ -110,6 +110,30 @@ function dateTime(value?: string): string {
   }).format(date);
 }
 
+function codeChangeState(task:Task):'applied'|'waiting'|'not_applied'|'no_change' {
+  if(task.result.integrated)return 'applied';
+  if(['queued','running','waiting_approval'].includes(task.status))return 'waiting';
+  if(task.status==='completed'&&task.result.files?.length===0)return 'no_change';
+  return 'not_applied';
+}
+
+function codeChangeSummary(task:Task):string {
+  if(task.status==='failed'){
+    const error=(task.error||'').toLowerCase();
+    if(error.includes('codex login')||error.includes('connecte codex'))return 'L’agent n’a pas pu se connecter. Aucun changement appliqué.';
+    if(error.includes('tests serveur')||error.includes('vérification'))return 'Les vérifications ont échoué. Le changement reste à examiner.';
+    if(error.includes('conflit')||error.includes('dépôt a changé'))return 'Le projet a changé pendant la mission. Le changement reste à examiner.';
+    return 'La mission s’est arrêtée avant l’application du changement.';
+  }
+  if(task.status==='queued')return 'Le travail attend son démarrage.';
+  if(task.status==='running')return 'L’agent travaille sur le changement.';
+  if(task.status==='waiting_approval')return 'Le changement attend une décision.';
+  if(codeChangeState(task)==='no_change')return 'L’agent n’a pas trouvé de changement fiable à faire.';
+  const raw=task.result.plain_summary||task.result.summary||task.result.text?.split(/\n\s*\n/)[0]||'';
+  const clean=raw.replace(/[`*_#]/g,'').replace(/\s+/g,' ').trim();
+  return clean.length>180?clean.slice(0,177).replace(/\s+\S*$/,'')+'…':clean||'Le compte rendu est disponible dans la mission.';
+}
+
 async function api<T>(path: string, payload?: object): Promise<T> {
   const response = await fetch(path, {
     credentials: "same-origin",
@@ -127,6 +151,8 @@ async function api<T>(path: string, payload?: object): Promise<T> {
 function App(): React.ReactElement {
   const [notificationView,setNotificationView]=useState({filter:"all",agent:""});
   const [missionFilter,setMissionFilter]=useState("active");
+  const [changeFilter,setChangeFilter]=useState<'all'|'applied'|'not_applied'|'waiting'>('all');
+  const [showAllChanges,setShowAllChanges]=useState(false);
   const [resultTaskId,setResultTaskId]=useState<string|null>(null);
   const [launchingSite,setLaunchingSite]=useState<string|null>(null);
   const [siteError,setSiteError]=useState("");
@@ -537,6 +563,9 @@ function App(): React.ReactElement {
 
   function managerPanel(): React.ReactElement {
     const allTasks = snapshot?.tasks || [];
+    const codeTasks=allTasks.filter(task=>['develop','code_change','prepare_branch'].includes(task.operation||'')||!!task.result.files||!!task.result.integrated).sort((a,b)=>(b.finished_at||b.created_at).localeCompare(a.finished_at||a.created_at));
+    const filteredChanges=codeTasks.filter(task=>changeFilter==='all'||(changeFilter==='not_applied'?['not_applied','no_change'].includes(codeChangeState(task)):codeChangeState(task)===changeFilter));
+    const shownChanges=filteredChanges.slice(0,showAllChanges?filteredChanges.length:6);
     const activeTasks = allTasks.filter(task=>["queued","running","waiting_approval"].includes(task.status));
     const recentTasks = allTasks.filter(task=>!["queued","running","waiting_approval"].includes(task.status)).slice(0,5);
     const controlTasks = allTasks.filter(t=>(missionTeam==='all'||(missionTeam==='code')===(agentGroup(t.agent_id)==='Développement'))&&(missionFilter==="all"||missionFilter==="active"&&['queued','running'].includes(t.status)||missionFilter==="pending"&&(["queued","waiting_approval"].includes(t.status)||isPendingProposal(t))||missionFilter==="completed"&&t.status==="completed"||missionFilter==="failed"&&["failed","cancelled"].includes(t.status)));
@@ -565,7 +594,12 @@ function App(): React.ReactElement {
       </article>;
     };
     return <div className="task-panel-content manager-panel">
-      
+      <section className="code-change-digest" aria-label="Changements des agents"><header><div><span className="mission-team-label">BILAN DU DÉVELOPPEMENT</span><h3>Changements des agents</h3><p>Ce qui est entré dans le projet local, ce qui attend et ce qui n’a pas été appliqué.</p></div></header>
+        <div className="code-change-filters" role="group" aria-label="Filtrer les changements"><button type="button" aria-pressed={changeFilter==='all'} onClick={()=>{setChangeFilter('all');setShowAllChanges(false)}}>Tout <b>{codeTasks.length}</b></button><button type="button" aria-pressed={changeFilter==='applied'} onClick={()=>{setChangeFilter('applied');setShowAllChanges(false)}}>Appliqué <b>{codeTasks.filter(task=>codeChangeState(task)==='applied').length}</b></button><button type="button" aria-pressed={changeFilter==='not_applied'} onClick={()=>{setChangeFilter('not_applied');setShowAllChanges(false)}}>Non appliqué <b>{codeTasks.filter(task=>['not_applied','no_change'].includes(codeChangeState(task))).length}</b></button><button type="button" aria-pressed={changeFilter==='waiting'} onClick={()=>{setChangeFilter('waiting');setShowAllChanges(false)}}>En cours <b>{codeTasks.filter(task=>codeChangeState(task)==='waiting').length}</b></button></div>
+        {!shownChanges.length?<p className="code-change-empty">Aucun changement à afficher pour ce filtre.</p>:<div className="code-change-list">{shownChanges.map(task=>{const state=codeChangeState(task),name=snapshot?.agents.find(agent=>agent.id===task.agent_id)?.name||task.agent_id;return <button type="button" className={`code-change-item ${state}`} key={task.id} onClick={()=>['completed','failed'].includes(task.status)?showResult(task):(setOpenedTaskId(task.id),setMissionFilter('active'))}><span className="code-change-indicator" aria-hidden="true">{state==='applied'?'✓':state==='waiting'?'◷':state==='no_change'?'–':'!'}</span><span className="code-change-copy"><span><strong>{name}</strong><small>{dateTime(task.finished_at||task.created_at)}</small></span><span>{codeChangeSummary(task)}</span></span><span className="code-change-state">{state==='applied'?'Appliqué':state==='waiting'?'En cours':state==='no_change'?'Sans changement':'Non appliqué'}</span></button>})}</div>}
+        {filteredChanges.length>6&&<button type="button" className="code-change-more" onClick={()=>setShowAllChanges(!showAllChanges)}>{showAllChanges?'Voir moins':`Voir les ${filteredChanges.length} changements`}</button>}
+        <small className="code-change-note">« Appliqué » signifie intégré au projet sur cet ordinateur. L’envoi sur GitHub se fait séparément.</small>
+      </section>
       <section className="mission-control-register"><div className="section-heading"><div><h3>Registre des missions</h3><small>{allTasks.filter(task=>task.status==="running").length} en cours &middot; {allTasks.filter(task=>task.status==="waiting_approval"||isPendingProposal(task)).length} &agrave; valider</small></div></div>
         {retryNotice&&<div className="mission-retry-notice" role="status">↻ {retryNotice}<button type="button" onClick={()=>setRetryNotice('')} aria-label="Masquer le message">×</button></div>}
         <div className="mission-team-tabs" role="group" aria-label="Équipe des missions"><button type="button" aria-pressed={missionTeam==='all'} onClick={()=>setMissionTeam('all')}>Toute l’équipe <b>{allTasks.length}</b></button><button type="button" aria-pressed={missionTeam==='code'} onClick={()=>setMissionTeam('code')}>Développement <b>{allTasks.filter(t=>agentGroup(t.agent_id)==='Développement').length}</b></button><button type="button" aria-pressed={missionTeam==='business'} onClick={()=>setMissionTeam('business')}>Agents métier <b>{allTasks.filter(t=>agentGroup(t.agent_id)==='Agents métier').length}</b></button></div>
