@@ -1459,3 +1459,103 @@ body { overflow:hidden; }
   .game-app .city-dashboard.command-center.city-full-width { display:grid !important; grid-template-rows:minmax(0,1fr); padding:58px 8px 8px; }
   .game-app .agent-dialog { top:50%; left:50%; right:auto; width:min(440px,calc(100vw - 20px)); height:auto; max-height:calc(100dvh - 24px); }
 }
+
+/* Desktop command bar: one layout context for brand, search and navigation. */
+.game-app .command-topbar {
+  position:fixed; z-index:40; top:0; left:0; right:0; height:76px;
+  box-sizing:border-box; display:grid; grid-template-columns:250px minmax(220px,1fr) auto;
+  align-items:center; gap:24px; padding:10px 24px;
+  background:linear-gradient(100deg,#245b56 0%,#183c42 56%,#123139 100%);
+  border-bottom:1px solid #6ba79a75; box-shadow:0 8px 32px #051b1e70;
+}
+.game-app .command-topbar .game-brand-hud,
+.game-app .command-topbar .command-search,
+.game-app .command-topbar .game-hud {
+  position:relative; inset:auto; left:auto; right:auto; top:auto; bottom:auto;
+  transform:none; margin:0; min-width:0; max-width:none;
+}
+.game-app .command-topbar .game-brand-hud { width:max-content; max-width:100%; box-sizing:border-box; }
+.game-app .command-topbar .command-search {
+  width:min(100%,420px); height:42px; justify-self:center; box-sizing:border-box;
+  border-radius:12px; background:#102d33; border-color:#6a9c95;
+}
+.game-app .command-topbar .command-search-results { top:calc(100% + 8px); z-index:60; }
+.command-result-group { padding:4px 0; border-bottom:1px solid #65998f55; }
+.command-result-group>strong { display:block; padding:6px 9px 2px; color:#9df2db; font-size:10px; letter-spacing:.12em; text-transform:uppercase; }
+.game-app .command-topbar .game-hud { display:flex; justify-self:end; width:max-content; max-width:100%; overflow:visible; padding:3px; }
+.game-app .command-topbar .game-hud button { white-space:nowrap; }
+.game-app .command-topbar .game-hud button span { display:inline; }
+.game-app .city-dashboard.command-center.city-full-width { padding-top:80px; }
+.game-app .world-stage.tower-world { border-radius:17px; box-shadow:0 18px 48px #06191b88,inset 0 0 0 1px #8ed8ba20; }
+
+/* Missions: readable records with a visible owner, stage and retry trail. */
+.game-app .game-mission-control { width:min(1220px,calc(100vw - 52px)); height:min(920px,calc(100dvh - 32px)); border-radius:20px; }
+.game-app .game-mission-control .manager-panel { padding:18px 32px 28px; }
+.game-app .mission-control-register { padding:22px; border-radius:16px; background:#153e43; }
+.mission-team-tabs,.notification-team-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 12px; }
+.mission-team-tabs button,.notification-team-tabs button { border:1px solid #4b817d; border-radius:10px; padding:9px 14px; background:#1b4e51; color:#d8f1e9; font:600 12px/1.2 inherit; cursor:pointer; }
+.mission-team-tabs button[aria-pressed=true],.notification-team-tabs button[aria-pressed=true] { background:#0b826d; border-color:#9cf5d6; color:#fff; box-shadow:0 4px 14px #13d7a833; }
+.mission-team-tabs b { margin-left:5px; padding:2px 6px; border-radius:8px; background:#ffffff1b; font-size:10px; }
+.game-app .mission-record-list { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; align-items:start; }
+.game-app .mission-record { min-width:0; padding:17px; border-radius:13px; background:linear-gradient(150deg,#1b4b4d,#12353a); box-shadow:0 8px 20px #03161925; }
+.game-app .mission-record-head { align-items:start; gap:14px; }
+.game-app .mission-record-head>div { gap:6px; }
+.game-app .mission-title { font-size:15px; font-weight:700; line-height:1.4; text-align:left; }
+.game-app .mission-record-head small,.game-app .mission-record-meta { font-size:11px; color:#b6d9d0; }
+.mission-team-label,.agent-group-label { display:block; width:max-content; color:#91ead2; font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; }
+.game-app .mission-record-result { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; font-size:12px; line-height:1.55; color:#e0f0e9; }
+.game-app .mission-record-meta { gap:6px 12px; margin:10px 0; }
+.game-app .mission-record-meta code { color:#92d8c9; }
+.mission-retry-link { display:inline-flex; width:max-content; max-width:100%; margin:5px 8px 5px 0; padding:5px 8px; border:1px solid #5b9f91; border-radius:7px; background:#174d49; color:#aaf5db; font:600 11px/1.3 inherit; text-align:left; cursor:pointer; }
+.mission-retry-link:hover { background:#247c6b; }
+.mission-retry-notice { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:12px 0; padding:11px 14px; border:1px solid #75dfbd; border-radius:10px; background:#0d6c5a; color:#f3fff8; font-size:13px; }
+.mission-retry-notice button { border:0; background:none; color:inherit; font-size:19px; cursor:pointer; }
+.game-app .mission-log { margin-top:10px; }
+
+/* The notification feed gets the largest share of the window. */
+.notification-center { width:min(1220px,calc(100vw - 52px)); height:min(920px,calc(100dvh - 32px)); border-radius:20px; }
+.notification-summary { gap:10px; padding:15px 30px 6px; }
+.notification-summary button { min-height:78px; }
+.notification-summary strong { font-size:23px; }
+.notification-summary small { display:none; }
+.notification-commands,.notification-tabs,.notification-filters { padding-left:30px; padding-right:30px; }
+.notification-team-tabs { margin:6px 30px; }
+.notification-tools { margin:6px 30px; }
+.notification-feed { padding:8px 30px 28px; }
+.notification-card { padding:16px 20px; border-radius:13px; }
+.notification-card-top { align-items:flex-start; }
+.notification-card h3 { margin:10px 0 5px; font-size:16px; line-height:1.4; }
+.notification-card p { margin:5px 0; font-size:12px; line-height:1.5; }
+.notification-card .mission-retry-link { color:#aaf5db; }
+@media(max-width:1350px) {
+  .game-app .command-topbar { grid-template-columns:230px minmax(160px,1fr) auto; gap:12px; padding-inline:14px; }
+  .game-app .command-topbar .game-hud button { padding-inline:7px; }
+  .game-app .command-topbar .game-hud button span { font-size:11px; }
+}
+@media(max-width:1100px) {
+  .game-app .command-topbar { grid-template-columns:200px minmax(0,1fr); height:108px; row-gap:4px; }
+  .game-app .command-topbar .game-hud { grid-column:1 / -1; justify-self:center; }
+  .game-app .city-dashboard.command-center.city-full-width { padding-top:112px; }
+}
+@media(max-width:850px) { .game-app .mission-record-list { grid-template-columns:1fr; } }
+
+/* Team directory keeps the engineering crew distinct from operational agents. */
+.game-app .team-directory { top:50%; left:50%; right:auto; transform:translate(-50%,-50%); width:min(1180px,calc(100vw - 52px)); height:min(900px,calc(100dvh - 32px)); padding:0; border-radius:20px; }
+.game-app .team-directory .game-popup-heading { padding:20px 30px; min-height:94px; box-sizing:border-box; }
+.game-app .team-directory .game-popup-heading strong { font-size:24px; letter-spacing:-.03em; }
+.game-app .team-directory .game-popup-heading small { margin-top:5px; font-size:12px; }
+.team-directory-body { flex:1; min-height:0; overflow:auto; padding:20px 30px 32px; }
+.team-directory-section { margin-bottom:25px; }
+.team-directory-section>header { display:flex; align-items:baseline; gap:11px; margin:0 0 11px; }
+.team-directory-section h3 { margin:0; color:#f1fff8; font-size:17px; }
+.team-directory-section header span { color:#a3d8ca; font-size:11px; }
+.team-directory-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:11px; }
+.team-directory-card { display:flex; align-items:center; gap:12px; min-width:0; min-height:91px; padding:12px; border:1px solid #528980; border-radius:12px; background:linear-gradient(130deg,#225754,#174044); color:#effbf6; text-align:left; cursor:pointer; transition:transform .16s,border-color .16s,background .16s; }
+.team-directory-card:hover { transform:translateY(-2px); border-color:#8df3d1; background:#256b61; }
+.team-directory-card .roster-avatar { flex:0 0 38px; width:38px; height:43px; }
+.team-directory-card>span:nth-child(2) { display:grid; gap:3px; min-width:0; flex:1; }
+.team-directory-card strong { font-size:14px; }
+.team-directory-card small { color:#bbdbd3; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.team-directory-card em { color:#9decd5; font:normal 10px/1.4 inherit; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.team-directory-card>b { align-self:flex-start; color:#9decd5; font-size:16px; }
+@media(max-width:1050px) { .team-directory-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }

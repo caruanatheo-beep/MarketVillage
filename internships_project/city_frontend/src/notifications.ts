@@ -1,4 +1,4 @@
-export type NotificationTask={id:string;agent_id:string;description:string;status:string;created_at:string;finished_at?:string;started_at?:string;error?:string;workflow_id?:string;retry_count?:number;max_retries?:number;
+export type NotificationTask={id:string;agent_id:string;description:string;status:string;created_at:string;finished_at?:string;started_at?:string;error?:string;workflow_id?:string;retry_count?:number;max_retries?:number;retry_of?:string;
   result:{title?:string;text?:string;summary?:string;market_points?:number;approval_required?:boolean;role_version?:number;branch?:string;review_decision?:string;revision?:string;blockage?:string;file?:string}};
 export type NotificationEvent={id:number;agent_id:string;task_id:string;status:string;message:string;created_at:string};
 export function isPendingProposal(task:NotificationTask):boolean{

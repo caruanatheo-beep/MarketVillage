@@ -1511,8 +1511,8 @@ class CityStore:
                            (row["workflow_id"],))
                 self._event(db, row, "queued", "Nouvelle tentative demandée.")
             return {"id": task_id, "workflow_id": row["workflow_id"], "status": "queued"}
-        return self.create_task(username, row["agent_id"], row["description"],
-                                json.loads(row["parameters_json"] or "{}"), None)
+        parameters["retry_of"] = task_id
+        return self.create_task(username, row["agent_id"], row["description"], parameters, None)
 
     def cancel_queued(self, username: str, task_id: str) -> bool:
         with self.db() as db:
@@ -1575,6 +1575,7 @@ class CityStore:
             task["delegated_by"] = payload.get("delegated_by", "")
             task["role_version"] = payload.get("role_version", 1)
             task["operation"] = payload.get("operation", "")
+            task["retry_of"] = payload.get("retry_of", "")
             task.pop("username", None)
             task.pop("heartbeat_at", None)
             task["depends_on"] = json.loads(task.pop("depends_on_json") or "[]")

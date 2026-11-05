@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityTimeline} from './ActivityTimeline';
 import {isPendingProposal,needsDecision,notificationRows,parisDay,type NotificationTask,type NotificationEvent} from './notifications';
+import {agentGroup,groupedAgents} from './agentGroups';
 
 type Props={tasks:NotificationTask[];events:NotificationEvent[];agents:{id:string;name:string}[];readThrough:number;initialFilter?:string;initialAgent?:string;
   onClose:()=>void;onOpen:(id:string)=>void;onRead:()=>Promise<unknown>;onRelaunch:()=>Promise<unknown>;onCodeRequest:(request:string)=>Promise<unknown>;onCodexReview:()=>Promise<unknown>;
@@ -9,12 +10,13 @@ const LABELS:Record<string,string>={completed:'Terminée',failed:'Erreur',queued
 export function NotificationCenter(props:Props){
   const dialog=useRef<HTMLDialogElement>(null);
   const [filter,setFilter]=useState(props.initialFilter||'all'),[query,setQuery]=useState(''),[agent,setAgent]=useState(props.initialAgent||'');
+  const [team,setTeam]=useState<'all'|'code'|'business'>('all');
   const [busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [codeRequest,setCodeRequest]=useState('');
   useEffect(()=>{const el=dialog.current,previous=document.activeElement as HTMLElement|null;el?.showModal();el?.querySelector<HTMLInputElement>('input')?.focus();return()=>{el?.close();previous?.focus();};},[]);
   const rows=notificationRows(props.tasks,props.events,props.readThrough);
   const decisions=props.tasks.filter(needsDecision).length,failures=props.tasks.filter(t=>t.status==='failed').length,completed=props.tasks.filter(t=>t.status==='completed'&&!isPendingProposal(t)).length;
-  const visible=rows.filter(({task,unread})=>(!agent||task.agent_id===agent)&&
+  const visible=rows.filter(({task,unread})=>(!agent||task.agent_id===agent)&&(team==='all'||(team==='code')===(agentGroup(task.agent_id)==='Développement'))&&
     (filter==='all'||filter==='decision'&&needsDecision(task)||filter==='completed'&&task.status==='completed'&&!isPendingProposal(task)||filter==='completed_today'&&task.status==='completed'&&!isPendingProposal(task)&&parisDay(task.finished_at||task.created_at)===parisDay(new Date())||filter==='failed'&&task.status==='failed'||filter==='active'&&['queued','running'].includes(task.status)||filter==='unread'&&unread)&&
     `${task.description} ${task.result.title||''} ${task.error||''} ${task.id}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   async function action(key:string,operation:()=>Promise<unknown>,success:string){
@@ -40,14 +42,17 @@ export function NotificationCenter(props:Props){
     </form>
     </details>
     <div className="notification-tabs" role="group" aria-label="Filtrer les notifications">{[['all','Tout'],['decision','Décisions'],['unread','Non lues'],['completed','Terminées'],['completed_today','Aujourd’hui'],['active','En cours'],['failed','Erreurs']].map(([id,label])=><button key={id} aria-pressed={filter===id} className={filter===id?'selected':''} onClick={()=>setFilter(id)}>{label}</button>)}</div>
-    <div className="notification-filters"><input aria-label="Rechercher une notification" placeholder="Mission, résultat ou identifiant…" value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="Agent des notifications" value={agent} onChange={e=>setAgent(e.target.value)}><option value="">Tous les agents</option>{props.agents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+    <div className="notification-team-tabs" role="group" aria-label="Équipe des notifications"><button type="button" aria-pressed={team==='all'} onClick={()=>setTeam('all')}>Toute l’équipe</button><button type="button" aria-pressed={team==='code'} onClick={()=>setTeam('code')}>Développement</button><button type="button" aria-pressed={team==='business'} onClick={()=>setTeam('business')}>Agents métier</button></div>
+    <div className="notification-filters"><input aria-label="Rechercher une notification" placeholder="Mission, résultat ou identifiant…" value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="Agent des notifications" value={agent} onChange={e=>setAgent(e.target.value)}><option value="">Tous les agents</option><optgroup label="Développement">{groupedAgents(props.agents).code.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</optgroup><optgroup label="Agents métier">{groupedAgents(props.agents).business.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</optgroup></select></div>
     {error&&<p className="notification-feedback error" role="alert">{error}</p>}{notice&&<p className="notification-feedback" role="status">{notice}</p>}
     <div className="notification-feed"><p className="notification-count">{visible.length} mission(s) affichée(s) · décisions en priorité</p>
       {!visible.length&&<div className="notification-empty"><strong>Tout est calme ici.</strong><p>Aucune mission ne correspond à ces filtres.</p></div>}
       {visible.map(({task,event,unread})=>{const decision=needsDecision(task),proposal=isPendingProposal(task),blocked=proposal&&task.agent_id==='job_hunter'&&!task.result.revision;
         return <article key={task.id} className={`notification-card ${decision?'decision':task.status} ${unread?'unread':''}`}>
-          <div className="notification-card-top"><span className={`roster-avatar pixel-agent-avatar ${task.agent_id}`} aria-hidden="true"><i className="agent-sprite"/></span><div><strong>{props.agents.find(a=>a.id===task.agent_id)?.name||task.agent_id}</strong><small>{new Date(event?.created_at||task.finished_at||task.created_at).toLocaleString('fr-FR',{dateStyle:'medium',timeStyle:'short',timeZone:'Europe/Paris'})}</small></div><span className="notification-status">{decision?'Décision requise':LABELS[task.status]||task.status}</span>{unread&&<i className="notification-unread" title="Non lue"/>}</div>
+          <div className="notification-card-top"><span className={`roster-avatar pixel-agent-avatar ${task.agent_id}`} aria-hidden="true"><i className="agent-sprite"/></span><div><small className="agent-group-label">{agentGroup(task.agent_id)}</small><strong>{props.agents.find(a=>a.id===task.agent_id)?.name||task.agent_id}</strong><small>{new Date(event?.created_at||task.finished_at||task.created_at).toLocaleString('fr-FR',{dateStyle:'medium',timeStyle:'short',timeZone:'Europe/Paris'})}</small></div><span className="notification-status">{decision?'Décision requise':LABELS[task.status]||task.status}</span>{unread&&<i className="notification-unread" title="Non lue"/>}</div>
           <h3>{task.description}</h3><p>{task.error||task.result.summary||task.result.text?.slice(0,240)||task.result.title||event?.message||'Mission enregistrée.'}</p>
+          {task.retry_of&&<button type="button" className="mission-retry-link" onClick={()=>props.onOpen(task.retry_of||'')}>↻ Nouvelle tentative de #{task.retry_of.slice(0,10)}</button>}
+          {props.tasks.filter(next=>next.retry_of===task.id).map(next=><button type="button" className="mission-retry-link" key={next.id} onClick={()=>props.onOpen(next.id)}>↻ Tentative #{next.id.slice(0,10)} · {LABELS[next.status]||next.status} →</button>)}
           {blocked&&<p className="notification-blockage">La branche nécessite un audit avec une révision Git. Relance l’audit de Jules pour obtenir une proposition à jour.</p>}
           {task.result.file&&<p className="notification-file">Fichier préparé : <code>{task.result.file}</code></p>}
           <div className="notification-actions"><button onClick={()=>props.onOpen(task.id)}>{task.status==='completed'?'Voir le résultat':'Voir la mission'} →</button>

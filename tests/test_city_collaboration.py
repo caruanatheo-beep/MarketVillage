@@ -81,6 +81,20 @@ def test_parallel_roots_dependencies_retry_and_cancellation(tmp_path, monkeypatc
     assert store.snapshot("theo")["workflows"][0]["status"] == "cancelled"
 
 
+def test_standalone_retry_links_new_attempt_to_failed_mission(tmp_path, monkeypatch):
+    store = _workspace(tmp_path, monkeypatch)
+    original = store.create_task("theo", "internship_scout", "Refresh internships", {})
+    claimed = store.claim_next()
+    assert claimed["id"] == original["id"]
+    store.finish(original["id"], error="Temporary source failure")
+
+    retried = store.retry_task("theo", original["id"])
+    tasks = {task["id"]: task for task in store.snapshot("theo")["tasks"]}
+    assert tasks[original["id"]]["status"] == "failed"
+    assert tasks[retried["id"]]["status"] == "queued"
+    assert tasks[retried["id"]]["retry_of"] == original["id"]
+
+
 def test_manager_tool_is_registered_and_workflow_requires_profile(tmp_path, monkeypatch):
     import asyncio
     from pydantic_ai.models.test import TestModel

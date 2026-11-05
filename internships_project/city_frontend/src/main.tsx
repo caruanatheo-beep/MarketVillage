@@ -8,6 +8,7 @@ import {ManagerChatWindow} from "./ManagerChatWindow";
 import {NotificationCenter} from "./NotificationCenter";
 import {Cockpit} from "./Cockpit";
 import {isPendingProposal} from "./notifications";
+import {agentGroup,groupedAgents} from "./agentGroups";
 
 // The standalone fallback panel is only used by the currently deployed bundle.
 // New frontend builds render these same live feeds directly in the game canvas.
@@ -32,7 +33,7 @@ type Task = {
   created_at: string; started_at?: string; finished_at?: string; result: Result;
   error?: string; xp_awarded: number; input_tokens: number; output_tokens: number; api_cost_usd: number;
   workflow_id?: string; priority?: number; retry_count?: number; max_retries?: number; depends_on?: string[];
-  delegated_by?: string;
+  delegated_by?: string; retry_of?: string;
 };
 type Workflow = {id:string;template:string;request:string;status:AgentStatus;priority:number;created_at:string;
   updated_at:string;steps:{id:string;agent_id:string;description:string;status:AgentStatus;error?:string;
@@ -154,6 +155,8 @@ function App(): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [openedTaskId, setOpenedTaskId] = useState<string | null>(null);
+  const [missionTeam,setMissionTeam]=useState<'all'|'code'|'business'>('all');
+  const [retryNotice,setRetryNotice]=useState('');
   const [windowMode, setWindowMode] = useState<"none"|"agent"|"agents"|"missions"|"activity"|"contacts"|"chat">("none");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -492,7 +495,7 @@ function App(): React.ReactElement {
     catch(exc){setError(exc instanceof Error?exc.message:"Approbation impossible.");}finally{setBusy(false);}
   }
   async function retry(taskId:string):Promise<void> {
-    setBusy(true);try{await api(`/city/api/tasks/${taskId}/retry`,{});await refresh();}
+    setBusy(true);try{const response=await api<{task:{id:string;status:string}}>(`/city/api/tasks/${taskId}/retry`,{});setRetryNotice(`Nouvelle tentative créée et placée en file · ID ${response.task.id.slice(0,10)}`);setMissionFilter('pending');setOpenedTaskId(response.task.id);await refresh();}
     catch(exc){setError(exc instanceof Error?exc.message:"Nouvelle tentative impossible.");}finally{setBusy(false);}
   }
   async function checkIntegrations():Promise<void> {
@@ -536,7 +539,7 @@ function App(): React.ReactElement {
     const allTasks = snapshot?.tasks || [];
     const activeTasks = allTasks.filter(task=>["queued","running","waiting_approval"].includes(task.status));
     const recentTasks = allTasks.filter(task=>!["queued","running","waiting_approval"].includes(task.status)).slice(0,5);
-    const controlTasks = allTasks.filter(t=>missionFilter==="all"||missionFilter==="active"&&t.status==="running"||missionFilter==="pending"&&(["queued","waiting_approval"].includes(t.status)||isPendingProposal(t))||missionFilter==="completed"&&t.status==="completed"||missionFilter==="failed"&&["failed","cancelled"].includes(t.status));
+    const controlTasks = allTasks.filter(t=>(missionTeam==='all'||(missionTeam==='code')===(agentGroup(t.agent_id)==='Développement'))&&(missionFilter==="all"||missionFilter==="active"&&['queued','running'].includes(t.status)||missionFilter==="pending"&&(["queued","waiting_approval"].includes(t.status)||isPendingProposal(t))||missionFilter==="completed"&&t.status==="completed"||missionFilter==="failed"&&["failed","cancelled"].includes(t.status)));
     const renderTask = (task:Task) => {
       const assigned = snapshot?.agents.find(agent=>agent.id===task.agent_id)?.name||task.agent_id;
       const dependencies = (task.depends_on||[]).map(id=>allTasks.find(item=>item.id===id));
@@ -545,8 +548,9 @@ function App(): React.ReactElement {
       const summary = task.result.summary || task.result.text || task.result.title ||
         (task.result.new_count !== undefined ? `${task.result.new_count} nouvelle(s) offre(s) sur ${task.result.total_count ?? "?"}.` : "");
       return <article className={`mission-record ${task.status} ${openedTaskId===task.id?'mission-highlight':''}`} key={task.id}>
-        <div className="mission-record-head"><div><button className="mission-title" type="button" onClick={()=>{setOpenedTaskId(task.id);setSelectedId(task.agent_id);}}>{task.description}</button><small>{assigned}{task.delegated_by?` / transmis par ${snapshot?.agents.find(agent=>agent.id===task.delegated_by)?.name||task.delegated_by}`:""}</small></div><span className={`task-chip ${task.status}`}>{LABELS[task.status]}</span></div>
-        <div className="mission-record-meta"><code title={`Identifiant persistant : ${task.id}`}>ID {task.id}</code><time>{dateTime(task.created_at)}</time>{task.workflow_id&&<span>Projet {task.workflow_id.slice(0,8)}</span>}</div>
+        <div className="mission-record-head"><div><span className="mission-team-label">{agentGroup(task.agent_id)}</span><button className="mission-title" type="button" onClick={()=>{setOpenedTaskId(task.id);setSelectedId(task.agent_id);}}>{task.description}</button><small>{assigned}{task.delegated_by?` / transmis par ${snapshot?.agents.find(agent=>agent.id===task.delegated_by)?.name||task.delegated_by}`:""}</small></div><span className={`task-chip ${task.status}`}>{LABELS[task.status]}</span></div>
+        <div className="mission-record-meta"><time>{dateTime(task.created_at)}</time><code title={`Identifiant persistant : ${task.id}`}>#{task.id.slice(0,10)}</code>{(task.retry_count||0)>0&&<span>Tentative {(task.retry_count||0)+1}</span>}{task.retry_of&&<button type="button" className="mission-retry-link" onClick={()=>{setOpenedTaskId(task.retry_of||null);setMissionFilter('failed')}}>Issue de #{task.retry_of.slice(0,10)}</button>}{task.workflow_id&&<span>Projet {task.workflow_id.slice(0,8)}</span>}</div>
+        {allTasks.filter(candidate=>candidate.retry_of===task.id).map(candidate=><button key={candidate.id} type="button" className="mission-retry-link" onClick={()=>{setOpenedTaskId(candidate.id);setMissionFilter(['queued','running'].includes(candidate.status)?'active':candidate.status==='failed'?'failed':'completed')}}>↻ Tentative #{candidate.id.slice(0,10)} · {LABELS[candidate.status]} →</button>)}
         {!!dependencies.length&&<div className="mission-dependencies"><b>{dependencies.filter(d=>d?.status==="completed").length}/{dependencies.length} prérequis terminés</b>{dependencies.map((dependency,index)=><span key={task.depends_on?.[index]} title={task.depends_on?.[index]}>{dependency?`${snapshot?.agents.find(agent=>agent.id===dependency.agent_id)?.name||dependency.agent_id} / ${LABELS[dependency.status]}`:`ID ${task.depends_on?.[index].slice(0,10)} indisponible`}</span>)}</div>}
         {task.status==="waiting_approval"&&<p className="mission-record-result">Cette mission attend ta validation avant ex&eacute;cution.</p>}
         {summary&&<p className="mission-record-result">{summary}</p>}
@@ -563,6 +567,8 @@ function App(): React.ReactElement {
     return <div className="task-panel-content manager-panel">
       
       <section className="mission-control-register"><div className="section-heading"><div><h3>Registre des missions</h3><small>{allTasks.filter(task=>task.status==="running").length} en cours &middot; {allTasks.filter(task=>task.status==="waiting_approval"||isPendingProposal(task)).length} &agrave; valider</small></div></div>
+        {retryNotice&&<div className="mission-retry-notice" role="status">↻ {retryNotice}<button type="button" onClick={()=>setRetryNotice('')} aria-label="Masquer le message">×</button></div>}
+        <div className="mission-team-tabs" role="group" aria-label="Équipe des missions"><button type="button" aria-pressed={missionTeam==='all'} onClick={()=>setMissionTeam('all')}>Toute l’équipe <b>{allTasks.length}</b></button><button type="button" aria-pressed={missionTeam==='code'} onClick={()=>setMissionTeam('code')}>Développement <b>{allTasks.filter(t=>agentGroup(t.agent_id)==='Développement').length}</b></button><button type="button" aria-pressed={missionTeam==='business'} onClick={()=>setMissionTeam('business')}>Agents métier <b>{allTasks.filter(t=>agentGroup(t.agent_id)==='Agents métier').length}</b></button></div>
         <div className="mission-filters" role="group" aria-label="Filtrer les missions">{[["active","Actives"],["pending","En attente"],["completed","Terminées"],["failed","Erreurs"],["all","Toutes"]].map(([id,label])=><button type="button" key={id} aria-pressed={missionFilter===id} onClick={()=>setMissionFilter(id)}>{label}</button>)}</div>
         {!controlTasks.length?<p className="muted">Aucune mission pour ce filtre.</p>:<div className="mission-record-list">{controlTasks.map(renderTask)}</div>}
 
@@ -701,9 +707,10 @@ function App(): React.ReactElement {
         <div className="world-stage tower-world"><PixelFloorGame agents={snapshot?.agents||[]} tasks={snapshot?.tasks||[]} events={snapshot?.events||[]}
           selectedId={selectedId} onPick={id=>openAgent(id)} onTaskPick={inspectCockpitTask} marketPoints={marketPoints} marketRetrievedAt={marketRetrievedAt}
           marketError={marketSnapshot?.error} internshipError={internshipHighlight?.error} featuredOffers={featuredOffers}/>
-          <div className="game-brand-hud"><span className="city-brand-mark" aria-hidden="true"><i/><i/><i/><i/></span><div><strong>MarketDesk City</strong><small>Global Markets &middot; AI Tower</small></div></div>
-          <div className="command-search"><span aria-hidden="true">⌕</span><input aria-label="Rechercher un agent ou une mission" placeholder="Rechercher un agent, une mission…" value={commandQuery} onChange={e=>setCommandQuery(e.target.value)}/>{commandQuery.trim()&&<div className="command-search-results">{(snapshot?.agents||[]).filter(a=>(a.name+" "+a.role).toLowerCase().includes(commandQuery.toLowerCase())).map(a=><button key={a.id} onClick={()=>{openAgent(a.id);setCommandQuery("");}}>{a.name}<small>{a.role}</small></button>)}{(snapshot?.tasks||[]).filter(t=>t.description.toLowerCase().includes(commandQuery.toLowerCase())).slice(0,5).map(t=><button key={t.id} onClick={()=>{showResult(t);setCommandQuery("");}}>{t.description}<small>{LABELS[t.status]}</small></button>)}<button onClick={()=>setCommandQuery("")}>Fermer la recherche</button></div>}</div>
+           <div className="command-topbar"><div className="game-brand-hud"><span className="city-brand-mark" aria-hidden="true"><i/><i/><i/><i/></span><div><strong>MarketDesk City</strong><small>Global Markets &middot; AI Tower</small></div></div>
+           <div className="command-search"><span aria-hidden="true">⌕</span><input aria-label="Rechercher un agent ou une mission" placeholder="Rechercher un agent, une mission…" value={commandQuery} onChange={e=>setCommandQuery(e.target.value)}/>{commandQuery.trim()&&<div className="command-search-results">{(['Développement','Agents métier'] as const).map(group=>{const agents=(snapshot?.agents||[]).filter(a=>agentGroup(a.id)===group&&(a.name+' '+a.role).toLowerCase().includes(commandQuery.toLowerCase()));return agents.length?<div className="command-result-group" key={group}><strong>{group}</strong>{agents.map(a=><button key={a.id} onClick={()=>{openAgent(a.id);setCommandQuery('');}}>{a.name}<small>{a.role}</small></button>)}</div>:null})}{(snapshot?.tasks||[]).filter(t=>t.description.toLowerCase().includes(commandQuery.toLowerCase())).slice(0,5).map(t=><button key={t.id} onClick={()=>{showResult(t);setCommandQuery("");}}>{t.description}<small>{agentGroup(t.agent_id)} · {LABELS[t.status]}</small></button>)}<button onClick={()=>setCommandQuery("")}>Fermer la recherche</button></div>}</div>
           <nav className="game-hud" aria-label="Commandes MarketDesk City">
+             <button type="button" className={windowMode==="agents"?"active":""} onClick={()=>setWindowMode(windowMode==="agents"?"none":"agents")} aria-label="Équipe" aria-pressed={windowMode==="agents"}><span>Équipe</span></button>
             <button type="button" className={windowMode==="missions"?"active":""} onClick={()=>setWindowMode(windowMode==="missions"?"none":"missions")} aria-label="Missions" aria-pressed={windowMode==="missions"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M9 3h6v4H9zM8 12h8M8 16h5"/></svg><span>Missions</span>{activeCount>0&&<b>{activeCount}</b>}</button>
             <button type="button" className={windowMode==="activity"?"active":""} onClick={()=>{if(windowMode==="activity")setWindowMode("none");else openNotifications();}} aria-label="Notifications" aria-pressed={windowMode==="activity"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M2 12h5l3-8 4 16 3-8h5"/></svg><span>Notifications</span>{(pendingCount>0||(snapshot?.events||[]).some(e=>e.id>notificationReadThrough))&&<b>{Math.max(pendingCount,(snapshot?.events||[]).filter(e=>e.id>notificationReadThrough).length)}</b>}</button>
             <button type="button" className={windowMode==="contacts"?"active":""} onClick={()=>setWindowMode(windowMode==="contacts"?"none":"contacts")} aria-label="Contacts" aria-pressed={windowMode==="contacts"}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-4-5"/></svg><span>Contacts</span></button>
@@ -711,7 +718,7 @@ function App(): React.ReactElement {
             <button type="button" aria-label="Ouvrir Internships" title="Ouvrir Internships" disabled={!!launchingSite} onClick={()=>void openLocalSite("internships")}>I↗<span>Internships</span></button>
             <button type="button" aria-label="Réglages" onClick={()=>{setSettingsOpen(true);void loadSettings();}}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor"/><circle cx="15" cy="17" r="3" fill="currentColor"/></svg><span>Réglages</span></button>
             <form action="/logout" method="post" className="city-logout"><button type="submit">Quitter</button></form>
-          </nav>
+           </nav></div>
           <div className="game-status-hud"><i className="live-dot"/> City active <small>{snapshot?.today_completed??0} missions aujourd’hui</small></div>
           <div className="world-hint">S&eacute;lectionne un bureau ou un robot pour ouvrir son espace.</div></div>
         <div className="world-footer"><span><i className="room-dot trading"/> March&eacute;s</span><span><i className="room-dot career"/> Carri&egrave;res</span><span><i className="room-dot lab"/> Laboratoire</span><span className="world-footer-note">Les robots r&eacute;agissent aux missions et transferts r&eacute;els.</span></div>      </div>
@@ -728,6 +735,7 @@ function App(): React.ReactElement {
           onSite={kind=>void openLocalSite(kind)} siteBusy={!!launchingSite} siteError={siteError}/>
 
       </section>}
+    {windowMode==="agents"&&<section className="game-popup team-directory" role="dialog" aria-label="Équipe MarketDesk City"><div className="game-popup-heading"><div><strong>Ton équipe</strong><small>Choisis un agent pour voir son activité et lui confier une mission.</small></div><button type="button" onClick={()=>setWindowMode('none')} aria-label="Fermer">×</button></div><div className="team-directory-body">{([['Développement',groupedAgents(snapshot?.agents||[]).code],['Agents métier',groupedAgents(snapshot?.agents||[]).business]] as const).map(([label,agents])=><section className="team-directory-section" key={label}><header><h3>{label}</h3><span>{agents.length} agents</span></header><div className="team-directory-grid">{agents.map(agent=>{const current=(snapshot?.tasks||[]).find(task=>task.agent_id===agent.id&&['running','queued'].includes(task.status));return <button type="button" className="team-directory-card" key={agent.id} onClick={()=>openAgent(agent.id)}><span className={`roster-avatar pixel-agent-avatar ${agent.id}`} aria-hidden="true"><i className="agent-sprite"/></span><span><strong>{agent.name}</strong><small>{agent.role}</small><em>{current?`${LABELS[current.status]} · ${current.description}`:'Disponible pour une mission'}</em></span><b aria-hidden="true">↗</b></button>})}</div></section>)}</div></section>}
     {windowMode==="chat"&&<ManagerChatWindow onClose={()=>setWindowMode("none")}>{managerChat}</ManagerChatWindow>}
     {windowMode==="contacts"&&<NetworkContactsWindow onClose={()=>setWindowMode("none")}/>}
     {windowMode==="missions"&&<section className="game-popup game-mission-control" aria-label="Mission Control">
