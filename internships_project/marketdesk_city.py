@@ -865,17 +865,6 @@ class CityStore:
                     "SELECT 1 FROM city_tasks WHERE id=? AND username=? AND status='completed'",
                     (source_task_id, username)).fetchone():
                 raise CityError("La mission source doit être terminée et t'appartenir.")
-            limit = max(1, int(os.getenv("MARKETDESK_CITY_DAILY_MISSIONS", "5")))
-            today = datetime.now(timezone.utc).date().isoformat()
-            count = db.execute("SELECT COUNT(*) FROM city_tasks WHERE username=? AND agent_id=? "
-                               "AND substr(created_at,1,10)=? AND status!='cancelled'",
-                               (username, agent_id, today)).fetchone()[0]
-            if count >= limit:
-                raise CityError(f"Limite de {limit} actualisations City atteinte aujourd'hui.")
-            active = db.execute("SELECT COUNT(*) FROM city_tasks WHERE username=? AND status IN "
-                                "('queued','running','waiting_approval')", (username,)).fetchone()[0]
-            if active >= settings["max_concurrent_tasks"]:
-                raise CityError("Concurrent mission limit reached. Finish or cancel a mission first.")
             if db.execute("SELECT 1 FROM city_tasks WHERE username=? AND agent_id=? AND status IN "
                           "('queued','running','waiting_approval') LIMIT 1", (username, agent_id)).fetchone():
                 raise CityError(f"{agent['name']} a déjà une mission active.")

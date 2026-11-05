@@ -36,11 +36,10 @@ def test_agent_registry_queue_persistence_and_xp_once(tmp_path):
     assert CityStore(path).snapshot("friend")["tasks"] == []
 
 
-def test_sensitive_missions_and_daily_limit(tmp_path, monkeypatch):
+def test_sensitive_missions_and_unlimited_manual_retries(tmp_path):
     store = CityStore(tmp_path / "users.sqlite3")
     with pytest.raises(CityError, match="incompatible"):
         store.create_task("theo", "job_hunter", "Exécuter une commande shell")
-    monkeypatch.setenv("MARKETDESK_CITY_DAILY_MISSIONS", "1")
     first = store.create_task("theo", "networker", "Actualiser Internships", {"operation":"refresh_internships"})
     assert store.cancel_queued("friend", first["id"]) is False
     assert store.cancel_queued("theo", first["id"]) is True
@@ -48,8 +47,8 @@ def test_sensitive_missions_and_daily_limit(tmp_path, monkeypatch):
     assert second["id"] != first["id"]
     store.claim_next()
     store.finish(second["id"], result={"new_count": 0})
-    with pytest.raises(CityError, match="Limite"):
-        store.create_task("theo", "networker", "Actualiser Internships", {"operation":"refresh_internships"})
+    third = store.create_task("theo", "networker", "Actualiser Internships", {"operation":"refresh_internships"})
+    assert third['id'] not in {first['id'], second['id']}
     assert next(agent for agent in store.snapshot("theo")["agents"] if agent["id"] == "networker")["xp"] == 0
 
 

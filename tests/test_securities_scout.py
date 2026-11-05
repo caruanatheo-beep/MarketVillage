@@ -75,6 +75,27 @@ def test_clara_without_summary_keeps_network_directory_available(tmp_path, monke
     assert response.json()['clara']['summary'] == ''
 
 
+def test_clara_can_be_launched_more_than_five_times_in_one_day(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
+    store = CityStore(state_store.USER_DB_PATH)
+    for _ in range(6):
+        task = store.create_task('alice', 'securities_scout', 'Rechercher des contacts',
+                                 {'operation': 'discover_service_contacts'}, auto_run=True)
+        claimed = store.claim_next()
+        assert claimed['id'] == task['id']
+        store.finish(task['id'], result={'count': 0, 'contacts': []})
+
+
+def test_clara_can_queue_behind_two_programmers(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
+    store = CityStore(state_store.USER_DB_PATH)
+    for agent in ('city_ui_engineer', 'quality_engineer'):
+        store.create_task('alice', agent, 'Améliorer le code', {'operation': 'develop'}, auto_run=True)
+    clara = store.create_task('alice', 'securities_scout', 'Rechercher des contacts',
+                              {'operation': 'discover_service_contacts'}, auto_run=True)
+    assert clara['status'] == 'queued'
+
+
 def test_clara_uses_one_codex_search_when_public_engines_fail(tmp_path, monkeypatch):
     import json
     from pathlib import Path
