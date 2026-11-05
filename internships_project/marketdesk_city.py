@@ -351,12 +351,34 @@ class CityStore:
             db.execute("INSERT OR IGNORE INTO city_specialist_schedule(username,operation,period,task_id) "
                        "SELECT username,operation,?,task_id FROM city_specialist_schedule "
                        "WHERE operation='innovation_review' AND period=?", (week+'-Mon',week))
-            users = db.execute("SELECT DISTINCT username FROM city_agents").fetchall()
+            # One ChatGPT subscription is shared by every City account on this instance.
+            users = db.execute("SELECT DISTINCT a.username FROM city_agents a ORDER BY "
+                               "COALESCE((SELECT MAX(m.created_at) FROM city_chat_messages m "
+                               "WHERE m.username=a.username),'') DESC").fetchall()
+            priority = {row[0]: index for index, row in enumerate(users)}
+            existing_code = db.execute(
+                "SELECT DISTINCT s.operation,s.period,t.id,t.username,t.agent_id,t.status FROM city_specialist_schedule s "
+                "JOIN city_tasks t ON t.id=s.task_id AND t.username=s.username "
+                "WHERE s.operation LIKE 'develop:%' AND s.period=?", (day,)).fetchall()
+            owners = {}
+            for scheduled in existing_code:
+                key = (scheduled['operation'], scheduled['period'])
+                if key not in owners or priority.get(scheduled['username'], len(priority)) < priority.get(owners[key], len(priority)):
+                    owners[key] = scheduled['username']
+            for scheduled in existing_code:
+                if scheduled['status'] == 'queued' and scheduled['username'] != owners[(scheduled['operation'], scheduled['period'])]:
+                    db.execute("UPDATE city_tasks SET status='cancelled',finished_at=?,error=? WHERE id=? AND status='queued'",
+                               (_utc(), 'Créneau de code partagé entre les comptes City.', scheduled['id']))
+                    self._event(db, scheduled, 'cancelled', 'Créneau automatique partagé : doublon annulé sans appel Codex.')
             for user in users:
                 saved = db.execute("SELECT settings_json FROM city_settings WHERE username=?", (user[0],)).fetchone()
                 if saved and not json.loads(saved[0]).get('auto_tasks', True):
                     continue
                 for agent_id, operation, period, title in schedules:
+                    if operation.startswith('develop:') and db.execute(
+                            "SELECT 1 FROM city_specialist_schedule WHERE operation=? AND period=? LIMIT 1",
+                            (operation, period)).fetchone():
+                        continue
                     if not operation.startswith('develop:') and db.execute("SELECT 1 FROM city_tasks WHERE username=? AND agent_id=? AND status IN ('queued','running','waiting_approval')", (user[0], agent_id)).fetchone():
                         continue
                     task_id = uuid.uuid4().hex

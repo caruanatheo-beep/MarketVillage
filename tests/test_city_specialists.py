@@ -73,6 +73,30 @@ def test_scheduler_once_per_day_and_week_and_disabled_accounts(store):
     assert store.enqueue_specialist_schedules(thursday) == 0
 
 
+def test_coding_slots_are_shared_across_accounts_and_queued_duplicates_stop(store):
+    store.ensure_agents('alice')
+    store.ensure_agents('bob')
+    store.append_chat_message('bob','desk_manager','user','Bonjour')
+    moment = datetime(2026, 11, 5, 9, tzinfo=timezone.utc)
+    period = moment.date().isoformat()
+    old = store.create_task('alice','job_hunter','Ancien créneau',{'operation':'develop','period':period})
+    preferred = store.create_task('bob','job_hunter','Créneau conservé',{'operation':'develop','period':period})
+    with store.db() as db:
+        for user, task in [('alice',old),('bob',preferred)]:
+            db.execute('INSERT INTO city_specialist_schedule VALUES(?,?,?,?)',
+                       (user,'develop:job_hunter:1',period,task['id']))
+    store.enqueue_specialist_schedules(moment)
+    with store.db() as db:
+        assert db.execute('SELECT status FROM city_tasks WHERE id=?',(old['id'],)).fetchone()[0]=='cancelled'
+        assert db.execute('SELECT status FROM city_tasks WHERE id=?',(preferred['id'],)).fetchone()[0]=='queued'
+        rows=db.execute("SELECT t.agent_id,s.username,COUNT(*) FROM city_specialist_schedule s "
+                        "JOIN city_tasks t ON t.id=s.task_id WHERE s.period=? AND s.operation LIKE 'develop:%' "
+                        "AND t.status!='cancelled' GROUP BY t.agent_id,s.username",(period,)).fetchall()
+    assert {row[0]: (row[1],row[2]) for row in rows} == {
+        'job_hunter': ('bob',4), 'city_ui_engineer': ('bob',4),
+        'internships_engineer': ('bob',4), 'quality_engineer': ('bob',4)}
+
+
 def test_one_manager_digest_after_scheduled_work(store):
     from concurrent.futures import ThreadPoolExecutor
     store.ensure_agents('alice')
