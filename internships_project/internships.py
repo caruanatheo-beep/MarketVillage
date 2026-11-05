@@ -2298,13 +2298,14 @@ def _collect_source(name: str, loader: object, args: tuple, force: bool) -> tupl
 
 def _deduplicate_opportunities(jobs: list[Opportunity]) -> list[Opportunity]:
     jobs = _without_jobteaser_duplicates(jobs)
-    unique: dict[tuple[str, str, str], Opportunity] = {}
+    unique: dict[tuple[str, str, str, str], Opportunity] = {}
     for job in jobs:
         if (_excluded_employer(job.company) or not _market_relevant_with_context(job.title, job.description)
                 or (job.source != "JobTeaser · sitemap" and not _plausible_location(job.location))):
             continue
         location_key = "paris-area" if _is_paris(job.location) else job.location.casefold()
-        key = (_canonical_title(job.title), _canonical_company(job.company), location_key)
+        # Identical role names can advertise separate internship, VIE or work-study contracts.
+        key = (_canonical_title(job.title), _canonical_company(job.company), location_key, job.kind)
         previous = unique.get(key)
         if previous is None or (previous.source == "JobTeaser · sitemap" and job.source != "JobTeaser · sitemap") or (
             previous.source == job.source and not previous.start_period and job.start_period
