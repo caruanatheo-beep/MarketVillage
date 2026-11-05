@@ -133,6 +133,54 @@ def test_autonomous_engineer_integrates_validated_code_without_approval(repo, mo
     assert (root/'internships_project/city_sample.py').read_text() == 'value = 2\n'
 
 
+def test_autonomous_worktree_resumes_after_main_becomes_clean(repo, monkeypatch):
+    root, git = repo
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 12)
+    monkeypatch.setattr(coding, '_integration_checks', lambda *_args, **_kwargs: 'focused tests')
+    calls = []
+    def execute(command, directory, prompt, env):
+        calls.append(command)
+        target = directory/'internships_project/city_sample.py'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('value = 2\n')
+        Path(command[command.index('--output-last-message') + 1]).write_text(json.dumps(
+            {'summary': 'Une valeur a été corrigée.', 'tests': 'Test ciblé réussi.', 'limitations': 'Aucune.'}))
+        (root/'sample.py').write_text('value = 9\n')
+        return [{'type': 'turn.completed'}]
+    monkeypatch.setattr(coding, '_execute', execute)
+    task_id = 'a'*32
+    with pytest.raises(CityError, match='modifications locales suivies'):
+        coding.implement_change(task_id, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
+    worktree = root/'.city-worktrees'/task_id
+    assert (worktree/'.jules-complete.json').exists()
+    assert len(calls) == 1
+    (root/'sample.py').write_text('value = 1\n')
+    monkeypatch.setattr(coding, '_execute', lambda *_args: pytest.fail('Codex must not run again'))
+    result = coding.implement_change(task_id, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
+    assert result['integrated'] and result['plain_summary'] == 'Une valeur a été corrigée.'
+    assert git('status', '--porcelain', '--untracked-files=no') == ''
+    assert not (worktree/'.jules-complete.json').exists()
+    assert len(calls) == 1
+
+
+def test_dirty_main_requeues_development_and_retry_keeps_task_id(store, monkeypatch):
+    task = store.create_task('alice', 'job_hunter', 'Développement autonome', {'operation': 'develop'})
+    def blocked(*_args, **_kwargs):
+        raise CityError('Intégration suspendue : le dépôt courant contient des modifications locales suivies.')
+    monkeypatch.setattr(coding, 'implement_change', blocked)
+    assert CityWorker(store).run_once()
+    with store.db() as db:
+        status, scheduled = db.execute('SELECT status,scheduled_at FROM city_tasks WHERE id=?',
+                                       (task['id'],)).fetchone()
+    assert status == 'queued' and scheduled > task['created_at']
+    with store.db() as db:
+        db.execute("UPDATE city_tasks SET status='failed',error='Temporary failure' WHERE id=?", (task['id'],))
+    retried = store.retry_task('alice', task['id'])
+    assert retried['id'] == task['id'] and retried['status'] == 'queued'
+    with store.db() as db:
+        assert db.execute('SELECT scheduled_at FROM city_tasks WHERE id=?', (task['id'],)).fetchone()[0] is None
+
+
 def test_parallel_coding_claims_are_bounded_per_agent_and_globally(store):
     from internships_project.city_specialists import VERSION
     for user in ('alice', 'bob'):

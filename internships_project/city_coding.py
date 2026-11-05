@@ -227,6 +227,10 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
         request = ('Analyse ton périmètre dans le dépôt actuel, choisis toi-même un défaut ou une amélioration '
                    'utile et circonscrite, puis implémente-la avec une vérification adaptée. '
                    'Si aucun changement fiable ne se justifie, explique pourquoi sans modifier de fichier.')
+    directory = root/'.city-worktrees'/task_id
+    branch = 'marketdesk/'+('jules' if agent_id == 'job_hunter' else agent_id.replace('_', '-'))+'-'+task_id[:12]
+    if auto_integrate and directory.exists():
+        return _resume_autonomous_change(root, directory, branch, agent_id)
     revision = git(root, 'rev-parse', 'HEAD') if auto_integrate else approved_base(root, proposal)
     if auto_integrate and git(root, 'status', '--porcelain', '--untracked-files=no'):
         raise CityError('Développement suspendu : le dépôt courant contient des modifications locales suivies.')
@@ -240,8 +244,6 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
         env['MARKETDESK_TEST_SITE_PACKAGES'] = str(site_packages)
     if auto_integrate and codex_usage_percent(binary, env) >= 70:
         raise CityError('Développement reporté : plus de 70 % d’une fenêtre de quota Codex est utilisé.')
-    directory = root/'.city-worktrees'/task_id
-    branch = 'marketdesk/'+('jules' if agent_id == 'job_hunter' else agent_id.replace('_', '-'))+'-'+task_id[:12]
     if directory.exists():
         raise CityError('Un espace existe déjà pour cette mission. Consulte-le ou soumets une nouvelle demande.')
     directory.parent.mkdir(exist_ok=True)
@@ -304,15 +306,19 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
             raise ValueError()
     except (OSError, ValueError) as exc:
         raise CityError('Rapport Codex incomplet. La branche reste disponible pour examen manuel.') from exc
+    if auto_integrate:
+        (directory/'.jules-complete.json').write_text(json.dumps(result, ensure_ascii=False), encoding='utf-8')
     for artifact in (schema, report):
         artifact.unlink(missing_ok=True)
     if git(directory,'rev-parse','HEAD') != revision:
         raise CityError('La révision de la branche de travail a changé pendant la mission. Examine-la avant toute intégration.')
     tracked = git(directory,'diff','--name-only','--no-renames','HEAD').splitlines()
-    added = git(directory,'ls-files','--others','--exclude-standard').splitlines()
+    added = [name for name in git(directory,'ls-files','--others','--exclude-standard').splitlines()
+             if name != '.jules-complete.json']
     files = sorted(set(tracked+added))
     if not files:
         if auto_integrate:
+            (directory/'.jules-complete.json').unlink(missing_ok=True)
             return {'title': 'Analyse sans changement', 'branch': branch, 'files': [], 'integrated': False,
                     'plain_summary': result['summary'],
                     'text': result['summary']+'\n\n'+result['limitations'], 'codex_usage': {},
@@ -336,6 +342,7 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
     context = branch_context(root,revision)
     integration = _auto_integrate(root, directory, branch, revision, files, agent_id) if auto_integrate else {}
     if integration:
+        (directory/'.jules-complete.json').unlink(missing_ok=True)
         context['base_note'] = ('La branche a \u00e9t\u00e9 adapt\u00e9e aux autres changements, puis rev\u00e9rifi\u00e9e et int\u00e9gr\u00e9e.'
                                 if integration['rebased'] else 'La branche a \u00e9t\u00e9 v\u00e9rifi\u00e9e et int\u00e9gr\u00e9e.')
     return {'title':'Développement intégré' if integration else 'Jules · développement prêt à examiner',
@@ -349,6 +356,54 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
                    f'\n\n{len(files)} fichier(s) modifié(s) dans {branch}. '+
                    ('Tests serveur validés ; commit intégré au dépôt local. Aucun push ou déploiement.' if integration else
                     'Modifications locales à examiner ; aucun commit, push ou merge effectué par City.')+'\n\n'+context['base_note']}
+
+
+def _resume_autonomous_change(root: Path, directory: Path, branch: str, agent_id: str) -> dict:
+    """Finish a completed Codex worktree after a temporary integration block."""
+    if git(directory, 'branch', '--show-current') != branch:
+        raise CityError('Branche de travail inattendue : intégration suspendue.')
+    marker = directory/'.jules-complete.json'
+    try:
+        result = json.loads(marker.read_text(encoding='utf-8'))
+        if not isinstance(result, dict) or not all(isinstance(result.get(key), str)
+                                                   for key in ('summary', 'tests', 'limitations')):
+            raise ValueError()
+    except (OSError, ValueError) as exc:
+        raise CityError('Travail Codex non terminé : la branche reste disponible pour examen.') from exc
+    revision = git(directory, 'rev-parse', 'HEAD')
+    tracked = git(directory, 'diff', '--name-only', '--no-renames', 'HEAD').splitlines()
+    added = [name for name in git(directory, 'ls-files', '--others', '--exclude-standard').splitlines()
+             if name not in {'.jules-result.json', '.jules-schema.json', '.jules-complete.json'}]
+    files = sorted(set(tracked + added))
+    if not files:
+        raise CityError('Aucune modification à reprendre dans la branche de travail.')
+    diff = git(directory, 'diff', '--no-ext-diff', '--no-textconv', '--no-renames', 'HEAD', '--', '.')
+    for name in added:
+        path = directory/name
+        if path.is_symlink() or not path.resolve().is_relative_to(directory.resolve()) or path.stat().st_size > 100_000:
+            continue
+        try:
+            lines = path.read_text(encoding='utf-8').splitlines(keepends=True)
+        except (UnicodeError, OSError):
+            continue
+        diff += '\n'+''.join(difflib.unified_diff([], lines, fromfile='/dev/null', tofile=name))
+    integration = _auto_integrate(root, directory, branch, revision, files, agent_id)
+    context = branch_context(root, revision)
+    context['base_note'] = ('La branche a été adaptée aux autres changements, puis revérifiée et intégrée.'
+                            if integration['rebased'] else 'La branche a été vérifiée et intégrée.')
+    marker.unlink(missing_ok=True)
+    report = directory/'.jules-result.json'
+    report.unlink(missing_ok=True)
+    (directory/'.jules-schema.json').unlink(missing_ok=True)
+    return {'title': 'Développement intégré', 'branch': branch, **context, **integration,
+            'file': str(directory.relative_to(root)), 'files': files, 'plain_summary': result['summary'],
+            'diff': diff[:120_000], 'diff_truncated': len(diff) > 120_000,
+            'checks': [], 'codex_usage': {}, 'provider': 'Codex · connexion ChatGPT locale',
+            'model': 'gpt-6.1-sol', 'role_version': VERSION, 'approval_required': False,
+            'text': result['summary']+'\n\nVérifications :\n'+result['tests']+'\n\nLimites :\n'+
+                    result['limitations']+f'\n\n{len(files)} fichier(s) modifié(s) dans {branch}. '+
+                    'Tests serveur validés ; commit intégré au dépôt local. Aucun push ou déploiement.\n\n'+
+                    context['base_note']}
 
 
 def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,

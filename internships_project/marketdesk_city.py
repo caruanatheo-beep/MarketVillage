@@ -1260,15 +1260,15 @@ class CityStore:
             db.execute("UPDATE city_tasks SET heartbeat_at=? WHERE id=? AND status='running'",
                        (_utc(), task_id))
 
-    def defer_coding(self, task_id: str, reason: str) -> None:
-        next_try = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(timespec='seconds')
+    def defer_coding(self, task_id: str, reason: str, *, delay_minutes: int = 60) -> None:
+        next_try = (datetime.now(timezone.utc) + timedelta(minutes=delay_minutes)).isoformat(timespec='seconds')
         with self.db() as db:
             task = db.execute("SELECT * FROM city_tasks WHERE id=? AND status='running'", (task_id,)).fetchone()
             if not task:
                 return
             db.execute("UPDATE city_tasks SET status='queued',scheduled_at=?,started_at=NULL,heartbeat_at=NULL "
                        "WHERE id=?", (next_try, task_id))
-            self._event(db, task, 'queued', reason + ' Nouvelle tentative dans une heure.')
+            self._event(db, task, 'queued', reason + f' Nouvelle tentative dans {delay_minutes} minutes.')
 
     @classmethod
     def _remember_task_result(cls, db, task: dict, result: dict) -> None:
@@ -1470,6 +1470,23 @@ class CityStore:
         if row is None:
             raise CityError("This mission is not available for retry.")
         parameters = json.loads(row['parameters_json'] or '{}')
+        if parameters.get('operation') == 'develop' and row['workflow_id'] is None:
+            settings = self.get_settings(username)
+            with self.db() as db:
+                db.execute('BEGIN IMMEDIATE')
+                if db.execute("SELECT 1 FROM city_tasks WHERE username=? AND agent_id=? AND status='running' LIMIT 1",
+                              (username, row['agent_id'])).fetchone():
+                    raise CityError('Cet agent a déjà une mission en cours.')
+                if db.execute("SELECT COUNT(*) FROM city_tasks WHERE username=? AND status IN ('queued','running','waiting_approval')",
+                              (username,)).fetchone()[0] >= settings['max_concurrent_tasks']:
+                    raise CityError('Termine ou annule une mission avant de la relancer.')
+                changed = db.execute("UPDATE city_tasks SET status='queued',scheduled_at=NULL,error=NULL,started_at=NULL,"
+                                     "finished_at=NULL,heartbeat_at=NULL,retry_count=retry_count+1 "
+                                     "WHERE id=? AND username=? AND status='failed'", (task_id, username)).rowcount
+                if not changed:
+                    raise CityError('Cette mission a déjà été relancée.')
+                self._event(db, row, 'queued', 'Nouvelle tentative sur la même branche de travail.')
+            return {'id': task_id, 'status': 'queued'}
         if row['agent_id']=='job_hunter' and parameters.get('operation')=='prepare_branch':
             # The human approval is bound to this task ID. Creating another ID loses it.
             settings = self.get_settings(username)
@@ -1907,6 +1924,11 @@ class CityWorker:
             if (parameters.get('operation') == 'develop' and isinstance(exc, CityError)
                     and safe.startswith(('Quota Codex indisponible', 'Développement reporté', 'Connecte Codex'))):
                 self.store.defer_coding(task['id'], safe)
+            elif (parameters.get('operation') == 'develop' and isinstance(exc, CityError)
+                    and safe in ('Développement suspendu : le dépôt courant contient des modifications locales suivies.',
+                                 'Intégration suspendue : le dépôt courant contient des modifications locales suivies.',
+                                 'Le dépôt a changé pendant les vérifications : intégration suspendue. La branche reste disponible.')):
+                self.store.defer_coding(task['id'], safe, delay_minutes=5)
             elif task['agent_id'] == 'market_analyst' and isinstance(exc, CityError) and safe.startswith("Markets n'a retourné aucune observation"):
                 self.store.defer_coding(task['id'], safe)
             else:
