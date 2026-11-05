@@ -125,9 +125,22 @@ def market_brief() -> dict:
         points, status = load_snapshot()
         if not any(getattr(point, "value", None) is not None for point in points):
             raise CityError("Markets n'a retourné aucune observation exploitable. Vérifie l'accès réseau à FRED et DBnomics.")
-        news, news_errors = load_news()
-        market_news, market_news_errors = fetch_global_news()
-        events, calendar_error = load_calendar(days_ahead=14, limit=20)
+        # Publications and agenda enrich the brief, but must not discard usable
+        # prices when one independent provider fails. Keep the snapshot required.
+        try:
+            news, news_errors = load_news()
+        except Exception as exc:
+            news, news_errors = [], [f"Publications officielles indisponibles ({type(exc).__name__})."]
+        try:
+            market_news, market_news_errors = fetch_global_news()
+        except Exception as exc:
+            market_news, market_news_errors = [], [f"Actualités de marché indisponibles ({type(exc).__name__})."]
+        try:
+            events, calendar_error = load_calendar(days_ahead=14, limit=20)
+        except Exception as exc:
+            events, calendar_error = [], f"Calendrier indisponible ({type(exc).__name__})."
+        warnings = [redact_diagnostic(error) for error in (
+            *news_errors[:3], *market_news_errors[:2], *([calendar_error] if calendar_error else []))]
         verified_news = [item for item in news if isinstance(item, NewsItem)]
         sentiment = _market_sentiment(points, [item for item in market_news if isinstance(item, NewsItem)])
         values = point_map(points)
@@ -165,13 +178,16 @@ def market_brief() -> dict:
             "fondé sur les variations observées et les titres des articles cités. "
             "Le contenu intégral des articles n'a pas été analysé ; ni les titres ni les cours ne prouvent une causalité.",
         ))
+        # Task reports and shared memory consume text, not the warnings field.
+        if warnings:
+            brief = "## Sources incomplètes\n" + "\n".join(f"- {warning}" for warning in warnings) + "\n\n" + brief
         market_count = sum(p.value is not None for p in points)
         return {"title": "Brief de marché", "as_of": datetime.now(timezone.utc).isoformat(),
                 "market_points": market_count,
                 "market_data": _market_readings(points),
                 "headlines": len(verified_news), "calendar_events": len(events),
                 "sentiment": sentiment, "data_status": status,
-                "warnings": [*news_errors[:3], *market_news_errors[:2], *([calendar_error] if calendar_error else [])],
+                "warnings": warnings,
                 "summary": " · ".join(part for part in (
                     sentiment['label'],
                     f"{market_count} série{'s' if market_count != 1 else ''} vérifiée{'s' if market_count != 1 else ''}",
