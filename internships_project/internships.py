@@ -2314,7 +2314,7 @@ def _deduplicate_opportunities(jobs: list[Opportunity]) -> list[Opportunity]:
         if (_excluded_employer(job.company) or not _market_relevant_with_context(job.title, job.description)
                 or (job.source != "JobTeaser · sitemap" and not _plausible_location(job.location))):
             continue
-        location_key = "paris-area" if _is_paris(job.location) else job.location.casefold()
+        location_key = "paris-area" if _is_paris(job.location) else _normalized_offer_text(job.location)
         # Identical role names can advertise separate internship, VIE or work-study contracts.
         key = (_canonical_title(job.title), _canonical_company(job.company), location_key, job.kind)
         previous = unique.get(key)
