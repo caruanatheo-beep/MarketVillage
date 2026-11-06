@@ -65,3 +65,59 @@ def test_noe_agent_rejects_invalid_history_and_delivers_serializable_valid_repor
         assert report["metrics"]["sharpe_rf_zero"] is None
         assert report["metrics"]["total_return"] == 0
         assert all(point["value"] == 1 for point in report["equity"])
+
+
+@pytest.mark.parametrize("invalid_date", [None, "not a date", "2025-02-30", 42, "2099-01-01", "2999-01-01"])
+def test_noe_agent_rejects_undated_or_future_history(monkeypatch, invalid_date):
+    prices = history([100 + i for i in range(200)])
+    dates = list(prices.index)
+    dates[10] = invalid_date  # Even dates before the trading window must be valid.
+
+    def fetch_history(self, ids, days):
+        return pd.DataFrame({"Date": dates, "S&P 500": prices.values}), []
+
+    monkeypatch.setattr(data.FredCollector, "fetch_history", fetch_history)
+
+    with pytest.raises(CityError, match="dates.*passées ou présentes"):
+        city_services.run_agent("finance_tutor", "test-user", {"operation": "quant_report"})
+
+
+def test_noe_report_dates_follow_usable_chronological_closes(monkeypatch):
+    prices = history([100 + i for i in range(200)])
+    baseline = city_specialists.backtest(prices)
+    # The provider can return unsorted dates and a final day without a close.
+    rows = list(zip(prices.index.strftime("%Y-%m-%d"), prices.values))
+    rows.append(("2025-07-20", None))
+    frame = pd.DataFrame(rows[::-1], columns=["Date", "S&P 500"])
+    monkeypatch.setattr(data.FredCollector, "fetch_history", lambda *args, **kwargs: (frame, []))
+
+    report = city_services.run_agent("finance_tutor", "test-user", {"operation": "quant_report"})
+
+    assert report["equity"] == baseline["equity"]
+    assert report["metrics"] == baseline["metrics"]
+    assert report["as_of"] == "2025-07-19"
+    assert report["as_of"] == report["equity"][-1]["date"]
+
+
+@pytest.mark.parametrize("last_date,eligible", [
+    ("2025-07-21T00:30:00+02:00", True),
+    ("2025-07-20T23:30:00-02:00", False),
+])
+def test_backtest_uses_utc_calendar_at_future_date_boundary(monkeypatch, last_date, eligible):
+    class FixedDatetime(city_specialists.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2025, 7, 20, 12, tzinfo=city_specialists.timezone.utc)
+
+    monkeypatch.setattr(city_specialists, "datetime", FixedDatetime)
+    prices = history([100 + i for i in range(200)])
+    dates = list(prices.index)
+    dates[-1] = last_date
+    prices.index = dates
+
+    if eligible:
+        result = city_specialists.backtest(prices)
+        assert result["equity"][-1]["date"] == "2025-07-20"
+    else:
+        with pytest.raises(CityError, match="dates.*passées ou présentes"):
+            city_specialists.backtest(prices)

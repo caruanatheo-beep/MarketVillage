@@ -235,7 +235,18 @@ def backtest(prices, *, lookback: int = 60, cost_bps: float = 10, strategy: str 
     """Long/cash, lagged close signal, next-close returns; no forward filling."""
     import numpy as np
     import pandas as pd
-    values = pd.to_numeric(prices, errors="coerce").dropna().sort_index()
+    date_error = "Historique invalide : dates connues, passées ou présentes requises (calendrier UTC). Aucun résultat de backtest publié."
+    # Numeric indices would otherwise be interpreted as nanoseconds since 1970.
+    # Validate before sorting or dropping prices, including the warm-up window.
+    if any(pd.api.types.is_number(value) for value in prices.index):
+        raise CityError(date_error)
+    dates = pd.to_datetime(prices.index, errors="coerce", utc=True, format="mixed").normalize()
+    today = pd.Timestamp(datetime.now(timezone.utc)).normalize()
+    if dates.isna().any() or (dates > today).any():
+        raise CityError(date_error)
+    values = pd.to_numeric(prices, errors="coerce").copy()
+    values.index = dates
+    values = values.dropna().sort_index(kind="stable")
     values = values[~values.index.duplicated(keep="last")]
     if not np.isfinite(values).all():
         raise CityError("Historique invalide : les clôtures doivent être positives et finies. Aucun résultat de backtest publié.")
@@ -291,7 +302,7 @@ def quant_report(parameters: dict) -> dict:
     result = backtest(prices, lookback=int(parameters.get("lookback", 60)), cost_bps=float(parameters.get("cost_bps", 10)), strategy=str(parameters.get("strategy") or "momentum"))
     metrics = result["metrics"]
     return {**result, "title": "Noé · recherche quantitative", "source": f"https://fred.stlouisfed.org/series/{series_id}",
-            "as_of": str(frame.Date.max())[:10], "strategy": parameters.get("strategy", "momentum"), "role_version": VERSION,
+            "as_of": result["equity"][-1]["date"], "strategy": parameters.get("strategy", "momentum"), "role_version": VERSION,
             "text": f"Indice prix {series_id}, {result['equity'][0]['date']} à {result['equity'][-1]['date']}. "
             f"Rendement net {metrics['total_return']:.2%} ; volatilité annualisée {metrics['annualized_volatility']:.2%} ; "
             f"Sharpe (taux sans risque=0) {metrics['sharpe_rf_zero']} ; max drawdown {metrics['max_drawdown']:.2%}. "
