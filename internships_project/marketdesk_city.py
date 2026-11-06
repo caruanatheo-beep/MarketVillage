@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import heapq
 import logging
 import math
 import os
@@ -15,6 +16,7 @@ import uuid
 from collections import Counter
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
+from itertools import islice
 from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -1157,40 +1159,46 @@ class CityStore:
         if not isinstance(limit, int):
             limit = 8
         limit = max(1, min(20, limit))
-        with self.db() as db:
-            rows = [dict(row) for row in db.execute(
-                "SELECT id,agent_id,kind,title,content,metadata_json,created_at,updated_at "
-                "FROM city_memory WHERE username=? ORDER BY updated_at DESC LIMIT 1200", (username,))]
         query_tokens = _memory_tokens(query)
         expanded = set(query_tokens)
         for token in query_tokens:
             expanded.update(_MEMORY_SYNONYMS.get(token, ()))
-        scored = []
-        for row in rows:
-            metadata = json.loads(row["metadata_json"] or "{}")
-            if agent_id and row["kind"] == "outreach_draft" and agent_id != "outreach_agent":
-                continue
-            tags = metadata.get("tags", []) if isinstance(metadata, dict) else []
-            title_tokens = _memory_tokens(row["title"] + " " + " ".join(map(str, tags)))
-            body_tokens = _memory_tokens(row["content"] + " " + json.dumps(metadata, ensure_ascii=False))
-            counts = Counter(body_tokens)
-            for token in title_tokens:
-                counts[token] += 3
-            if query_tokens:
-                overlap = sum(min(3, counts[token]) for token in expanded)
-                if not overlap:
+        def scored_rows(rows):
+            for row in rows:
+                metadata = json.loads(row["metadata_json"] or "{}")
+                if agent_id and row["kind"] == "outreach_draft" and agent_id != "outreach_agent":
                     continue
-                length_norm = math.sqrt(max(1, len(body_tokens)))
-                phrase_bonus = 2.0 if len(query) > 3 and query.casefold() in (row["title"] + " " + row["content"]).casefold() else 0.0
-                score = overlap / length_norm + phrase_bonus + (0.8 if agent_id and row["agent_id"] == agent_id else 0)
-            else:
-                score = 0.0
-            scored.append((score, row, metadata))
-        scored.sort(key=lambda item: (item[0], item[1]["updated_at"]), reverse=True)
+                tags = metadata.get("tags", []) if isinstance(metadata, dict) else []
+                title_tokens = _memory_tokens(row["title"] + " " + " ".join(map(str, tags)))
+                body_tokens = _memory_tokens(row["content"] + " " + json.dumps(metadata, ensure_ascii=False))
+                counts = Counter(body_tokens)
+                for token in title_tokens:
+                    counts[token] += 3
+                if query_tokens:
+                    overlap = sum(min(3, counts[token]) for token in expanded)
+                    if not overlap:
+                        continue
+                    length_norm = math.sqrt(max(1, len(body_tokens)))
+                    phrase_bonus = 2.0 if len(query) > 3 and query.casefold() in (row["title"] + " " + row["content"]).casefold() else 0.0
+                    score = overlap / length_norm + phrase_bonus + (0.8 if agent_id and row["agent_id"] == agent_id else 0)
+                else:
+                    score = 0.0
+                yield score, row, metadata
+
+        with self.db() as db:
+            rows = db.execute(
+                "SELECT id,agent_id,kind,title,content,metadata_json,created_at,updated_at "
+                "FROM city_memory WHERE username=? ORDER BY updated_at DESC", (username,))
+            # Search the full history, retaining only the best matches. The
+            # default recent view can stop as soon as enough eligible rows exist.
+            candidates = scored_rows(rows)
+            scored = (heapq.nlargest(limit, candidates,
+                                     key=lambda item: (item[0], item[1]["updated_at"]))
+                      if query_tokens else list(islice(candidates, limit)))
         return [{"id": row["id"], "agent_id": row["agent_id"], "kind": row["kind"],
                  "title": row["title"], "content": row["content"][:2200], "metadata": metadata,
                  "created_at": row["created_at"], "updated_at": row["updated_at"], "score": round(score, 3)}
-                for score, row, metadata in scored[:limit]]
+                for score, row, metadata in scored]
 
     def shared_results(self, username: str, agent_id: str = "", limit: int = 6) -> list[dict]:
         if agent_id and agent_id not in AGENT_BY_ID:
