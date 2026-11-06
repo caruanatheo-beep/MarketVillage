@@ -59,14 +59,18 @@ def market_news() -> dict:
         try:
             # News providers emit "YYYY-MM-DD HH:MM UTC"; accept ISO dates too.
             stamp = datetime.fromisoformat(raw_date.replace(" UTC", "+00:00").replace("Z", "+00:00"))
-            stamp = stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None else stamp
-            timestamp = stamp.timestamp()
-        except ValueError:
-            timestamp = float("-inf")
-        articles.append((timestamp, {"title": item.title, "publisher": str(getattr(item, "source", "")),
+            stamp = (stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None
+                     else stamp.astimezone(timezone.utc))
+        except (ValueError, OverflowError):
+            stamp = None
+        articles.append((stamp, {"title": item.title, "publisher": str(getattr(item, "source", "")),
                                     "published": raw_date, "url": item.url,
-                                    "date_known": timestamp != float("-inf")}))
-    articles.sort(key=lambda row: (-row[0], row[1]["url"]))
+                                    "date_known": stamp is not None}))
+    # Stable sorts preserve URL order for ties, without platform-dependent
+    # timestamps. Unrepresentable UTC dates must not replace a dated duplicate.
+    articles.sort(key=lambda row: row[1]["url"])
+    articles.sort(key=lambda row: (row[0] is not None,
+                                  row[0] or datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
     seen, unique = set(), []
     for _, article in articles:
         key = article["url"].split("#")[0].rstrip("/") or search_text(article["title"])
