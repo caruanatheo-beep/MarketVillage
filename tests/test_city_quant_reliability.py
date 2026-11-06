@@ -77,6 +77,33 @@ def test_severe_loss_with_positive_capital_remains_reportable():
     json.dumps(result, allow_nan=False)
 
 
+@pytest.mark.parametrize("final_factor", [1e-8, 1 + 1e-8])
+def test_noe_published_capital_preserves_small_balances_and_moves(monkeypatch, final_factor):
+    # Enter a long position after the warm-up, then apply one final movement.
+    # Rounding to six decimals used to turn these into zero capital or no gain.
+    prices = history([100.0 + i for i in range(160)])
+    capital_before_move = prices.iloc[-2] / prices.iloc[60]
+    prices.iloc[-1] = prices.iloc[-2]
+    prices.iloc[-1] *= final_factor
+
+    def fetch_history(self, ids, days):
+        return pd.DataFrame({"Date": prices.index, "S&P 500": prices.values}), []
+
+    monkeypatch.setattr(data.FredCollector, "fetch_history", fetch_history)
+
+    report = city_services.run_agent("finance_tutor", "test-user", {
+        "operation": "quant_report", "cost_bps": 0})
+    published = json.loads(json.dumps(report, allow_nan=False))
+    capital = published["equity"][-1]["value"]
+
+    assert capital > 0
+    assert capital != published["equity"][-2]["value"]
+    assert capital == pytest.approx(capital_before_move * final_factor, rel=1e-8, abs=0)
+    assert capital - 1 == published["metrics"]["total_return"]
+    assert published["equity"][-2]["value"] == pytest.approx(capital_before_move)
+    assert published["as_of"] == prices.index[-1].date().isoformat()
+
+
 def test_underflowing_capital_does_not_publish_a_flat_zero_equity_curve():
     prices = history([10 ** (300 - i * 600 / 159) for i in range(160)])
 

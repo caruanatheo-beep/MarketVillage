@@ -288,7 +288,9 @@ def backtest(prices, *, lookback: int = 60, cost_bps: float = 10, strategy: str 
         raise CityError("Calculs de backtest non finis : historique trop extrême. Aucun résultat publié.")
     # Inline SVG from numeric values only; survives the existing Markdown result viewer.
     points = " ".join(f"{i*480/max(1,len(equity)-1):.1f},{100-(v-float(equity.min()))/max(.001,float(equity.max()-equity.min()))*90:.1f}" for i, v in enumerate(equity))
-    return {"metrics": metrics, "equity": [{"date": str(d)[:10], "value": round(float(v), 6)} for d,v in equity.items()],
+    # Preserve computed capital in the published curve: fixed decimal rounding
+    # can erase small moves or turn a valid positive balance into zero.
+    return {"metrics": metrics, "equity": [{"date": str(d)[:10], "value": float(v)} for d,v in equity.items()],
             "chart_svg": f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 110"><polyline fill="none" stroke="#8b9cfa" stroke-width="2" points="{points}"/></svg>'}
 
 
