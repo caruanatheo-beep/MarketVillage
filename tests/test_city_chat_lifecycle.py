@@ -119,6 +119,76 @@ def test_chat_deadline_cancels_stalled_agent_and_reports_error(chat, monkeypatch
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("finalization", ["completed", "failed", "stalled"])
+def test_chat_waits_for_stream_finalization_before_saving_success(chat, monkeypatch, finalization):
+    store, messages = chat
+    turns, receipts = [], []
+    store.save_chat_turn = lambda *args: turns.append(args)
+    monkeypatch.setattr(city_chat, "record_response", lambda *args: receipts.append(args))
+    monkeypatch.setenv("MARKETDESK_CITY_CHAT_TIMEOUT", "15")
+    real_timeout = asyncio.timeout
+    monkeypatch.setattr(city_chat.asyncio, "timeout", lambda _: real_timeout(0.05))
+
+    async def scenario():
+        finalizing = asyncio.Event()
+        release = asyncio.Event()
+        closed = asyncio.Event()
+
+        async def stream_text(**kwargs):
+            yield "Complete answer"
+
+        @asynccontextmanager
+        async def run_stream(*args, **kwargs):
+            try:
+                yield SimpleNamespace(
+                    stream_text=stream_text,
+                    usage=SimpleNamespace(input_tokens=10, output_tokens=3, cache_read_tokens=0),
+                    new_messages_json=lambda: b"[]",
+                )
+                finalizing.set()
+                await release.wait()
+                if finalization == "failed":
+                    raise RuntimeError("synthetic stream finalization failure")
+            finally:
+                closed.set()
+
+        monkeypatch.setattr(city_chat, "build_agent", lambda *args: SimpleNamespace(run_stream=run_stream))
+        events = city_chat.stream_chat(store, "test-user", "desk_manager", "Hello")
+        try:
+            assert json.loads(await anext(events))["type"] == "status"
+            assert json.loads(await anext(events))["type"] == "delta"
+            await asyncio.wait_for(finalizing.wait(), 1)
+            assert turns == []
+            assert receipts == []
+            assert [row[2] for row in messages] == ["user"]
+            if finalization != "stalled":
+                release.set()
+
+            async def collect():
+                return [json.loads(event) async for event in events]
+
+            remaining = await asyncio.wait_for(collect(), 1)
+            assert closed.is_set()
+            if finalization == "completed":
+                assert [event["type"] for event in remaining] == ["done"]
+                assert turns == [("test-user", "desk_manager", "[]")]
+                assert [row[2] for row in messages] == ["user", "assistant"]
+                assert messages[-1][3] == "Complete answer"
+                assert len(receipts) == 1
+            else:
+                assert [event["type"] for event in remaining] == ["error"]
+                assert turns == receipts == []
+                assert [row[2] for row in messages] == ["user"]
+                if finalization == "stalled":
+                    assert "15 secondes" in remaining[0]["text"]
+                else:
+                    assert "synthetic stream" not in remaining[0]["text"]
+        finally:
+            await events.aclose()
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize("cancel_waiting", [False, True])
 def test_http_stream_closes_inner_chat_on_disconnect(chat, monkeypatch, cancel_waiting):
     store, _ = chat

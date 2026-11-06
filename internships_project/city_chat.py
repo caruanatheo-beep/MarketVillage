@@ -107,18 +107,21 @@ async def stream_chat(store: CityStore, username: str, agent_id: str, message: s
                     if not answer:
                         raise CityError("L'agent n'a renvoyé aucun texte. Tu peux réessayer.")
                     usage = run.usage
-                    store.save_chat_turn(username, agent_id, run.new_messages_json().decode("utf-8"))
-                    store.append_chat_message(username, agent_id, "assistant", answer, model,
-                                              input_tokens=usage.input_tokens,
-                                              output_tokens=usage.output_tokens,
-                                              tool_calls=deps.calls)
-                    record_response(f"city_chat:{agent_id}", model, {
-                        "model": model, "usage": {"input_tokens": usage.input_tokens,
-                        "output_tokens": usage.output_tokens,
-                        "input_tokens_details": {"cached_tokens": usage.cache_read_tokens}}})
-                    await queue.put({"type": "done", "model": model,
-                                     "usage": {"input_tokens": usage.input_tokens,
-                                               "output_tokens": usage.output_tokens}})
+                    messages_json = run.new_messages_json().decode("utf-8")
+                # Stream finalization can still fail or exceed the deadline.
+                # Publish success only after both context managers have closed.
+                store.save_chat_turn(username, agent_id, messages_json)
+                store.append_chat_message(username, agent_id, "assistant", answer, model,
+                                          input_tokens=usage.input_tokens,
+                                          output_tokens=usage.output_tokens,
+                                          tool_calls=deps.calls)
+                record_response(f"city_chat:{agent_id}", model, {
+                    "model": model, "usage": {"input_tokens": usage.input_tokens,
+                    "output_tokens": usage.output_tokens,
+                    "input_tokens_details": {"cached_tokens": usage.cache_read_tokens}}})
+                await queue.put({"type": "done", "model": model,
+                                 "usage": {"input_tokens": usage.input_tokens,
+                                           "output_tokens": usage.output_tokens}})
         except GenerationLimitError as exc:
             await queue.put({"type": "error", "text": str(exc)})
         except CityError as exc:
