@@ -133,6 +133,47 @@ class DeduplicationTests(unittest.TestCase):
                 self.assertEqual(result[0].start_period, april.start_period)
                 self.assertEqual(matching_opportunities(result, earliest="2027-04"), result)
 
+    def test_direct_sources_keep_known_start_in_either_order(self):
+        career = replace(self.offer, source="Career site",
+                         description="Trading desk details")
+        feed = replace(self.offer, source="Public feed", start_period="April 2027",
+                       url="https://example.invalid/feed")
+        for ordered in permutations([career, feed]):
+            with self.subTest(order=[job.source for job in ordered]):
+                result = _deduplicate_opportunities(list(ordered))
+                self.assertEqual(len(result), 1)
+                self.assertEqual(result[0].url, ordered[0].url)
+                self.assertEqual(result[0].source, ordered[0].source)
+                self.assertEqual(result[0].start_period, feed.start_period)
+                self.assertEqual(matching_opportunities(result, earliest="2027-04"), result)
+                self.assertEqual(matching_opportunities(result, earliest="2027-05"), [])
+
+    def test_direct_sources_do_not_assign_an_ambiguous_start(self):
+        unknown = replace(self.offer, source="Career site")
+        april = replace(self.offer, source="Public feed", start_period="April 2027",
+                        url="https://example.invalid/april")
+        september = replace(april, start_period="September 2027",
+                            url="https://example.invalid/september")
+        for ordered in permutations([unknown, april, september]):
+            result = _deduplicate_opportunities(list(ordered))
+            self.assertCountEqual(result, [unknown, april, september])
+            self.assertEqual(matching_opportunities(result, earliest="2027-09"), [september])
+
+    def test_progressive_refresh_keeps_start_from_another_direct_source(self):
+        career = replace(self.offer, source="Career site")
+        feed = replace(self.offer, source="Public feed", start_period="April 2027",
+                       url="https://example.invalid/feed")
+        now = datetime(2026, 11, 5, tzinfo=timezone.utc)
+        writer = Mock()
+        with patch.multiple(internships, _cache=None, _last_attempt=now,
+                            _refresh_previous_jobs={career.url: career},
+                            _refresh_first_seen={}, _write_cache=writer):
+            internships._publish_refresh_progress([feed], [])
+            jobs = internships._cache[1]
+            self.assertEqual(jobs, [replace(career, start_period=feed.start_period)])
+            self.assertEqual(matching_opportunities(jobs, earliest="2027-04"), jobs)
+            writer.assert_called_once_with(now, jobs, [])
+
     def test_same_contract_still_merges_normalized_title_and_paris_area(self):
         duplicate = replace(self.offer, title="Stage - Assistant Trading",
                             location="La Défense", url="https://example.invalid/duplicate")

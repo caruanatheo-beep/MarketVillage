@@ -2352,6 +2352,10 @@ def _deduplicate_opportunities(jobs: list[Opportunity]) -> list[Opportunity]:
                 preferred, other = job, previous
             else:
                 preferred, other = previous, job
+            # Cohort grouping above makes a known start safe to share across
+            # sources without changing the selected posting or its provenance.
+            if other is not None and not preferred.start_period and start_month(other.start_period):
+                preferred = replace(preferred, start_period=other.start_period)
             unique[month] = (_merge_duplicate_publication(preferred, other)
                              if other is not None else preferred)
         deduplicated.extend(unique.values())
