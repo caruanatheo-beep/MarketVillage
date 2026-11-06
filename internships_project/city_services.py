@@ -258,6 +258,7 @@ def _market_sentiment(points: list, news: list) -> dict:
 
     values = point_map(points)
     signals = []
+    signal_dates = {}
     spx, vix, hy = (values.get(key) for key in ("SP500", "VIXCLS", "BAMLH0A0HYM2"))
     def recent(point) -> bool:
         # An unusable observation must not contribute a directional signal.
@@ -270,19 +271,23 @@ def _market_sentiment(points: list, news: list) -> dict:
         move = spx.change / spx.previous * 100
         if math.isfinite(move) and abs(move) >= 0.5:
             signals.append(("Actions", -1 if move < 0 else 1, f"S&P 500 {move:+.2f}%"))
+            signal_dates["Actions"] = _news_timestamp(spx.date).date().isoformat()
     if vix and recent(vix) and vix.previous and vix.change is not None:
         move = vix.change / vix.previous * 100
         if math.isfinite(move) and abs(move) >= 5:
             signals.append(("Volatilité", -1 if move > 0 else 1, f"VIX {move:+.2f}%"))
+            signal_dates["Volatilité"] = _news_timestamp(vix.date).date().isoformat()
     if hy and recent(hy) and hy.change is not None:
         move = hy.change * 100
         if math.isfinite(move) and abs(move) >= 3:
             signals.append(("Crédit", -1 if move > 0 else 1, f"spread HY {move:+.1f} pb"))
+            signal_dates["Crédit"] = _news_timestamp(hy.date).date().isoformat()
     defensive = sum(direction < 0 for _, direction, _ in signals)
     constructive = sum(direction > 0 for _, direction, _ in signals)
-    if defensive >= 2 and defensive > constructive:
+    comparable = len(set(signal_dates.values())) <= 1
+    if comparable and defensive >= 2 and defensive > constructive:
         label, direction = "Défensif", -1
-    elif constructive >= 2 and constructive > defensive:
+    elif comparable and constructive >= 2 and constructive > defensive:
         label, direction = "Constructif", 1
     else:
         label, direction = "Mitigé", 0
@@ -292,6 +297,10 @@ def _market_sentiment(points: list, news: list) -> dict:
                "Cette combinaison suggère un appétit pour le risque plus ferme. " if direction == 1 else
                "Les signaux ne convergent pas assez pour conclure. ")
     explanation = f"{detail}. {reading}"
+    if not comparable:
+        explanation += ("Les variations proviennent de dates d'observation différentes ; "
+                        "elles ne permettent pas de conclure à un mouvement de marché commun. "
+                        + "; ".join(f"{name} : {day}" for name, day in signal_dates.items()) + ". ")
     if opposition:
         explanation += f"{opposition} indicateur va dans le sens opposé. "
     if hy and recent(hy) and hy.change is not None and abs(hy.change * 100) < 3:
@@ -325,6 +334,7 @@ def _market_sentiment(points: list, news: list) -> dict:
     confidence = "modérée" if direction and len(signals) >= 2 and supporting else "faible"
     return {"label": label, "confidence": confidence, "explanation": explanation.strip(),
             "signals": [move for _, _, move in signals],
+            "signal_dates": signal_dates,
             "supporting_news": [{"title": item.title, "url": item.url, "source": item.source,
                                  "published": item.published} for item in supporting]}
 
