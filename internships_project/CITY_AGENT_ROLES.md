@@ -30,17 +30,20 @@ sont accessibles dans Réglages. Le chat du Manager et les contacts conservent l
 
 Iris et le Desk Manager conservent leurs autres responsabilités.
 
-Du 4 novembre au 3 décembre 2026 inclus, chaque agent de développement reçoit deux
+Du 4 novembre au 3 décembre 2026 inclus, chaque agent de développement reçoit six
 missions quotidiennes. Le choix du changement concret lui appartient. Jusqu'à quatre
 missions de développement peuvent s'exécuter ensemble, une par agent et par compte,
 dans des worktrees Git distincts, avec Codex connecté à
 l'abonnement ChatGPT et `gpt-6.1-sol` en raisonnement moyen. Aucun appel API payant
 n'est utilisé pour ce développement. Le réglage « Missions simultanées » de chaque
-compte s'applique aussi. Avant chaque lancement, City lit l'utilisation
-des fenêtres de quota Codex et reporte la mission si l'une atteint 70 % ou si la
-mesure est indisponible. Dans ces cas City reporte la mission d'une heure et réessaie.
-Ce seuil protège une réserve d'usage ; il ne représente
-pas un pourcentage garanti de consommation quotidienne.
+compte s'applique aussi. Avant chaque nouvel appel Codex des programmeurs, de Jules
+ou de Clara,
+City lit la fenêtre hebdomadaire et compare sa progression à un budget commun de
+1/7 du quota par jour (14,3 points), remis à zéro à minuit heure de Paris.
+Si le budget est atteint, le développement reprend le lendemain ; si la mesure est
+indisponible, City réessaie une heure plus tard.
+Une mission déjà lancée peut faire dépasser ce seuil ; il ne s'agit pas d'un plafond
+imposé par OpenAI à l'abonnement.
 
 City contrôle le périmètre des fichiers, la syntaxe Python, un test ciblé et le build
 frontend lorsque nécessaire. Les intégrations sont successives : si une autre mission

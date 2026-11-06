@@ -38,6 +38,7 @@ def repo(tmp_path,monkeypatch):
     monkeypatch.setattr(coding,'repo_root',lambda:root)
     monkeypatch.setattr(coding,'codex_binary',lambda:'fixture-codex')
     monkeypatch.setattr(coding,'require_chatgpt',lambda *args:None)
+    monkeypatch.setattr(coding,'codex_usage_percent',lambda *_:0)
     return root,git
 
 
@@ -133,13 +134,50 @@ def test_autonomous_engineer_integrates_validated_code_without_approval(repo, mo
     assert (root/'internships_project/city_sample.py').read_text() == 'value = 2\n'
 
 
-def test_codex_usage_stop_prevents_a_new_worktree(repo, monkeypatch):
+def test_codex_daily_budget_prevents_a_new_worktree(repo, store, monkeypatch):
     root, _ = repo
-    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: coding.CODEX_USAGE_STOP_PERCENT)
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 60)
+    coding.require_daily_codex_budget('codex', {})
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 60 + coding.CODEX_DAILY_USAGE_PERCENT)
     monkeypatch.setattr(coding, '_execute', lambda *_args: pytest.fail('Codex must stay stopped'))
-    with pytest.raises(CityError, match='60 %'):
+    with pytest.raises(CityError, match='budget Codex quotidien'):
         coding.implement_change('9'*32, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
     assert not (root/'.city-worktrees'/('9'*32)).exists()
+
+
+def test_codex_daily_budget_reads_weekly_window_only():
+    assert coding._weekly_usage_percent({'codex': {
+        'primary': {'usedPercent': 85, 'windowDurationMins': 300},
+        'secondary': {'usedPercent': 23, 'windowDurationMins': 10080}}}) == 23
+    assert coding._weekly_usage_percent({'codex': {
+        'primary': {'usedPercent': 23, 'windowDurationMins': 10080}}}) == 23
+    with pytest.raises(CityError, match='Quota Codex indisponible'):
+        coding._weekly_usage_percent({'codex': {'primary': {'usedPercent': 85, 'windowDurationMins': 300}}})
+
+
+def test_codex_daily_budget_resets_on_new_day_and_weekly_reset(store, monkeypatch):
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    today = datetime(2026, 11, 6, 10, tzinfo=ZoneInfo('Europe/Paris'))
+    current = [today]
+    used = [62.0]
+    monkeypatch.setattr(coding, 'datetime', SimpleNamespace(now=lambda _tz: current[0]))
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: used[0])
+    coding.require_daily_codex_budget('codex', {})
+    used[0] = 75.0
+    coding.require_daily_codex_budget('codex', {})
+    used[0] = 77.0
+    with pytest.raises(CityError, match='budget Codex quotidien'):
+        coding.require_daily_codex_budget('codex', {})
+    current[0] = today + timedelta(days=1)
+    coding.require_daily_codex_budget('codex', {})
+    used[0] = 2.0  # Subscription's weekly window reset during the day.
+    coding.require_daily_codex_budget('codex', {})
+    used[0] = 13.0
+    coding.require_daily_codex_budget('codex', {})
+    used[0] = 15.0
+    with pytest.raises(CityError, match='budget Codex quotidien'):
+        coding.require_daily_codex_budget('codex', {})
 
 
 def test_autonomous_worktree_resumes_after_main_becomes_clean(repo, monkeypatch):
@@ -335,6 +373,21 @@ def test_unavailable_codex_quota_defers_coding_without_losing_mission(store, mon
                                        (task['id'],)).fetchone()
     assert status == 'queued' and scheduled > task['created_at']
     assert store.claim_next() is None
+
+
+def test_daily_codex_budget_retries_on_next_paris_day(store, monkeypatch):
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    task = store.create_task('alice', 'job_hunter', 'Développement autonome', {'operation': 'develop'})
+    monkeypatch.setattr(coding, 'implement_change', lambda *_args, **_kwargs: (
+        (_ for _ in ()).throw(CityError('Développement reporté : budget Codex quotidien atteint.'))))
+    assert CityWorker(store).run_once()
+    with store.db() as db:
+        status, scheduled = db.execute('SELECT status,scheduled_at FROM city_tasks WHERE id=?',
+                                       (task['id'],)).fetchone()
+    tomorrow = datetime.now(ZoneInfo('Europe/Paris')).date() + timedelta(days=1)
+    assert status == 'queued'
+    assert datetime.fromisoformat(scheduled).astimezone(ZoneInfo('Europe/Paris')).date() == tomorrow
 
 
 def test_market_collection_without_data_is_retried(store, monkeypatch):

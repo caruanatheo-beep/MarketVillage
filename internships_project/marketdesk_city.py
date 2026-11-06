@@ -1308,15 +1308,24 @@ class CityStore:
                 db.execute("UPDATE city_tasks SET heartbeat_at=? WHERE id=?", (_utc(), task_id))
                 self._event(db, task, 'running', message)
 
-    def defer_coding(self, task_id: str, reason: str, *, delay_minutes: int = 60) -> None:
-        next_try = (datetime.now(timezone.utc) + timedelta(minutes=delay_minutes)).isoformat(timespec='seconds')
+    def defer_coding(self, task_id: str, reason: str, *, delay_minutes: int = 60,
+                     until_next_day: bool = False) -> None:
+        if until_next_day:
+            from zoneinfo import ZoneInfo
+            paris = ZoneInfo('Europe/Paris')
+            tomorrow = datetime.now(paris).date() + timedelta(days=1)
+            next_try = datetime.combine(tomorrow, datetime.min.time(), paris).astimezone(timezone.utc).isoformat(timespec='seconds')
+            retry_message = ' Nouvelle tentative demain.'
+        else:
+            next_try = (datetime.now(timezone.utc) + timedelta(minutes=delay_minutes)).isoformat(timespec='seconds')
+            retry_message = f' Nouvelle tentative dans {delay_minutes} minutes.'
         with self.db() as db:
             task = db.execute("SELECT * FROM city_tasks WHERE id=? AND status='running'", (task_id,)).fetchone()
             if not task:
                 return
             db.execute("UPDATE city_tasks SET status='queued',scheduled_at=?,started_at=NULL,heartbeat_at=NULL "
                        "WHERE id=?", (next_try, task_id))
-            self._event(db, task, 'queued', reason + f' Nouvelle tentative dans {delay_minutes} minutes.')
+            self._event(db, task, 'queued', reason + retry_message)
 
     @classmethod
     def _remember_task_result(cls, db, task: dict, result: dict) -> None:
@@ -2031,9 +2040,10 @@ class CityWorker:
             # Public logs and the UI receive only the exception type for unknown errors.
             from .llm_usage import GenerationLimitError
             safe = str(exc) if isinstance(exc, (CityError, GenerationLimitError)) else f"Erreur de mission ({type(exc).__name__})."
-            if (parameters.get('operation') == 'develop' and isinstance(exc, CityError)
+            if (parameters.get('operation') in ('develop', 'repository_audit') and isinstance(exc, CityError)
                     and safe.startswith(('Quota Codex indisponible', 'Développement reporté', 'Connecte Codex'))):
-                self.store.defer_coding(task['id'], safe)
+                self.store.defer_coding(task['id'], safe,
+                                        until_next_day=safe.startswith('Développement reporté'))
             elif (parameters.get('operation') == 'develop' and isinstance(exc, CityError)
                     and safe in ('Développement suspendu : le dépôt courant contient des modifications locales suivies.',
                                  'Intégration suspendue : le dépôt courant contient des modifications locales suivies.',

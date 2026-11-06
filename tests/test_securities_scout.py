@@ -156,9 +156,12 @@ def test_clara_codex_fallback_obeys_subscription_stop(tmp_path, monkeypatch):
     monkeypatch.setattr(city_coding, 'codex_binary', lambda: 'codex')
     monkeypatch.setattr(city_coding, 'codex_environment', lambda: {})
     monkeypatch.setattr(city_coding, 'require_chatgpt', lambda *_args: None)
-    monkeypatch.setattr(city_coding, 'codex_usage_percent', lambda *_args: 60)
+    usage = [60.0]
+    monkeypatch.setattr(city_coding, 'codex_usage_percent', lambda *_args: usage[0])
+    city_coding.require_daily_codex_budget('codex', {})
+    usage[0] += city_coding.CODEX_DAILY_USAGE_PERCENT
     monkeypatch.setattr(city_coding, '_execute', lambda *_args, **_kwargs:
                         pytest.fail('Codex must not run at the quota stop'))
 
-    with pytest.raises(CityError, match='limite de consommation Codex'):
+    with pytest.raises(CityError, match='budget Codex quotidien'):
         network.discover_service_contacts('alice')

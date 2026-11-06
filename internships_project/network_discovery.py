@@ -614,13 +614,12 @@ def import_assisted_page(username: str, payload: dict) -> dict:
 def _search_service_contacts_with_codex() -> list[dict]:
     """One subscription-backed search when both free public engines are unavailable."""
     from .marketdesk_city import CityError
-    from .city_coding import (CODEX_USAGE_STOP_PERCENT, _execute, codex_binary,
-                              codex_environment, codex_usage_percent, require_chatgpt)
+    from .city_coding import (_execute, codex_binary, codex_environment,
+                              require_chatgpt, require_daily_codex_budget)
 
     binary, env = codex_binary(), codex_environment()
     require_chatgpt(binary, env)
-    if codex_usage_percent(binary, env) >= CODEX_USAGE_STOP_PERCENT:
-        raise CityError('Recherche de Clara reportée : limite de consommation Codex atteinte.')
+    require_daily_codex_budget(binary, env, activity='Recherche de Clara')
     with tempfile.TemporaryDirectory(prefix='clara-search-') as temporary:
         directory = Path(temporary)
         schema = directory / 'schema.json'

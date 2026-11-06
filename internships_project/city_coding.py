@@ -2,23 +2,27 @@
 from __future__ import annotations
 
 import difflib
+from datetime import datetime
 import json
 import os
 from pathlib import Path
 from queue import Empty, Queue
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import threading
 from typing import Callable
+from zoneinfo import ZoneInfo
 
 from .marketdesk_city import AGENT_BY_ID, CityError
 from .city_specialists import VERSION, git, repo_root, approved_base, branch_context
+from . import state_store
 
 _integration_lock = threading.Lock()
-CODEX_USAGE_STOP_PERCENT = 60
+CODEX_DAILY_USAGE_PERCENT = 100 / 7
 
 
 def codex_binary() -> str:
@@ -80,12 +84,7 @@ def codex_usage_percent(binary: str, env: dict) -> float:
                     break
         limits = reply.get('result', {}).get('rateLimitsByLimitId') or {
             'codex': reply.get('result', {}).get('rateLimits') or {}}
-        percentages = [window['usedPercent'] for bucket in limits.values() if isinstance(bucket, dict)
-                       for window in (bucket.get('primary'), bucket.get('secondary'))
-                       if isinstance(window, dict) and isinstance(window.get('usedPercent'), (int, float))]
-        if not percentages:
-            raise CityError('Quota Codex indisponible : missions de développement suspendues.')
-        return max(percentages)
+        return _weekly_usage_percent(limits)
     except (OSError, Empty, ValueError, TypeError, BrokenPipeError) as exc:
         raise CityError('Quota Codex indisponible : missions de développement suspendues.') from exc
     finally:
@@ -96,6 +95,40 @@ def codex_usage_percent(binary: str, env: dict) -> float:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 process.kill()
+
+
+def _weekly_usage_percent(limits: dict) -> float:
+    weekly = [window['usedPercent'] for bucket in limits.values() if isinstance(bucket, dict)
+              for window in (bucket.get('primary'), bucket.get('secondary'))
+              if isinstance(window, dict) and window.get('windowDurationMins') == 10080
+              and isinstance(window.get('usedPercent'), (int, float))]
+    if not weekly:
+        raise CityError('Quota Codex indisponible : missions de développement suspendues.')
+    return max(weekly)
+
+
+def require_daily_codex_budget(binary: str, env: dict, *, activity: str = 'Développement') -> None:
+    """Share one Paris-day slice of the weekly Codex quota across City agents."""
+    used = codex_usage_percent(binary, env)
+    if used >= 100:
+        raise CityError(f'{activity} reporté : quota Codex hebdomadaire épuisé.')
+    day = datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
+    path = state_store.USER_DB_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path, timeout=15) as db:
+        db.execute('BEGIN IMMEDIATE')
+        db.execute('CREATE TABLE IF NOT EXISTS city_codex_daily_usage ('
+                   'day TEXT PRIMARY KEY, baseline REAL NOT NULL, last_seen REAL NOT NULL)')
+        row = db.execute('SELECT baseline,last_seen FROM city_codex_daily_usage WHERE day=?', (day,)).fetchone()
+        baseline = used if row is None else row[0]
+        if row is not None and used < row[1]:
+            baseline = 0  # The weekly window reset during this Paris day.
+        db.execute('INSERT OR REPLACE INTO city_codex_daily_usage VALUES(?,?,?)',
+                   (day, baseline, used))
+        db.execute('DELETE FROM city_codex_daily_usage WHERE day<?', (day,))
+    if used - baseline >= CODEX_DAILY_USAGE_PERCENT:
+        raise CityError(f'{activity} reporté : budget Codex quotidien atteint '
+                        f'({CODEX_DAILY_USAGE_PERCENT:.1f} points du quota hebdomadaire).')
 
 
 def change_proposal(request: str) -> dict:
@@ -118,6 +151,7 @@ def review_repository() -> dict:
     root = repo_root()
     binary, env = codex_binary(), codex_environment()
     require_chatgpt(binary, env)
+    require_daily_codex_budget(binary, env)
     revision = git(root,'rev-parse','HEAD')
     candidates = git(root,'ls-files','--','internships_project/city_*.py',
                      'internships_project/marketdesk_city.py',
@@ -247,8 +281,7 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
     site_packages = root/'.venv'/'Lib'/'site-packages'
     if site_packages.is_dir():
         env['MARKETDESK_TEST_SITE_PACKAGES'] = str(site_packages)
-    if auto_integrate and codex_usage_percent(binary, env) >= CODEX_USAGE_STOP_PERCENT:
-        raise CityError('Développement reporté : le seuil de 60 % du quota Codex est atteint.')
+    require_daily_codex_budget(binary, env)
     if directory.exists():
         raise CityError('Un espace existe déjà pour cette mission. Consulte-le ou soumets une nouvelle demande.')
     directory.parent.mkdir(exist_ok=True)
