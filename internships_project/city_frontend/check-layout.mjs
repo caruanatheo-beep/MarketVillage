@@ -16,7 +16,7 @@ export async function checkLayout() {
         export { buildTowerStructure } from './src/TowerArchitecture';
         export { TileType } from './vendor/pixel-agents/webview-ui/src/office/types';
         export { projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows } from './src/TowerPerspective';
-        export { GolfPractice, GOLF_BAYS, GOLF_BOUNDS, OFFICE_PORTAL, GOLF_PORTAL } from './src/GolfPractice';
+        export { GolfPractice, GOLF_BAYS, GOLF_BOUNDS, OFFICE_PORTAL, GOLF_PORTAL, golfSwingPose } from './src/GolfPractice';
         export { OfficeState } from './vendor/pixel-agents/webview-ui/src/office/engine/officeState';
         export { findPath } from './vendor/pixel-agents/webview-ui/src/office/layout/tileMap';`,
       resolveDir: base,
@@ -24,7 +24,7 @@ export async function checkLayout() {
     },
     bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
   });
-  const { loadFurniture, buildOfficeLayout, validateAgentRoutes, OfficeState, findPath, GolfPractice, GOLF_BAYS, GOLF_BOUNDS, OFFICE_PORTAL, GOLF_PORTAL, worldY,
+  const { loadFurniture, buildOfficeLayout, validateAgentRoutes, OfficeState, findPath, GolfPractice, GOLF_BAYS, GOLF_BOUNDS, OFFICE_PORTAL, GOLF_PORTAL, golfSwingPose, worldY,
     projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows, buildTowerStructure, TileType,
     notificationRows, isPendingProposal, needsDecision, parisDay, cockpitData, resultSummary } =
     await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString("base64")}`);
@@ -206,6 +206,9 @@ export async function checkLayout() {
   const roster=['market_analyst','finance_tutor','job_hunter','networker','outreach_agent','developer','innovation_lab','internship_scout','city_ui_engineer','internships_engineer','quality_engineer','securities_scout','desk_manager'];
   roster.forEach((id,index)=>{office.addAgent(index,index%6,0,id==='desk_manager'?'marketdesk-manager-chair':`marketdesk-chair-${id}`,true);office.setAgentPinned(index,true);office.setAgentActive(index,false);});
   const golf=new GolfPractice(office,roster);
+  assert.ok(golfSwingPose(1.5).angle<golfSwingPose(0).angle,'Backswing lifts the club');
+  assert.ok(golfSwingPose(2.7).flight>0,'Ball launches after contact');
+  assert.equal(golfSwingPose(4.4).flight,0,'Ball and swing reset before the next shot');
   const idle=roster.map(id=>({id,status:'idle'}));
   const played=new Set();
   let maxVisitors=0;

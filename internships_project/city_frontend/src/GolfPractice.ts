@@ -18,6 +18,18 @@ type Task = {agent_id:string;status?:string};
 const BLOCKING = new Set(['queued','running','waiting_approval']);
 const IDLE = new Set(['idle','completed','cancelled']);
 
+const SWING_SECONDS = 4.4;
+const ease = (value:number)=>value*value*(3-2*value);
+export function golfSwingPose(seconds:number){
+  const phase=(seconds%SWING_SECONDS)/SWING_SECONDS;
+  if(phase<.18)return {phase,angle:.12,sway:0,bob:Math.sin(phase/.18*Math.PI)*.3,flight:0};
+  if(phase<.43){const t=ease((phase-.18)/.25);return {phase,angle:.12-2.3*t,sway:-1.8*t,bob:-.7*t,flight:0};}
+  if(phase<.55){const t=ease((phase-.43)/.12);return {phase,angle:-2.18+2.3*t,sway:-1.8+4*t,bob:-.7+1.5*t,flight:0};}
+  if(phase<.79){const t=ease((phase-.55)/.24);return {phase,angle:.12-1.35*t,sway:2-1.2*t,bob:.8-.8*t,flight:(phase-.55)/.24};}
+  const t=ease((phase-.79)/.21);
+  return {phase,angle:-1.23+1.35*t,sway:.8*(1-t),bob:0,flight:0};
+}
+
 export class GolfPractice {
   readonly visits = new Map<number,Visit>();
   private statuses = new Map<string,AgentStatus>();
@@ -78,7 +90,12 @@ export class GolfPractice {
         // Freeze the idle wander FSM while the original character faces the tee.
         ch.state=CharacterState.IDLE;ch.dir=Direction.RIGHT;ch.wanderTimer=Infinity;ch.frame=0;
         visit.swing+=dt;
+        const pose=golfSwingPose(visit.swing);
+        ch.x=ch.tileCol*TILE_SIZE+TILE_SIZE/2+pose.sway;
+        ch.y=ch.tileRow*TILE_SIZE+TILE_SIZE/2+pose.bob;
         if(visit.elapsed>32){
+          ch.x=ch.tileCol*TILE_SIZE+TILE_SIZE/2;
+          ch.y=ch.tileRow*TILE_SIZE+TILE_SIZE/2;
           visit.stage='to_exit';visit.elapsed=0;
           if(!this.office.walkToTile(index,GOLF_PORTAL.col,GOLF_PORTAL.row))this.interrupt(index);
         }
@@ -162,18 +179,44 @@ export class GolfPractice {
     for(const [index,visit] of this.visits){
       if(visit.stage!=='playing')continue;
       const ch=this.office.characters.get(index);if(!ch)continue;
-      const x=ox+ch.x*zoom,y=oy+(ch.y-10)*zoom,phase=(visit.swing%3.8)/3.8;
-      const angle=phase<.35?-.3-phase*5:phase<.55?-2.05+(phase-.35)*17.5:1.45-(phase-.55)*3.88;
-      const handX=x+4*zoom,handY=y+1*zoom;
-      // Articulated sleeve/hand and club share the character's world transform.
-      ctx.strokeStyle='#bac8d3';ctx.lineWidth=Math.max(1,zoom);
-      ctx.beginPath();ctx.moveTo(x+1*zoom,y-2*zoom);ctx.lineTo(handX,handY);ctx.stroke();
-      const endX=handX+Math.cos(angle)*13*zoom,endY=handY+Math.sin(angle)*13*zoom;
+      const pose=golfSwingPose(visit.swing),x=ox+ch.x*zoom,y=oy+(ch.y-12)*zoom;
+      const handX=x+4*zoom,handY=y+1*zoom,clubLength=15*zoom;
+      const teeX=ox+(GOLF_BAYS[visit.bay].matCol*TILE_SIZE+43)*zoom;
+      const teeY=oy+(worldY(GOLF_BAYS[visit.bay].matRow)*TILE_SIZE+11)*zoom;
+      // The sleeve, both hands and shaft follow the same pivot; impact starts at the printed tee.
+      ctx.lineCap='round';ctx.lineJoin='round';
+      ctx.strokeStyle='#172a35';ctx.lineWidth=Math.max(2,2.6*zoom);
+      ctx.beginPath();ctx.moveTo(x-zoom,y-5*zoom);ctx.lineTo(x+2*zoom,y-zoom);ctx.stroke();
+      ctx.strokeStyle='#8aa9b5';ctx.lineWidth=Math.max(1,1.5*zoom);
+      ctx.beginPath();ctx.moveTo(x-zoom,y-5*zoom);ctx.lineTo(x+2*zoom,y-zoom);ctx.stroke();
+      ctx.strokeStyle='#d8aa83';ctx.lineWidth=Math.max(1,1.2*zoom);
+      ctx.beginPath();ctx.moveTo(x+2*zoom,y-zoom);ctx.lineTo(handX,handY);ctx.stroke();
+      if(pose.phase>=.43&&pose.phase<.58){
+        ctx.globalAlpha=.22;ctx.strokeStyle='#d3e6e9';ctx.lineWidth=Math.max(1,zoom);
+        for(const lag of [.32,.62]){
+          ctx.beginPath();ctx.moveTo(handX,handY);
+          ctx.lineTo(handX+Math.cos(pose.angle-lag)*clubLength,handY+Math.sin(pose.angle-lag)*clubLength);ctx.stroke();
+        }
+        ctx.globalAlpha=1;
+      }
+      const endX=handX+Math.cos(pose.angle)*clubLength,endY=handY+Math.sin(pose.angle)*clubLength;
+      ctx.strokeStyle='#d7e7e9';ctx.lineWidth=Math.max(1,zoom);
       ctx.beginPath();ctx.moveTo(handX,handY);ctx.lineTo(endX,endY);ctx.stroke();
-      ctx.fillStyle='#6c8c99';ctx.fillRect(endX-2*zoom,endY,4*zoom,2*zoom);
-      if(phase>.48&&phase<.85){
-        const t=(phase-.48)/.37;
-        ctx.fillStyle='#fff7d9';ctx.beginPath();ctx.arc(x+(25+t*31)*zoom,oy+ch.y*zoom-(4+Math.sin(t*Math.PI)*14)*zoom,Math.max(.7,zoom),0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#536e7b';ctx.lineWidth=Math.max(2,2*zoom);
+      ctx.beginPath();ctx.moveTo(endX-2*zoom,endY);ctx.lineTo(endX+2*zoom,endY+zoom);ctx.stroke();
+      if(!pose.flight){
+        ctx.fillStyle='#fff9df';ctx.beginPath();ctx.arc(teeX,teeY,Math.max(1,1.15*zoom),0,Math.PI*2);ctx.fill();
+      }else{
+        const t=pose.flight,ballX=teeX+48*t*zoom,ballY=teeY-(32*t+9*Math.sin(Math.PI*t))*zoom;
+        for(const lag of [.08,.16,.24])if(t>lag){
+          ctx.globalAlpha=(.35-lag)*(.85-t);
+          ctx.fillStyle='#bdf8e9';ctx.beginPath();ctx.arc(ballX-48*lag*zoom,ballY+32*lag*zoom,Math.max(.6,zoom*.7),0,Math.PI*2);ctx.fill();
+        }
+        ctx.globalAlpha=1;ctx.fillStyle='#fffdf0';ctx.beginPath();ctx.arc(ballX,ballY,Math.max(1,1.25*zoom),0,Math.PI*2);ctx.fill();
+        if(t<.18){
+          ctx.strokeStyle=`rgba(255,244,185,${1-t/.18})`;ctx.lineWidth=Math.max(1,zoom);
+          ctx.beginPath();ctx.arc(teeX,teeY,Math.max(2,5*t*zoom),0,Math.PI*2);ctx.stroke();
+        }
       }
     }
     ctx.restore();
