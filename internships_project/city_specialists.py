@@ -265,6 +265,11 @@ def backtest(prices, *, lookback: int = 60, cost_bps: float = 10, strategy: str 
     net.iloc[-1] -= float(position.iloc[-1]) * cost_bps / 10000
     if not np.isfinite(net).all():
         raise CityError("Calculs de backtest non finis : historique trop extrême. Aucun résultat publié.")
+    capital_error = "Simulation interrompue : capital simulé épuisé après variations et frais, ou trop faible pour être représenté. Aucun résultat de backtest publié."
+    # A zero/negative wealth factor cannot be compounded into later returns.
+    # In particular, the final liquidation cost can exceed residual capital.
+    if (net <= -1).any():
+        raise CityError(capital_error)
     # Finite prices/returns can still overflow when compounded or squared.
     # Detect that before producing metrics, JSON or chart coordinates.
     with np.errstate(over="ignore", invalid="ignore"):
@@ -272,6 +277,8 @@ def backtest(prices, *, lookback: int = 60, cost_bps: float = 10, strategy: str 
         volatility = float(net.std(ddof=1) * math.sqrt(252))
     if not np.isfinite(equity).all() or not math.isfinite(volatility):
         raise CityError("Calculs de backtest non finis : historique trop extrême. Aucun résultat publié.")
+    if (equity <= 0).any():
+        raise CityError(capital_error)
     peak = equity.cummax().clip(lower=1)
     metrics = {"total_return": float(equity.iloc[-1] - 1), "annualized_volatility": volatility,
                "sharpe_rf_zero": float(net.mean() / net.std(ddof=1) * math.sqrt(252)) if volatility > 0 else None,

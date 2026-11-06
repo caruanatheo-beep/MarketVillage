@@ -45,6 +45,45 @@ def test_finite_equity_with_overflowing_volatility_is_rejected():
         city_specialists.backtest(prices, lookback=20)
 
 
+@pytest.mark.parametrize("strategy", ["momentum", "mean_reversion"])
+@pytest.mark.parametrize("remaining", [0.5, 1.0])
+def test_noe_does_not_publish_performance_after_costs_exhaust_capital(
+        monkeypatch, strategy, remaining):
+    # The last close loses 99% or 99.5%; the final 1% liquidation cost
+    # exhausts the long/cash portfolio although all inputs remain finite.
+    prices = history([100 + i if strategy == "momentum" else 300 - i
+                      for i in range(160)])
+    prices.iloc[-1] = prices.iloc[-2] * remaining / 100
+
+    def fetch_history(self, ids, days):
+        return pd.DataFrame({"Date": prices.index, "S&P 500": prices.values}), []
+
+    monkeypatch.setattr(data.FredCollector, "fetch_history", fetch_history)
+
+    with pytest.raises(CityError, match="capital.*épuisé"):
+        city_services.run_agent("finance_tutor", "test-user", {
+            "operation": "quant_report", "strategy": strategy, "cost_bps": 100})
+
+
+def test_severe_loss_with_positive_capital_remains_reportable():
+    prices = history([100 + i for i in range(160)])
+    prices.iloc[-1] = prices.iloc[-2] * 0.02
+
+    result = city_specialists.backtest(prices, cost_bps=100)
+
+    assert -1 < result["metrics"]["total_return"] < -0.9
+    assert -1 < result["metrics"]["max_drawdown"] < -0.9
+    assert all(point["value"] > 0 for point in result["equity"])
+    json.dumps(result, allow_nan=False)
+
+
+def test_underflowing_capital_does_not_publish_a_flat_zero_equity_curve():
+    prices = history([10 ** (300 - i * 600 / 159) for i in range(160)])
+
+    with pytest.raises(CityError, match="capital.*épuisé"):
+        city_specialists.backtest(prices, strategy="mean_reversion", cost_bps=0)
+
+
 @pytest.mark.parametrize("invalid", [False, True])
 def test_noe_agent_rejects_invalid_history_and_delivers_serializable_valid_report(monkeypatch, invalid):
     prices = history([100.0] * 200)
