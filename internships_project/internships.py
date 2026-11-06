@@ -2371,13 +2371,14 @@ def _deduplicate_opportunities(jobs: list[Opportunity]) -> list[Opportunity]:
 
 
 def _date_detected_offer(job: Opportunity, previous: Opportunity | None, today: date) -> Opportunity:
-    if job.published and not job.published_inferred:
+    """Use only valid calendar dates for publication and first detection."""
+    if _publication_sort_value(job.published) and not job.published_inferred:
         return job
-    if previous and previous.published and not previous.published_inferred:
+    if previous and _publication_sort_value(previous.published) and not previous.published_inferred:
         return replace(job, published=previous.published, published_inferred=False)
     candidates = [value for value in (job.published, previous.published if previous else "",
                                       _refresh_first_seen.get(job.url, ""))
-                  if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)]
+                  if _publication_sort_value(value)]
     first_seen = min(candidates, default=today.isoformat())
     _refresh_first_seen[job.url] = first_seen
     return replace(job, published=first_seen, published_inferred=True)
