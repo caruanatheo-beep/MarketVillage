@@ -160,7 +160,21 @@ def market_brief() -> dict:
         verified_news = [item for item in news if isinstance(item, NewsItem)]
         sentiment = _market_sentiment(points, [item for item in market_news if isinstance(item, NewsItem)])
         values = point_map(points)
-        spread = curve_spreads(points).get("US 2s10s")
+        spread = None
+        short, long = values.get("DGS2"), values.get("DGS10")
+        if short is not None and long is not None:
+            short_age = _observation_age(short.date)["age_days"]
+            long_age = _observation_age(long.date)["age_days"]
+            # Do not present a difference between separate observation days as
+            # an observed yield curve. Match the UTC calendar used by the panel.
+            if short_age is not None and short_age >= 0 and short_age == long_age:
+                candidate = curve_spreads(points).get("US 2s10s")
+                if candidate is not None and math.isfinite(candidate):
+                    spread = candidate
+                else:
+                    warnings.append("Pente 2–10 ans non calculée : écart non fini.")
+            else:
+                warnings.append("Pente 2–10 ans non calculée : les taux doivent avoir la même date d'observation connue, sans date future.")
         facts = []
         if spread is not None:
             facts.append(f"**Taux** · La courbe américaine 2–10 ans est à {spread:+.0f} pb. C'est un écart observé, pas une prévision.")

@@ -136,3 +136,55 @@ def test_only_invalid_prices_fail_before_enrichment(monkeypatch, sources, invali
 
     with pytest.raises(CityError, match="aucune observation exploitable"):
         city_services.run_agent("market_analyst", "fixture", {"operation": "collect_markets"})
+
+
+@pytest.mark.parametrize("short_date,long_date,comparable", [
+    ("2026-11-04", "2026-11-05", False),
+    ("", "", False),
+    ("not a date", "not a date", False),
+    ("2026-02-30", "2026-02-30", False),
+    ("2026-11-06", "2026-11-06", False),
+    ("2026-11-05T00:30:00+02:00", "2026-11-05T12:00:00Z", False),
+    ("2026-11-04T23:30:00-02:00", "2026-11-05T12:00:00Z", True),
+    ("2026-11-05", "2026-11-05 12:00 UTC", True),
+    ("2026-11-04", "2026-11-04", True),
+])
+def test_mira_only_reports_curve_from_comparable_observation_dates(
+        monkeypatch, sources, short_date, long_date, comparable):
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 11, 5, 18, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(city_services, "datetime", FixedDatetime)
+    points, status = data.load_snapshot()
+    yields = [replace(points[0], series_id=series, date=observed,
+                      value=value, previous=None, change=None)
+              for series, observed, value in [
+                  ("DGS2", short_date, 4), ("DGS10", long_date, 4.5)]]
+    monkeypatch.setattr(data, "load_snapshot", lambda: (points + yields, status))
+
+    result = city_services.run_agent("market_analyst", "fixture", {"operation": "collect_markets"})
+
+    assert result["market_points"] == 4
+    assert {p["series_id"] for p in result["market_data"]} == {"SP500", "VIXCLS", "DGS2", "DGS10"}
+    assert ("+50 pb" in result["text"]) == comparable
+    assert bool(result["warnings"]) == (not comparable)
+    if not comparable:
+        assert "date d'observation" in result["warnings"][0]
+        assert result["warnings"][0] in result["text"][:3500]
+
+
+def test_mira_omits_overflowing_curve_without_losing_quotes(monkeypatch, sources):
+    points, status = data.load_snapshot()
+    yields = [replace(points[0], series_id=series, value=value, previous=None, change=None)
+              for series, value in [("DGS2", -1e308), ("DGS10", 1e308)]]
+    monkeypatch.setattr(data, "load_snapshot", lambda: (points + yields, status))
+
+    result = city_services.run_agent("market_analyst", "fixture", {"operation": "collect_markets"})
+
+    assert result["market_points"] == 4
+    assert len(result["market_data"]) == 4
+    assert "courbe américaine" not in result["text"]
+    assert "écart non fini" in result["warnings"][0]
+    assert result["warnings"][0] in result["text"][:3500]
