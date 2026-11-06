@@ -125,13 +125,28 @@ def _usable_market_point(point) -> bool:
     )
 
 
+def _market_change_display(point) -> str:
+    """Keep observed quotes even when their converted movement overflows."""
+    from src.analytics import format_change
+
+    if point.change is not None:
+        movement = point.change
+        if point.category in {"Rates", "Policy", "Credit"} and point.unit == "%":
+            movement *= 100
+        elif point.previous not in (None, 0) and point.category in {"FX", "Risk", "Commodities"}:
+            movement = movement / point.previous * 100
+        if not math.isfinite(movement):
+            return "Variation indisponible (calcul hors limites)"
+    return format_change(point)
+
+
 def market_brief() -> dict:
     """Read the existing Market Brief snapshot, news and official calendar."""
     try:
         from src.data import load_snapshot
         from src.news import fetch_global_news, load_news
         from src.calendar import load_calendar
-        from src.analytics import curve_spreads, format_change, format_value, point_map
+        from src.analytics import curve_spreads, format_value, point_map
         from src.models import NewsItem
 
         points, status = load_snapshot()
@@ -180,13 +195,13 @@ def market_brief() -> dict:
             facts.append(f"**Taux** · La courbe américaine 2–10 ans est à {spread:+.0f} pb. C'est un écart observé, pas une prévision.")
         spx, vix = values.get("SP500"), values.get("VIXCLS")
         if spx and spx.value is not None and vix and vix.value is not None:
-            facts.append(f"**Actions et volatilité** · S&P 500 {format_change(spx)} ; VIX {format_change(vix)} sur leurs dernières observations.")
+            facts.append(f"**Actions et volatilité** · S&P 500 {_market_change_display(spx)} ; VIX {_market_change_display(vix)} sur leurs dernières observations.")
         eur = values.get("DEXUSEU")
         if eur and eur.value is not None:
-            facts.append(f"**Change** · EUR/USD à {format_value(eur)} ({format_change(eur)}).")
+            facts.append(f"**Change** · EUR/USD à {format_value(eur)} ({_market_change_display(eur)}).")
         hy = values.get("BAMLH0A0HYM2")
         if hy and hy.value is not None:
-            facts.append(f"**Crédit** · Spread high yield américain à {format_value(hy)} ({format_change(hy)}).")
+            facts.append(f"**Crédit** · Spread high yield américain à {format_value(hy)} ({_market_change_display(hy)}).")
         agenda = [f"- **{event.date} · {event.time}** · [{event.title}]({event.url}) — {event.institution}"
                   for event in events[:3] if event.url.startswith(('https://', 'http://'))]
         market_terms = ("monetary", "interest rate", "inflation", "market", "bond", "exchange rate",
@@ -221,8 +236,8 @@ def market_brief() -> dict:
                 "summary": " · ".join(part for part in (
                     sentiment['label'],
                     f"{market_count} série{'s' if market_count != 1 else ''} vérifiée{'s' if market_count != 1 else ''}",
-                    f"S&P 500 {format_change(spx)}" if spx and spx.value is not None else "",
-                    f"VIX {format_change(vix)}" if vix and vix.value is not None else "") if part),
+                    f"S&P 500 {_market_change_display(spx)}" if spx and spx.value is not None else "",
+                    f"VIX {_market_change_display(vix)}" if vix and vix.value is not None else "") if part),
                 "text": brief[:18000], "source": "Market Brief · données et publications existantes"}
     except CityError:
         raise
@@ -299,7 +314,6 @@ def _market_sentiment(points: list, news: list) -> dict:
 
 
 def _market_readings(points: list) -> list[dict]:
-    from src.analytics import format_change
     selected = []
     wanted = {"DGS2", "DGS10", "DEXUSEU", "DEXUSUK", "SP500", "VIXCLS", "BAMLH0A0HYM2", "DCOILWTICO"}
     for point in points:
@@ -312,7 +326,7 @@ def _market_readings(points: list) -> list[dict]:
                              "value": float(point.value), "unit": point.unit,
                              "previous": float(point.previous) if point.previous is not None else None,
                              "change": float(point.change) if point.change is not None else None,
-                             "change_display": format_change(point),
+                             "change_display": _market_change_display(point),
                              "observed_at": str(point.date or ""), "source": point.source_name,
                              "source_url": point.source_url, **_observation_age(point.date)})
     return selected[:8]
