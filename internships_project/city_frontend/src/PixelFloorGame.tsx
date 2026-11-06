@@ -37,9 +37,9 @@ const ROOT = "/city/pixel-assets";
 const ROSTER = ["market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout", "city_ui_engineer", "internships_engineer", "quality_engineer", "securities_scout"];
 const MANAGER_ID = "desk_manager";
 const WORLD_ROSTER = [...ROSTER, MANAGER_ID];
-const MARKET_PANEL = { col: -100, width: 18, top: 0.3, height: 7.2 };
-const OFFERS_PANEL = { col: 100, width: 18, top: 0.3, height: 7.2 };
-function fitPanel(geometry: typeof MARKET_PANEL, zoom: number, offsetX: number, canvasWidth: number): typeof MARKET_PANEL {
+const OFFERS_PANEL = { col: 100, width: 14, top: 0.65, height: 5.6 };
+const OFFER_NAV_ROW = 5;
+function fitPanel(geometry: typeof OFFERS_PANEL, zoom: number, offsetX: number, canvasWidth: number): typeof OFFERS_PANEL {
   const cell = TILE_SIZE * zoom, inset = Math.max(3, cell * .35);
   const maxX = Math.max(inset, canvasWidth - geometry.width * cell - inset);
   const x = Math.min(maxX, Math.max(inset, offsetX + geometry.col * cell));
@@ -727,11 +727,10 @@ function renderZoneLabels(ctx: CanvasRenderingContext2D, zoom: number, offsetX: 
   ctx.restore();
 }
 
-function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX: number, offsetY: number,
-  marketPoints: MarketReading[], _marketRetrievedAt: string, _marketError: string | undefined,
+function renderFeaturedOffer(ctx: CanvasRenderingContext2D, zoom: number, offsetX: number, offsetY: number,
   featured: FeaturedOffer | null, offerIndex: number, offerCount: number, internshipError?: string): void {
   const cell = TILE_SIZE * zoom;
-  const panel = (geometry: typeof MARKET_PANEL, accent: string) => {
+  const panel = (geometry: typeof OFFERS_PANEL, accent: string) => {
     const x = offsetX + geometry.col * cell, y = offsetY + geometry.top * cell;
     const w = geometry.width * cell, h = geometry.height * cell;
     ctx.save();
@@ -743,14 +742,13 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
     ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetY=0;
     ctx.strokeStyle='#9dd5bdba';ctx.lineWidth=Math.max(1,zoom*.55);ctx.stroke();
     ctx.fillStyle=accent;ctx.fillRect(x+cell*.45,y+cell*.22,w-cell*.9,Math.max(2,zoom*.7));
-    ctx.fillStyle='#b9d6cf16';ctx.fillRect(x+cell*.38,y+cell*1.05,w-cell*.76,Math.max(1,zoom*.4));
     ctx.restore();return {x,y,w,h};
   };
   const write = (value: string, x: number, y: number, color: string, size: number, weight = "normal", maxWidth?: number) => {
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillStyle = color;
-    ctx.font = `${weight} ${Math.max(zoom < .7 ? 5.5 : 9.5, size * zoom)}px Inter, Arial, sans-serif`;
+    ctx.font = `${weight} ${Math.min(size >= 15 ? 20 : size >= 11 ? 15 : 13, Math.max(9, size * zoom))}px Inter, Arial, sans-serif`;
     // Truncate rather than horizontally distorting the type.
     let text = value;
     if (maxWidth && ctx.measureText(text).width > maxWidth) {
@@ -759,79 +757,31 @@ function renderMarketDecor(ctx: CanvasRenderingContext2D, zoom: number, offsetX:
     }
     ctx.fillText(text, x, y);
   };
-  const market = panel(fitPanel(MARKET_PANEL, zoom, offsetX, ctx.canvas.width), "#75f0df");
   const jobs = panel(fitPanel(OFFERS_PANEL, zoom, offsetX, ctx.canvas.width), "#f1c782");
-  const items = [
-    {id:"SP500", label:"S&P 500", decimals:1},
-    {id:"DGS10", label:"10Y UST", decimals:2},
-    {id:"DEXUSEU", label:"EUR/USD", decimals:4},
-    {id:"DCOILWTICO", label:"WTI", decimals:1},
-  ];
-  const gap = cell * 0.34;
-  const slot = (market.w - gap * 2) / items.length;
-  write("LE POINT MARCHÉS", market.x + cell * .52, market.y + cell * .7, "#aaf2df", 11.5, "700");
-  const centered = (text: string, x: number, y: number, color: string, size: number, weight: string) => {
-    ctx.font = `${weight} ${Math.max(zoom < .7 ? 5.5 : 9.5, size * zoom)}px Inter, Arial, sans-serif`;
-    write(text, x - ctx.measureText(text).width / 2, y, color, size, weight);
-  };
-  items.forEach((item, index) => {
-    const x = market.x + gap + (index + .5) * slot;
-    const point = marketPoints.find(reading => reading.series_id === item.id);
-    const wellX = x - slot * .46, wellY = market.y + cell * 1.35;
-    ctx.beginPath(); ctx.roundRect(wellX, wellY, slot * .92, cell * 5.25, cell * .2);
-    ctx.fillStyle = "#071f2a65"; ctx.fill();
-    ctx.strokeStyle = "#9dcbbe30"; ctx.lineWidth = Math.max(.7, zoom * .3); ctx.stroke();
-    centered(item.label, x, market.y + cell * 1.95, "#b8d5d2", 9.5, "600");
-    if (!point || !Number.isFinite(point.value)) {
-      centered("—", x, market.y + cell * 3.15, "#e5edf4", 11, "700");
-      centered("N/D", x, market.y + cell * 4.2, "#94a7b8", 8, "500");
-      return;
-    }
-    const value = point.value.toLocaleString("en-GB", {minimumFractionDigits:item.decimals, maximumFractionDigits:item.decimals});
-    const delta = point.change != null && point.previous != null && point.previous !== 0
-      ? item.id === "DGS10"
-        ? `${point.change >= 0 ? "+" : ""}${(point.change * 100).toFixed(0)} bp`
-        : `${point.change >= 0 ? "+" : ""}${(point.change / point.previous * 100).toFixed(1)}%`
-      : "—";
-    centered(value + (item.id === "DGS10" ? "%" : ""), x, market.y + cell * 3.15, "#f4f7fb", 15.2, "700");
-    centered(delta, x, market.y + cell * 4.2,
-      point.change == null ? "#a8b6c3" : point.change >= 0 ? "#41ecc4" : "#ff665e",
-      10, "700");
-    if(point.previous != null && Number.isFinite(point.previous)) {
-      const rising=point.value>=point.previous;
-      const left=x-slot*.31,right=x+slot*.31,base=market.y+cell*5.85;
-      ctx.strokeStyle='#94b4c72e';ctx.lineWidth=Math.max(1,zoom*.4);
-      ctx.beginPath();ctx.moveTo(left,base);ctx.lineTo(right,base);ctx.stroke();
-      ctx.strokeStyle=rising?'#41ecc4':'#ff665e';ctx.lineWidth=Math.max(1,zoom*.7);
-      ctx.beginPath();ctx.moveTo(left,base-(rising?.08:.38)*cell);ctx.lineTo(right,base-(rising?.38:.08)*cell);ctx.stroke();
-      ctx.fillStyle=ctx.strokeStyle;ctx.fillRect(right-zoom,base-(rising?.38:.08)*cell-zoom,2*zoom,2*zoom);
-    }
-  });
-
   const x = jobs.x + cell * 0.62;
   const max = jobs.w - cell * 1.25;
-  write("OPPORTUNITÉ DU JOUR", x, jobs.y + cell * 0.7, "#f7d7a3", 11.5, "700", max);
+  write("OPPORTUNITÉ DU JOUR", x, jobs.y + cell * 1.02, "#f7d7a3", 11.5, "700", max);
   if (!featured) {
     write(internshipError ? "Offres temporairement indisponibles" : "Aucune offre à afficher",
-      x, jobs.y + cell * 2.5, "#d2e0dc", 11, "500", max);
+      x, jobs.y + cell * 2.8, "#d2e0dc", 11, "500", max);
     return;
   }
   ctx.beginPath();
-  ctx.roundRect(jobs.x + cell * .38, jobs.y + cell * 1.35, jobs.w - cell * .76, cell * 4.3, cell * .2);
+  ctx.roundRect(jobs.x + cell * .38, jobs.y + cell * 1.52, jobs.w - cell * .76, cell * 2.95, cell * .2);
   ctx.fillStyle = "#071d2866"; ctx.fill();
   ctx.fillStyle = "#f1c782";
-  ctx.fillRect(jobs.x + cell * .38, jobs.y + cell * 1.6, Math.max(2, zoom * .8), cell * 3.7);
-  write(featured.company || "Entreprise non indiquée", x, jobs.y + cell * 1.85, "#fff8ed", 16, "700", max);
-  ctx.font = `500 ${Math.max(11, 11 * zoom)}px Inter, Arial, sans-serif`;
+  ctx.fillRect(jobs.x + cell * .38, jobs.y + cell * 1.75, Math.max(2, zoom * .8), cell * 2.45);
+  write(featured.company || "Entreprise non indiquée", x, jobs.y + cell * 2.04, "#fff8ed", 16, "700", max);
+  ctx.font = `500 ${Math.min(15, Math.max(9, 11 * zoom))}px Inter, Arial, sans-serif`;
   const words = featured.title.split(/\s+/);
   let line = "";
   while (words.length && ctx.measureText([line, words[0]].filter(Boolean).join(" ")).width <= max) line += (line ? " " : "") + words.shift();
   if (!line) line = words.shift() || "";
   write(line, x, jobs.y + cell * 2.8, "#e7f0ed", 11, "500", max);
-  write(words.join(" "), x, jobs.y + cell * 3.7, "#e7f0ed", 11, "500", max);
-  write(featured.location || "Lieu non indiqué", x, jobs.y + cell * 4.8, "#b8d6cf", 10, "600", max);
-  const navY = jobs.y + cell * 6.28;
-  ctx.beginPath(); ctx.roundRect(x, navY - cell * .39, cell * 4.35, cell * .78, cell * .16);
+  write(words.join(" "), x, jobs.y + cell * 3.45, "#e7f0ed", 11, "500", max);
+  write(featured.location || "Lieu non indiqué", x, jobs.y + cell * 4.1, "#b8d6cf", 10, "600", max);
+  const navY = jobs.y + cell * OFFER_NAV_ROW;
+  ctx.beginPath(); ctx.roundRect(x, navY - cell * .32, cell * 4.35, cell * .64, cell * .16);
   ctx.fillStyle = "#cceee0"; ctx.fill();
   write("Voir l’offre ↗", x + cell * .33, navY, "#17443f", 10, "700", cell * 3.8);
   if (offerCount > 1) {
@@ -1133,8 +1083,7 @@ export function PixelFloorGame(props: Props): React.ReactElement {
           output.fillText(agent.name,x,top+11);output.restore();
         }
         // Billboards face the viewer: keep their type on a flat, legible plane.
-        renderMarketDecor(output,scale,position.offsetX,position.offsetY,latest.current.marketPoints,
-          latest.current.marketRetrievedAt,latest.current.marketError,visibleOffer,offerIndexRef.current,
+        renderFeaturedOffer(output,scale,position.offsetX,position.offsetY,visibleOffer,offerIndexRef.current,
           offers.length,latest.current.internshipError);
         bubbleHits.current=renderTaskBubbles(output,scale,position.offsetX,position.offsetY,floor,latest.current.agents,latest.current.tasks);
       },
@@ -1199,19 +1148,13 @@ export function PixelFloorGame(props: Props): React.ReactElement {
     const y = (screenY - live.offsetY) / live.scale;
     const tileX = ((event.clientX-rect.left)*dpr-live.offsetX)/live.scale/TILE_SIZE;
     const tileY = ((event.clientY-rect.top)*dpr-live.offsetY)/live.scale/TILE_SIZE;
-    const marketPanel = fitPanel(MARKET_PANEL,live.scale,live.offsetX,node.width);
     const offersPanel = fitPanel(OFFERS_PANEL,live.scale,live.offsetX,node.width);
-    if (tileX >= marketPanel.col && tileX <= marketPanel.col + marketPanel.width &&
-      tileY >= marketPanel.top && tileY <= marketPanel.top + marketPanel.height) {
-      pick.current("market_analyst");
-      return;
-    }
     const offers = latest.current.featuredOffers;
     if (tileX >= offersPanel.col && tileX <= offersPanel.col + offersPanel.width &&
       tileY >= offersPanel.top && tileY <= offersPanel.top + offersPanel.height) {
       const prevX = offersPanel.col + offersPanel.width - 2.62;
       const nextX = offersPanel.col + offersPanel.width - 1.48;
-      if (offers.length > 1 && tileY >= offersPanel.top + 5.99 && tileY <= offersPanel.top + 6.57) {
+      if (offers.length > 1 && Math.abs(tileY - offersPanel.top - OFFER_NAV_ROW) <= .32) {
         if (tileX >= prevX && tileX <= prevX + 0.88) {
           setOfferIndex((offerIndexRef.current - 1 + offers.length) % offers.length);
           return;
@@ -1247,22 +1190,7 @@ export function PixelFloorGame(props: Props): React.ReactElement {
     const y = (screenY - live.offsetY) / live.scale;
     const tileX = ((event.clientX-rect.left)*dpr-live.offsetX)/live.scale/TILE_SIZE;
     const tileY = ((event.clientY-rect.top)*dpr-live.offsetY)/live.scale/TILE_SIZE;
-    const marketPanel = fitPanel(MARKET_PANEL,live.scale,live.offsetX,node.width);
     const offersPanel = fitPanel(OFFERS_PANEL,live.scale,live.offsetX,node.width);
-    if (tileX >= marketPanel.col && tileX <= marketPanel.col + marketPanel.width &&
-      tileY >= marketPanel.top && tileY <= marketPanel.top + marketPanel.height) {
-      node.style.cursor = "pointer";
-      const labels = ["S&P 500", "10Y UST", "EUR/USD", "WTI"];
-      const gap = 0.34;
-      const slot = (marketPanel.width - gap * 2) / labels.length;
-      const index = Math.max(0, Math.min(labels.length - 1, Math.floor((tileX - marketPanel.col - gap) / slot)));
-      const ids = ["SP500", "DGS10", "DEXUSEU", "DCOILWTICO"];
-      const point = latest.current.marketPoints.find(item => item.series_id === ids[index]);
-      node.title = point
-        ? `${labels[index]} · ${point.value} ${point.unit}\nVariation : ${point.change == null ? "non disponible" : point.change}\nObservation : ${point.observed_at || "date inconnue"}\nSource : ${point.source || "source non indiquée"}`
-        : `${labels[index]} · donnée temporairement indisponible${latest.current.marketError ? `\n${latest.current.marketError}` : ""}`;
-      return;
-    }
     const offers = latest.current.featuredOffers;
     if (tileX >= offersPanel.col && tileX <= offersPanel.col + offersPanel.width &&
       tileY >= offersPanel.top && tileY <= offersPanel.top + offersPanel.height) {
@@ -1270,7 +1198,7 @@ export function PixelFloorGame(props: Props): React.ReactElement {
       const offer = offers[Math.min(offerIndexRef.current, offers.length - 1)];
       const prevX = offersPanel.col + offersPanel.width - 2.62;
       const nextX = offersPanel.col + offersPanel.width - 1.48;
-      const isPager = offers.length > 1 && tileY >= offersPanel.top + 5.99 && tileY <= offersPanel.top + 6.57 &&
+      const isPager = offers.length > 1 && Math.abs(tileY - offersPanel.top - OFFER_NAV_ROW) <= .32 &&
         (tileX >= prevX && tileX <= prevX + 0.88 || tileX >= nextX && tileX <= nextX + 0.88);
       node.title = isPager ? "Parcourir les offres" : offer
         ? `${offer.company} — ${offer.title}\n${offer.location || "Lieu non indiqué"}\nContrat : ${offer.kind || "non indiqué"}\nDébut : ${offer.start_period || "non indiqué"}\nPublication : ${offer.published ? offer.published_inferred ? `date estimée à la détection (${offer.published})` : offer.published : "non indiquée"}\nSource : ${offer.source || "non indiquée"}${offer.selection_reason ? `\n${offer.selection_reason}` : ""}`
