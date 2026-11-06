@@ -414,7 +414,10 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
         if not safe_post(request):
             return JSONResponse({"detail": "Requ\u00eate refus\u00e9e."}, status_code=403)
         try:
-            payload = await bounded_json(request, 5000)
+            # JSON may use 12 bytes per character (escaped surrogate pairs).
+            # Allow the 3,000-character message plus four 100-character context
+            # values and JSON framing; keep the character checks below.
+            payload = await bounded_json(request, 42000)
             message = str(payload.get("message") or "").strip()
             selection = payload.get("selection") or {}
             if agent_id not in {agent["id"] for agent in AGENTS}:
