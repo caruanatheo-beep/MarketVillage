@@ -1357,7 +1357,7 @@ def _oddo_jobs() -> list[Opportunity]:
         contract_match = re.search(r"(?:Type de contrat|Contract type)\s*:\s*(Stage|Internship|VIE|Graduate)", description, re.IGNORECASE)
         posted_match = re.search(r"(?:Date.{0,35}publication|First publication date)\s*:\s*(\d{2}/\d{2}/\d{4})", description, re.IGNORECASE)
         employment = contract_match.group(1) if contract_match else ""
-        published = datetime.strptime(posted_match.group(1), "%d/%m/%Y").date().isoformat() if posted_match else ""
+        published = _career_publication_date(posted_match.group(1)) if posted_match else ""
         job = _opportunity(title, "ODDO BHF", location_match.group(1).strip() if location_match else "",
                            employment, url, published, _start_period(description) or _title_period(title), description)
         if job:
