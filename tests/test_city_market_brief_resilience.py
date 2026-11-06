@@ -100,7 +100,11 @@ def test_provider_warnings_are_also_visible_in_the_report(monkeypatch, sources):
 
 
 @pytest.mark.parametrize("field", ["value", "previous", "change"])
-@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("invalid", [
+    float("nan"), float("inf"), float("-inf"),
+    "unavailable", "102.5", [], {}, True, False,
+    pytest.param(10 ** 400, id="integer-overflow"),
+])
 def test_brief_excludes_invalid_prices_from_facts_counts_and_shared_report(monkeypatch, sources, field, invalid):
     points, status = data.load_snapshot()
     valid = replace(points[1], previous=None, change=None)
@@ -123,7 +127,11 @@ def test_brief_excludes_invalid_prices_from_facts_counts_and_shared_report(monke
     assert result["text"].endswith(expected["text"])
 
 
-@pytest.mark.parametrize("invalid", [None, float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("invalid", [
+    None, float("nan"), float("inf"), float("-inf"),
+    "unavailable", "102.5", [], {}, True, False,
+    pytest.param(10 ** 400, id="integer-overflow"),
+])
 def test_only_invalid_prices_fail_before_enrichment(monkeypatch, sources, invalid):
     points, status = data.load_snapshot()
     monkeypatch.setattr(data, "load_snapshot", lambda: ([replace(points[0], value=invalid)], status))

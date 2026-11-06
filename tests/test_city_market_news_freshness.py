@@ -66,6 +66,11 @@ def test_only_recent_dated_news_can_strengthen_sentiment(monkeypatch, published,
     ("change", float("inf")),
     ("change", float("-inf")),
     ("change", float("nan")),
+    ("value", "unavailable"),
+    ("previous", "100"),
+    ("change", []),
+    ("value", True),
+    pytest.param("change", 10 ** 400, id="integer-overflow"),
 ])
 def test_invalid_observations_cannot_strengthen_market_sentiment(series, field, value):
     today = datetime.now(timezone.utc).date().isoformat()
@@ -101,15 +106,26 @@ def test_overflowing_moves_do_not_produce_market_signals(series):
 
 
 @pytest.mark.parametrize("field", ["value", "previous", "change"])
-@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), float("-inf")])
-def test_invalid_reading_does_not_hide_valid_market_quotes(field, invalid):
+@pytest.mark.parametrize("invalid", [
+    float("nan"), float("inf"), float("-inf"),
+    "unavailable", "102.5", [], {}, True, False,
+    pytest.param(10 ** 400, id="integer-overflow"),
+])
+def test_invalid_reading_does_not_hide_valid_market_quotes(monkeypatch, field, invalid):
+    from src import data
+
     today = datetime.now(timezone.utc).date().isoformat()
     valid = MarketPoint("SP500", "S&P 500", "Risk", 102, 100, 2,
                         today, "index", "daily", "latest available", "Fixture",
                         "https://example.org/SP500")
     damaged = replace(valid, series_id="VIXCLS", **{field: invalid})
 
-    readings = city_services._market_readings([damaged, valid])
+    monkeypatch.setattr(data, "load_snapshot", lambda: ([damaged, valid], {}))
+    city_services._market_snapshot_cached.cache_clear()
+    try:
+        readings = city_services.market_snapshot()["points"]
+    finally:
+        city_services._market_snapshot_cached.cache_clear()
     # City uses a strict JSON response: one non-finite value used to make
     # serialization fail and the route return an empty market panel.
     response = JSONResponse({"points": readings})

@@ -122,11 +122,15 @@ def run_agent(agent_id: str, username: str, parameters: dict | None = None) -> d
 
 
 def _usable_market_point(point) -> bool:
-    """Match the quote panel's validity rule while allowing missing history."""
-    return point.value is not None and all(
-        math.isfinite(value) for value in (point.value, point.previous, point.change)
-        if value is not None
-    )
+    """Reject malformed provider values without discarding other observations."""
+    try:
+        return point.value is not None and all(
+            not isinstance(value, bool) and math.isfinite(value)
+            for value in (point.value, point.previous, point.change)
+            if value is not None
+        )
+    except (TypeError, ValueError, OverflowError):
+        return False
 
 
 def _market_change_display(point) -> str:
@@ -175,7 +179,7 @@ def market_brief() -> dict:
         warnings = [redact_diagnostic(error) for error in (
             *news_errors[:3], *market_news_errors[:2], *([calendar_error] if calendar_error else []))]
         if rejected:
-            warnings.insert(0, f"Observations de marché écartées : {rejected} (valeurs non finies).")
+            warnings.insert(0, f"Observations de marché écartées : {rejected} (valeurs non numériques ou non finies).")
         verified_news = [item for item in news if isinstance(item, NewsItem)]
         sentiment = _market_sentiment(points, [item for item in market_news if isinstance(item, NewsItem)])
         values = point_map(points)
