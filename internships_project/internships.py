@@ -2330,12 +2330,14 @@ def _merge_duplicate_publication(preferred: Opportunity, other: Opportunity) -> 
 
 
 def _deduplicate_opportunities(jobs: list[Opportunity]) -> list[Opportunity]:
-    jobs = _without_jobteaser_duplicates(jobs)
+    # Only usable direct postings may replace a JobTeaser fallback. Otherwise
+    # a rejected employer result can suppress the only offer we can display.
+    jobs = [job for job in jobs
+            if not _excluded_employer(job.company)
+            and _market_relevant_with_context(job.title, job.description)
+            and (job.source == "JobTeaser · sitemap" or _plausible_location(job.location))]
     grouped: dict[tuple[str, str, str, str], list[Opportunity]] = {}
-    for job in jobs:
-        if (_excluded_employer(job.company) or not _market_relevant_with_context(job.title, job.description)
-                or (job.source != "JobTeaser · sitemap" and not _plausible_location(job.location))):
-            continue
+    for job in _without_jobteaser_duplicates(jobs):
         location_key = "paris-area" if _is_paris(job.location) else _normalized_offer_text(job.location)
         # Identical role names can advertise separate internship, VIE or work-study contracts.
         key = (_canonical_title(job.title), _canonical_company(job.company), location_key, job.kind)

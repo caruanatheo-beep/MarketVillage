@@ -241,3 +241,32 @@ class DeduplicationTests(unittest.TestCase):
                          url="https://example.invalid/teaser")
         self.assertEqual(_deduplicate_opportunities([teaser, self.offer]),
                          [self.offer])
+
+    def test_rejected_employer_location_does_not_suppress_jobteaser_fallback(self):
+        for location in ["", "Description du poste", "x" * 121]:
+            direct = replace(self.offer, location=location)
+            # A sitemap does not always identify the city. It remains usable
+            # without one, unlike an incomplete employer detail extraction.
+            teaser = replace(self.offer, location="", source="JobTeaser · sitemap",
+                             url="https://example.invalid/teaser")
+            for ordered in permutations([direct, teaser]):
+                with self.subTest(location=location, order=[job.url for job in ordered]):
+                    self.assertEqual(_deduplicate_opportunities(list(ordered)), [teaser])
+
+    def test_progressive_refresh_keeps_fallback_until_usable_employer_result(self):
+        teaser = replace(self.offer, location="", source="JobTeaser · sitemap",
+                         url="https://example.invalid/teaser")
+        incomplete = replace(self.offer, location="")
+        now = datetime(2026, 11, 5, tzinfo=timezone.utc)
+        writer = Mock()
+        with patch.multiple(internships, _cache=None, _last_attempt=now,
+                            _refresh_previous_jobs={teaser.url: teaser},
+                            _refresh_first_seen={}, _write_cache=writer):
+            internships._publish_refresh_progress([incomplete], [])
+            self.assertEqual(internships._cache[1], [teaser])
+            writer.assert_called_once_with(now, [teaser], [])
+
+            internships._publish_refresh_progress([self.offer], [])
+            self.assertEqual(internships._cache[1], [self.offer])
+            self.assertEqual(writer.call_count, 2)
+            writer.assert_called_with(now, [self.offer], [])
