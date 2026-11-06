@@ -28,8 +28,9 @@ export function golfBallPosition(bay:typeof GOLF_BAYS[number],flight:number){
 export function golfSwingPose(seconds:number){
   const phase=(seconds%SWING_SECONDS)/SWING_SECONDS;
   if(phase<.18)return {phase,angle:.12,sway:0,bob:Math.sin(phase/.18*Math.PI)*.3,flight:0};
-  if(phase<.43){const t=ease((phase-.18)/.25);return {phase,angle:.12-1.42*t,sway:-1.8*t,bob:-.7*t,flight:0};}
-  if(phase<.55){const t=ease((phase-.43)/.12);return {phase,angle:-1.3+1.42*t,sway:-1.8+4*t,bob:-.7+1.5*t,flight:0};}
+  // Keep feet below the mat's draw order: a negative bob hides the sprite behind its mat.
+  if(phase<.43){const t=ease((phase-.18)/.25);return {phase,angle:.12-1.42*t,sway:-1.8*t,bob:0,flight:0};}
+  if(phase<.55){const t=ease((phase-.43)/.12);return {phase,angle:-1.3+1.42*t,sway:-1.8+4*t,bob:.8*t,flight:0};}
   if(phase<.79){const t=ease((phase-.55)/.24);return {phase,angle:.12-1.35*t,sway:2-1.2*t,bob:.8-.8*t,flight:(phase-.55)/.24};}
   const t=ease((phase-.79)/.21);
   return {phase,angle:-1.23+1.35*t,sway:.8*(1-t),bob:0,flight:0};

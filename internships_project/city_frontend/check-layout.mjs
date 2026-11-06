@@ -202,6 +202,8 @@ export async function checkLayout() {
     assert.ok(mat,'Each golfer has a mat');
     assert.ok(bay.col>=mat.col&&bay.col<mat.col+5&&bay.row>=mat.row&&bay.row<mat.row+2,
       `Golf stance ${bay.index} must be on its mat`);
+    const matDrawable=office.furniture[office.layout.furniture.indexOf(mat)];
+    assert.ok(bay.row*16+16.5>matDrawable.zY,`Golfer ${bay.index} must draw in front of its mat`);
     assert.ok(findPath(GOLF_PORTAL.col,GOLF_PORTAL.row,bay.col,bay.row,office.tileMap,office.blockedTiles).length,`Cannot reach golf bay ${bay.index} from portal`);
     assert.ok(findPath(bay.col,bay.row,GOLF_PORTAL.col,GOLF_PORTAL.row,office.tileMap,office.blockedTiles).length,`Cannot leave golf bay ${bay.index}`);
   }
@@ -211,6 +213,7 @@ export async function checkLayout() {
   assert.ok(golfSwingPose(1.5).angle<golfSwingPose(0).angle,'Backswing lifts the club');
   assert.ok(golfSwingPose(2.7).flight>0,'Ball launches after contact');
   assert.equal(golfSwingPose(4.4).flight,0,'Ball and swing reset before the next shot');
+  for(let tick=0;tick<=440;tick++)assert.ok(golfSwingPose(tick/100).bob>=0,'Golfer must sort in front of the mat throughout the swing');
   for(const bay of GOLF_BAYS){
     const tee=golfBallPosition(bay,0),middle=golfBallPosition(bay,.5),net=golfBallPosition(bay,1);
     assert.ok(tee.y>middle.y&&middle.y>net.y,'Ball travels upward toward the backstop');
