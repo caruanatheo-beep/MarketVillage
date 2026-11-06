@@ -1588,6 +1588,19 @@ class CityStore:
                     raise CityError("Ce projet a été annulé. Lance un nouveau projet pour recommencer.")
                 if row["retry_count"] >= row["max_retries"]:
                     raise CityError("Le nombre maximal de tentatives est atteint.")
+                # Retrying also revives dependency-cancelled steps. Check every
+                # affected agent under the write lock before changing any task.
+                conflict = db.execute(
+                    "SELECT active.agent_id FROM city_tasks AS active "
+                    "JOIN city_tasks AS resumed ON resumed.username=active.username "
+                    "AND resumed.agent_id=active.agent_id "
+                    "WHERE active.username=? AND active.status IN ('queued','running','waiting_approval') "
+                    "AND (resumed.id=? OR (resumed.workflow_id=? AND resumed.status='cancelled' "
+                    "AND resumed.error='Dépendance indisponible.')) LIMIT 1",
+                    (username, task_id, row["workflow_id"])).fetchone()
+                if conflict:
+                    raise CityError(f"{AGENT_BY_ID[conflict[0]]['name']} a déjà une mission active. "
+                                    "Termine ou annule cette mission avant de relancer le projet.")
                 db.execute("UPDATE city_tasks SET status='queued',error=NULL,started_at=NULL,finished_at=NULL,"
                            "retry_count=retry_count+1 WHERE id=? AND username=? AND status='failed'",
                            (task_id, username))
