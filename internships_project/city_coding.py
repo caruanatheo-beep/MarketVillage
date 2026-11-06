@@ -23,6 +23,7 @@ from . import state_store
 
 _integration_lock = threading.Lock()
 CODEX_DAILY_USAGE_PERCENT = 100 / 7
+CODEX_DAILY_FALLBACK_CALLS = 6
 
 
 def codex_binary() -> str:
@@ -107,28 +108,53 @@ def _weekly_usage_percent(limits: dict) -> float:
     return max(weekly)
 
 
-def require_daily_codex_budget(binary: str, env: dict, *, activity: str = 'Développement') -> None:
-    """Share one Paris-day slice of the weekly Codex quota across City agents."""
-    used = codex_usage_percent(binary, env)
-    if used >= 100:
+def require_daily_codex_budget(binary: str, env: dict, *, activity: str = 'Développement') -> float | None:
+    """Reserve one agent call without charging unrelated Codex activity to City."""
+    try:
+        used = codex_usage_percent(binary, env)
+    except CityError:
+        used = None
+    if used is not None and used >= 100:
         raise CityError(f'{activity} reporté : quota Codex hebdomadaire épuisé.')
     day = datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
     path = state_store.USER_DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path, timeout=15) as db:
         db.execute('BEGIN IMMEDIATE')
-        db.execute('CREATE TABLE IF NOT EXISTS city_codex_daily_usage ('
-                   'day TEXT PRIMARY KEY, baseline REAL NOT NULL, last_seen REAL NOT NULL)')
-        row = db.execute('SELECT baseline,last_seen FROM city_codex_daily_usage WHERE day=?', (day,)).fetchone()
-        baseline = used if row is None else row[0]
-        if row is not None and used < row[1]:
-            baseline = 0  # The weekly window reset during this Paris day.
-        db.execute('INSERT OR REPLACE INTO city_codex_daily_usage VALUES(?,?,?)',
-                   (day, baseline, used))
-        db.execute('DELETE FROM city_codex_daily_usage WHERE day<?', (day,))
-    if used - baseline >= CODEX_DAILY_USAGE_PERCENT:
-        raise CityError(f'{activity} reporté : budget Codex quotidien atteint '
-                        f'({CODEX_DAILY_USAGE_PERCENT:.1f} points du quota hebdomadaire).')
+        db.execute('CREATE TABLE IF NOT EXISTS city_codex_agent_usage ('
+                   'day TEXT PRIMARY KEY, consumed REAL NOT NULL, last_seen REAL, fallback_calls INTEGER NOT NULL)')
+        row = db.execute('SELECT consumed,fallback_calls FROM city_codex_agent_usage WHERE day=?', (day,)).fetchone()
+        consumed, fallback_calls = row if row else (0.0, 0)
+        if consumed >= CODEX_DAILY_USAGE_PERCENT or (used is None and fallback_calls >= CODEX_DAILY_FALLBACK_CALLS):
+            raise CityError(f'{activity} reporté : budget Codex quotidien atteint.')
+        if used is None:
+            consumed += CODEX_DAILY_USAGE_PERCENT / CODEX_DAILY_FALLBACK_CALLS
+            fallback_calls += 1
+        db.execute('INSERT INTO city_codex_agent_usage VALUES(?,?,?,?) '
+                   'ON CONFLICT(day) DO UPDATE SET consumed=excluded.consumed, '
+                   'fallback_calls=excluded.fallback_calls',
+                   (day, consumed, used, fallback_calls))
+        db.execute('DELETE FROM city_codex_agent_usage WHERE day<?', (day,))
+    return used
+
+
+def record_daily_codex_usage(binary: str, env: dict, before: float | None) -> None:
+    if before is None:
+        return  # A bounded fallback call was reserved before execution.
+    try:
+        after = codex_usage_percent(binary, env)
+    except CityError:
+        after = None
+    day = datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
+    with sqlite3.connect(state_store.USER_DB_PATH, timeout=15) as db:
+        db.execute('BEGIN IMMEDIATE')
+        row = db.execute('SELECT consumed,last_seen FROM city_codex_agent_usage WHERE day=?', (day,)).fetchone()
+        if row is None:
+            return
+        delta = (CODEX_DAILY_USAGE_PERCENT / CODEX_DAILY_FALLBACK_CALLS if after is None or after < before
+                 else max(0.0, after - max(before, row[1] if row[1] is not None else before)))
+        db.execute('UPDATE city_codex_agent_usage SET consumed=?,last_seen=? WHERE day=?',
+                   (row[0] + delta, after if after is not None else row[1], day))
 
 
 def change_proposal(request: str) -> dict:
@@ -151,7 +177,7 @@ def review_repository() -> dict:
     root = repo_root()
     binary, env = codex_binary(), codex_environment()
     require_chatgpt(binary, env)
-    require_daily_codex_budget(binary, env)
+    usage_before = require_daily_codex_budget(binary, env)
     revision = git(root,'rev-parse','HEAD')
     candidates = git(root,'ls-files','--','internships_project/city_*.py',
                      'internships_project/marketdesk_city.py',
@@ -195,7 +221,10 @@ def review_repository() -> dict:
                   'les tests attendus ; evidence cite le fichier et le code observé ; limitations '
                   'décrit ce qui reste à vérifier. Réponds en français selon le schéma JSON.\n\n'+
                   json.dumps(excerpts,ensure_ascii=False))
-        events = _execute(command,directory,prompt,env)
+        try:
+            events = _execute(command,directory,prompt,env)
+        finally:
+            record_daily_codex_usage(binary, env, usage_before)
         try:
             result = json.loads(report.read_text(encoding='utf-8'))
             if not isinstance(result,dict) or not all(isinstance(result.get(key),str) and result[key].strip()
@@ -281,7 +310,7 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
     site_packages = root/'.venv'/'Lib'/'site-packages'
     if site_packages.is_dir():
         env['MARKETDESK_TEST_SITE_PACKAGES'] = str(site_packages)
-    require_daily_codex_budget(binary, env)
+    usage_before = require_daily_codex_budget(binary, env)
     if directory.exists():
         raise CityError('Un espace existe déjà pour cette mission. Consulte-le ou soumets une nouvelle demande.')
     directory.parent.mkdir(exist_ok=True)
@@ -339,7 +368,10 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
               'Réponds en français avec le schéma JSON demandé.\n\nDemande utilisateur :\n'+request)
     if on_progress:
         on_progress('Codex examine le projet et prépare une modification.')
-    events = _execute(command, directory, prompt, env)
+    try:
+        events = _execute(command, directory, prompt, env)
+    finally:
+        record_daily_codex_usage(binary, env, usage_before)
     try:
         result = json.loads(report.read_text(encoding='utf-8'))
         if not isinstance(result,dict) or not all(isinstance(result.get(key),str) for key in ('summary','tests','limitations')):

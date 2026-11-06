@@ -137,8 +137,9 @@ def test_autonomous_engineer_integrates_validated_code_without_approval(repo, mo
 def test_codex_daily_budget_prevents_a_new_worktree(repo, store, monkeypatch):
     root, _ = repo
     monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 60)
-    coding.require_daily_codex_budget('codex', {})
+    before = coding.require_daily_codex_budget('codex', {})
     monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 60 + coding.CODEX_DAILY_USAGE_PERCENT)
+    coding.record_daily_codex_usage('codex', {}, before)
     monkeypatch.setattr(coding, '_execute', lambda *_args: pytest.fail('Codex must stay stopped'))
     with pytest.raises(CityError, match='budget Codex quotidien'):
         coding.implement_change('9'*32, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
@@ -163,19 +164,49 @@ def test_codex_daily_budget_resets_on_new_day_and_weekly_reset(store, monkeypatc
     used = [62.0]
     monkeypatch.setattr(coding, 'datetime', SimpleNamespace(now=lambda _tz: current[0]))
     monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: used[0])
-    coding.require_daily_codex_budget('codex', {})
+    before = coding.require_daily_codex_budget('codex', {})
     used[0] = 75.0
-    coding.require_daily_codex_budget('codex', {})
+    coding.record_daily_codex_usage('codex', {}, before)
+    before = coding.require_daily_codex_budget('codex', {})
     used[0] = 77.0
+    coding.record_daily_codex_usage('codex', {}, before)
     with pytest.raises(CityError, match='budget Codex quotidien'):
         coding.require_daily_codex_budget('codex', {})
     current[0] = today + timedelta(days=1)
-    coding.require_daily_codex_budget('codex', {})
+    before = coding.require_daily_codex_budget('codex', {})
     used[0] = 2.0  # Subscription's weekly window reset during the day.
-    coding.require_daily_codex_budget('codex', {})
+    coding.record_daily_codex_usage('codex', {}, before)
+    before = coding.require_daily_codex_budget('codex', {})
     used[0] = 13.0
-    coding.require_daily_codex_budget('codex', {})
+    coding.record_daily_codex_usage('codex', {}, before)
+    before = coding.require_daily_codex_budget('codex', {})
     used[0] = 15.0
+    coding.record_daily_codex_usage('codex', {}, before)
+    with pytest.raises(CityError, match='budget Codex quotidien'):
+        coding.require_daily_codex_budget('codex', {})
+
+
+def test_codex_budget_excludes_usage_between_agent_calls(store, monkeypatch):
+    used = [60.0]
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: used[0])
+    before = coding.require_daily_codex_budget('codex', {})
+    used[0] = 62.0
+    coding.record_daily_codex_usage('codex', {}, before)
+    used[0] = 80.0  # Usage outside City between its calls.
+    before = coding.require_daily_codex_budget('codex', {})
+    used[0] = 81.0
+    coding.record_daily_codex_usage('codex', {}, before)
+    with store.db() as db:
+        consumed = db.execute('SELECT consumed FROM city_codex_agent_usage').fetchone()[0]
+    assert consumed == 3.0
+
+
+def test_codex_budget_allows_bounded_calls_when_meter_is_unavailable(store, monkeypatch):
+    def unavailable(*_args):
+        raise CityError('Quota Codex indisponible : missions de développement suspendues.')
+    monkeypatch.setattr(coding, 'codex_usage_percent', unavailable)
+    for _ in range(coding.CODEX_DAILY_FALLBACK_CALLS):
+        assert coding.require_daily_codex_budget('codex', {}) is None
     with pytest.raises(CityError, match='budget Codex quotidien'):
         coding.require_daily_codex_budget('codex', {})
 

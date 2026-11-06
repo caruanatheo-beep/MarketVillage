@@ -615,11 +615,11 @@ def _search_service_contacts_with_codex() -> list[dict]:
     """One subscription-backed search when both free public engines are unavailable."""
     from .marketdesk_city import CityError
     from .city_coding import (_execute, codex_binary, codex_environment,
-                              require_chatgpt, require_daily_codex_budget)
+                              require_chatgpt, require_daily_codex_budget, record_daily_codex_usage)
 
     binary, env = codex_binary(), codex_environment()
     require_chatgpt(binary, env)
-    require_daily_codex_budget(binary, env, activity='Recherche de Clara')
+    usage_before = require_daily_codex_budget(binary, env, activity='Recherche de Clara')
     with tempfile.TemporaryDirectory(prefix='clara-search-') as temporary:
         directory = Path(temporary)
         schema = directory / 'schema.json'
@@ -649,7 +649,10 @@ def _search_service_contacts_with_codex() -> list[dict]:
                   'Pas de connexion LinkedIn, de shell, de fichiers, de données privées ni d’autre outil. '
                   'Réponds uniquement selon le schéma JSON. Entités : '
                   + json.dumps(entities, ensure_ascii=False))
-        events = _execute(command, directory, prompt, env, timeout_seconds=180)
+        try:
+            events = _execute(command, directory, prompt, env, timeout_seconds=180)
+        finally:
+            record_daily_codex_usage(binary, env, usage_before)
         try:
             candidates = json.loads(report.read_text(encoding='utf-8'))['contacts']
             if not isinstance(candidates, list):

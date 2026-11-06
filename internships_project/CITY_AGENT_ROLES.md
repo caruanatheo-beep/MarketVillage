@@ -36,12 +36,12 @@ missions de développement peuvent s'exécuter ensemble, une par agent et par co
 dans des worktrees Git distincts, avec Codex connecté à
 l'abonnement ChatGPT et `gpt-6.1-sol` en raisonnement moyen. Aucun appel API payant
 n'est utilisé pour ce développement. Le réglage « Missions simultanées » de chaque
-compte s'applique aussi. Avant chaque nouvel appel Codex des programmeurs, de Jules
-ou de Clara,
-City lit la fenêtre hebdomadaire et compare sa progression à un budget commun de
-1/7 du quota par jour (14,3 points), remis à zéro à minuit heure de Paris.
-Si le budget est atteint, le développement reprend le lendemain ; si la mesure est
-indisponible, City réessaie une heure plus tard.
+compte s'applique aussi. City mesure la progression du quota hebdomadaire pendant
+les appels des programmeurs, de Jules et de Clara, puis la compare à un budget
+commun de 1/7 du quota par jour (14,3 points), remis à zéro à minuit heure de Paris.
+L'usage personnel de Codex entre deux appels City n'entre pas dans ce calcul.
+Si Codex ne renvoie pas sa mesure, City autorise au plus six appels partagés par jour.
+Quand le budget est atteint, le développement reprend le lendemain.
 Une mission déjà lancée peut faire dépasser ce seuil ; il ne s'agit pas d'un plafond
 imposé par OpenAI à l'abonnement.
 

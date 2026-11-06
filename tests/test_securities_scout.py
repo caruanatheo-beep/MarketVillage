@@ -158,8 +158,9 @@ def test_clara_codex_fallback_obeys_subscription_stop(tmp_path, monkeypatch):
     monkeypatch.setattr(city_coding, 'require_chatgpt', lambda *_args: None)
     usage = [60.0]
     monkeypatch.setattr(city_coding, 'codex_usage_percent', lambda *_args: usage[0])
-    city_coding.require_daily_codex_budget('codex', {})
+    before = city_coding.require_daily_codex_budget('codex', {})
     usage[0] += city_coding.CODEX_DAILY_USAGE_PERCENT
+    city_coding.record_daily_codex_usage('codex', {}, before)
     monkeypatch.setattr(city_coding, '_execute', lambda *_args, **_kwargs:
                         pytest.fail('Codex must not run at the quota stop'))
 
