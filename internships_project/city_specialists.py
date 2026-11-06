@@ -233,27 +233,41 @@ def prepare_branch(task_id: str, audit: dict, approval: bool) -> dict:
 
 def backtest(prices, *, lookback: int = 60, cost_bps: float = 10, strategy: str = "momentum") -> dict:
     """Long/cash, lagged close signal, next-close returns; no forward filling."""
+    import numpy as np
     import pandas as pd
     values = pd.to_numeric(prices, errors="coerce").dropna().sort_index()
     values = values[~values.index.duplicated(keep="last")]
+    if not np.isfinite(values).all():
+        raise CityError("Historique invalide : les clôtures doivent être positives et finies. Aucun résultat de backtest publié.")
     if not 5 <= lookback <= 252 or not 0 <= cost_bps <= 100 or len(values) < lookback + 60 or (values <= 0).any():
         raise CityError("Historique insuffisant/invalide : au moins lookback + 60 clôtures positives, coûts 0–100 pb.")
     if strategy not in {"momentum", "mean_reversion"}:
         raise CityError("Stratégie non disponible. Momentum ou retour à la moyenne uniquement ; aucun faux carry sans taux de financement.")
     signal = values.pct_change(lookback, fill_method=None)
+    if not np.isfinite(signal.iloc[lookback:]).all():
+        raise CityError("Calculs de backtest non finis : historique trop extrême. Aucun résultat publié.")
     position = ((signal > 0) if strategy == "momentum" else (signal < 0)).astype(float).shift(1).fillna(0)
     gross = position * values.pct_change(fill_method=None).fillna(0)
     turnover = position.diff().abs().fillna(position.abs())
     net = (gross - turnover * cost_bps / 10000).iloc[lookback + 1:]
     # Liquidate at the final close and charge the final one-way cost.
     net.iloc[-1] -= float(position.iloc[-1]) * cost_bps / 10000
-    equity = (1 + net).cumprod()
-    volatility = float(net.std(ddof=1) * math.sqrt(252))
+    if not np.isfinite(net).all():
+        raise CityError("Calculs de backtest non finis : historique trop extrême. Aucun résultat publié.")
+    # Finite prices/returns can still overflow when compounded or squared.
+    # Detect that before producing metrics, JSON or chart coordinates.
+    with np.errstate(over="ignore", invalid="ignore"):
+        equity = (1 + net).cumprod()
+        volatility = float(net.std(ddof=1) * math.sqrt(252))
+    if not np.isfinite(equity).all() or not math.isfinite(volatility):
+        raise CityError("Calculs de backtest non finis : historique trop extrême. Aucun résultat publié.")
     peak = equity.cummax().clip(lower=1)
     metrics = {"total_return": float(equity.iloc[-1] - 1), "annualized_volatility": volatility,
                "sharpe_rf_zero": float(net.mean() / net.std(ddof=1) * math.sqrt(252)) if volatility > 0 else None,
                "max_drawdown": float((equity / peak - 1).min()), "transaction_cost_bps": cost_bps,
                "observations": len(net), "turnover": float(turnover.iloc[lookback+1:].sum() + position.iloc[-1])}
+    if any(value is not None and not math.isfinite(value) for value in metrics.values()):
+        raise CityError("Calculs de backtest non finis : historique trop extrême. Aucun résultat publié.")
     # Inline SVG from numeric values only; survives the existing Markdown result viewer.
     points = " ".join(f"{i*480/max(1,len(equity)-1):.1f},{100-(v-float(equity.min()))/max(.001,float(equity.max()-equity.min()))*90:.1f}" for i, v in enumerate(equity))
     return {"metrics": metrics, "equity": [{"date": str(d)[:10], "value": round(float(v), 6)} for d,v in equity.items()],
