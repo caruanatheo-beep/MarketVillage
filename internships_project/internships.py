@@ -982,6 +982,14 @@ def _jsonld_job_posted(page_html: str) -> str:
         return ""
 
 
+def _career_publication_date(raw: str) -> str:
+    """Keep a career offer usable when its displayed publication date is invalid."""
+    try:
+        return datetime.strptime(raw.replace(".", "/"), "%d/%m/%Y").date().isoformat()
+    except ValueError:
+        return ""
+
+
 def _career_detail(url: str, company: str, fallback_title: str = "",
                    html_override: str | None = None) -> Opportunity | None:
     portal_company = company
@@ -1076,7 +1084,7 @@ def _career_detail(url: str, company: str, fallback_title: str = "",
             location = location_match.group(1).strip() if location_match else location
         published_match = re.search(r"(?:Date de publication|Date de parution|Date de mise à jour|Mise à jour le)\s*[:|]*\s*(\d{2}[/.]\d{2}[/.]\d{4})", text, re.IGNORECASE)
         if published_match and not published:
-            published = datetime.strptime(published_match.group(1).replace(".", "/"), "%d/%m/%Y").date().isoformat()
+            published = _career_publication_date(published_match.group(1))
         contract_match = re.search(r"(?:Type de contrat|Contrat)\s*[:|]*\s*(?:\|\s*){0,2}(Stage|VIE|Graduate)", text, re.IGNORECASE)
         employment = contract_match.group(1) if contract_match else employment
         if company == "La Banque Postale":
@@ -1105,7 +1113,7 @@ def _career_detail(url: str, company: str, fallback_title: str = "",
             employment = contract_match.group(1) if contract_match else employment
             posted_match = re.search(r"Date de début de diffusion\s*[:|]*\s*(\d{2}/\d{2}/\d{4})", text, re.IGNORECASE)
             if posted_match and not published:
-                published = datetime.strptime(posted_match.group(1), "%d/%m/%Y").date().isoformat()
+                published = _career_publication_date(posted_match.group(1))
     if company == "BNP Paribas" and not location:
         location_match = re.search(rf"{re.escape(title)}\s+Stage\s+Temps plein\s+(.+?)\s+Postuler", text)
         location = location_match.group(1) if location_match else ""
