@@ -3,7 +3,7 @@ import type { OfficeState } from '../vendor/pixel-agents/webview-ui/src/office/e
 import type { AgentStatus } from './types';
 import { worldY } from './worldGeometry';
 
-// The six stance areas all strike east. Reservations are local
+// The six stance areas face the backstop. Reservations are local
 // ambient animation only: never create tasks, tool events or backend statuses.
 export const OFFICE_PORTAL = {col:47,row:worldY(28)};
 export const GOLF_PORTAL = {col:64,row:worldY(28)};
@@ -20,11 +20,16 @@ const IDLE = new Set(['idle','completed','cancelled']);
 
 const SWING_SECONDS = 4.4;
 const ease = (value:number)=>value*value*(3-2*value);
+export function golfBallPosition(bay:typeof GOLF_BAYS[number],flight:number){
+  const teeY=worldY(bay.matRow)*TILE_SIZE+11;
+  return {x:bay.matCol*TILE_SIZE+43+6*flight+3*Math.sin(Math.PI*flight),
+    y:teeY-(teeY-GOLF_BOUNDS.top*TILE_SIZE-12)*flight-12*Math.sin(Math.PI*flight)};
+}
 export function golfSwingPose(seconds:number){
   const phase=(seconds%SWING_SECONDS)/SWING_SECONDS;
   if(phase<.18)return {phase,angle:.12,sway:0,bob:Math.sin(phase/.18*Math.PI)*.3,flight:0};
-  if(phase<.43){const t=ease((phase-.18)/.25);return {phase,angle:.12-2.3*t,sway:-1.8*t,bob:-.7*t,flight:0};}
-  if(phase<.55){const t=ease((phase-.43)/.12);return {phase,angle:-2.18+2.3*t,sway:-1.8+4*t,bob:-.7+1.5*t,flight:0};}
+  if(phase<.43){const t=ease((phase-.18)/.25);return {phase,angle:.12-1.42*t,sway:-1.8*t,bob:-.7*t,flight:0};}
+  if(phase<.55){const t=ease((phase-.43)/.12);return {phase,angle:-1.3+1.42*t,sway:-1.8+4*t,bob:-.7+1.5*t,flight:0};}
   if(phase<.79){const t=ease((phase-.55)/.24);return {phase,angle:.12-1.35*t,sway:2-1.2*t,bob:.8-.8*t,flight:(phase-.55)/.24};}
   const t=ease((phase-.79)/.21);
   return {phase,angle:-1.23+1.35*t,sway:.8*(1-t),bob:0,flight:0};
@@ -41,10 +46,10 @@ export class GolfPractice {
   constructor(private office:OfficeState,private roster:string[]){}
 
   async load():Promise<void>{
-    await Promise.all(['practice-net','md_golf_deck','md_golf_skyline'].map(name=>new Promise<void>((resolve,reject)=>{
+    await Promise.all(['md_golf_backstop','md_golf_deck','md_golf_skyline'].map(name=>new Promise<void>((resolve,reject)=>{
       const image=new Image();image.onload=()=>{this.assets[name]=image;resolve();};
       image.onerror=()=>reject(new Error(`Impossible de charger le décor du practice : ${name}`));
-      image.src=name==='practice-net'?'/city/pixel-assets/tower/practice-net.png':name==='md_golf_deck'?'/city/pixel-assets/tower/turf.png':`/city/pixel-assets/furniture/MARKETDESK_GOLF/${name}.png`;
+      image.src=name==='md_golf_backstop'?'/city/pixel-assets/tower/md_golf_backstop.svg':name==='md_golf_deck'?'/city/pixel-assets/tower/turf.png':`/city/pixel-assets/furniture/MARKETDESK_GOLF/${name}.png`;
     })));
   }
   sync(agents:Agent[],tasks:Task[]):void{
@@ -140,6 +145,8 @@ export class GolfPractice {
       for(let col=50;col<67;col+=6)ctx.drawImage(skyline,ox+col*cell,oy+(GOLF_BOUNDS.top-.7)*cell,96*zoom,32*zoom);
       ctx.restore();
     }
+    const backstop=this.assets.md_golf_backstop;
+    if(backstop)ctx.drawImage(backstop,x,y,w,4*cell);
   }
 
   render(ctx:CanvasRenderingContext2D,ox:number,oy:number,zoom:number):void{
@@ -154,13 +161,6 @@ export class GolfPractice {
       ctx.beginPath();ctx.ellipse(px,py-cell*.2,cell*.48,cell*.85,0,0,Math.PI*2);ctx.stroke();
       ctx.font=`700 ${Math.max(7,6*zoom)}px "Segoe UI",sans-serif`;
       ctx.textAlign='center';ctx.fillStyle='#e6fff5';ctx.fillText(label,px,py-cell*1.1);
-    }
-    // Fine mesh encloses the practice terrace without blocking its portal.
-    const net=this.assets['practice-net'];
-    if(net){
-      ctx.save();ctx.beginPath();ctx.rect(ox+50*cell,oy+GOLF_BOUNDS.top*cell,17*cell,.9*cell);ctx.clip();
-      for(let x=50;x<67;x+=4)ctx.drawImage(net,ox+x*cell,oy+GOLF_BOUNDS.top*cell,4*cell,.9*cell);
-      ctx.restore();
     }
     // Local additive light pools brighten wood, characters and the green.
     ctx.beginPath();ctx.rect(ox+50*cell,oy+GOLF_BOUNDS.top*cell,17*cell,(GOLF_BOUNDS.bottom-GOLF_BOUNDS.top+1)*cell);ctx.clip();
@@ -180,22 +180,23 @@ export class GolfPractice {
       if(visit.stage!=='playing')continue;
       const ch=this.office.characters.get(index);if(!ch)continue;
       const pose=golfSwingPose(visit.swing),x=ox+ch.x*zoom,y=oy+(ch.y-12)*zoom;
-      const handX=x+4*zoom,handY=y+1*zoom,clubLength=15*zoom;
-      const teeX=ox+(GOLF_BAYS[visit.bay].matCol*TILE_SIZE+43)*zoom;
-      const teeY=oy+(worldY(GOLF_BAYS[visit.bay].matRow)*TILE_SIZE+11)*zoom;
-      // The sleeve, both hands and shaft follow the same pivot; impact starts at the printed tee.
+      const handX=x+7*zoom,handY=y+1*zoom,clubLength=12*zoom;
+      const bay=GOLF_BAYS[visit.bay],tee=golfBallPosition(bay,0);
+      const teeX=ox+tee.x*zoom,teeY=oy+tee.y*zoom;
+      // The club stays outside the character silhouette; impact starts at the printed tee.
       ctx.lineCap='round';ctx.lineJoin='round';
       ctx.strokeStyle='#172a35';ctx.lineWidth=Math.max(2,2.6*zoom);
-      ctx.beginPath();ctx.moveTo(x-zoom,y-5*zoom);ctx.lineTo(x+2*zoom,y-zoom);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(x+3*zoom,y-5*zoom);ctx.lineTo(x+5*zoom,y-zoom);ctx.stroke();
       ctx.strokeStyle='#8aa9b5';ctx.lineWidth=Math.max(1,1.5*zoom);
-      ctx.beginPath();ctx.moveTo(x-zoom,y-5*zoom);ctx.lineTo(x+2*zoom,y-zoom);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(x+3*zoom,y-5*zoom);ctx.lineTo(x+5*zoom,y-zoom);ctx.stroke();
       ctx.strokeStyle='#d8aa83';ctx.lineWidth=Math.max(1,1.2*zoom);
-      ctx.beginPath();ctx.moveTo(x+2*zoom,y-zoom);ctx.lineTo(handX,handY);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(x+5*zoom,y-zoom);ctx.lineTo(handX,handY);ctx.stroke();
       if(pose.phase>=.43&&pose.phase<.58){
         ctx.globalAlpha=.22;ctx.strokeStyle='#d3e6e9';ctx.lineWidth=Math.max(1,zoom);
         for(const lag of [.32,.62]){
           ctx.beginPath();ctx.moveTo(handX,handY);
-          ctx.lineTo(handX+Math.cos(pose.angle-lag)*clubLength,handY+Math.sin(pose.angle-lag)*clubLength);ctx.stroke();
+          const trailAngle=Math.max(-1.4,pose.angle+(pose.phase<.43?lag:-lag));
+          ctx.lineTo(handX+Math.cos(trailAngle)*clubLength,handY+Math.sin(trailAngle)*clubLength);ctx.stroke();
         }
         ctx.globalAlpha=1;
       }
@@ -207,22 +208,23 @@ export class GolfPractice {
       if(!pose.flight){
         ctx.fillStyle='#fff9df';ctx.beginPath();ctx.arc(teeX,teeY,Math.max(1,1.15*zoom),0,Math.PI*2);ctx.fill();
       }else{
-        const t=pose.flight,ballX=teeX+48*t*zoom,ballY=teeY-(32*t+9*Math.sin(Math.PI*t))*zoom;
+        const t=pose.flight,ball=golfBallPosition(bay,t),ballX=ox+ball.x*zoom,ballY=oy+ball.y*zoom;
         for(const lag of [.08,.16,.24])if(t>lag){
-          ctx.globalAlpha=(.35-lag)*(.85-t);
-          ctx.fillStyle='#bdf8e9';ctx.beginPath();ctx.arc(ballX-48*lag*zoom,ballY+32*lag*zoom,Math.max(.6,zoom*.7),0,Math.PI*2);ctx.fill();
+          const previous=golfBallPosition(bay,t-lag);
+          ctx.globalAlpha=Math.max(0,(.35-lag)*(.85-t));
+          ctx.fillStyle='#bdf8e9';ctx.beginPath();ctx.arc(ox+previous.x*zoom,oy+previous.y*zoom,Math.max(.6,zoom*.7),0,Math.PI*2);ctx.fill();
         }
         ctx.globalAlpha=1;ctx.fillStyle='#fffdf0';ctx.beginPath();ctx.arc(ballX,ballY,Math.max(1,1.25*zoom),0,Math.PI*2);ctx.fill();
         if(t<.18){
           ctx.strokeStyle=`rgba(255,244,185,${1-t/.18})`;ctx.lineWidth=Math.max(1,zoom);
           ctx.beginPath();ctx.arc(teeX,teeY,Math.max(2,5*t*zoom),0,Math.PI*2);ctx.stroke();
         }
+        if(t>.88){
+          ctx.strokeStyle=`rgba(208,255,235,${(t-.88)/.12})`;ctx.lineWidth=Math.max(1,zoom);
+          ctx.beginPath();ctx.arc(ballX,ballY,Math.max(2,(t-.88)*25*zoom),0,Math.PI*2);ctx.stroke();
+        }
       }
     }
     ctx.restore();
-    ctx.save();ctx.font=`600 ${Math.max(7,7*zoom)}px "Segoe UI",sans-serif`;ctx.textAlign='center';
-    ctx.fillStyle='#e8d3a6';ctx.fillText('GOLF PRACTICE',ox+58*cell,oy+worldY(10)*cell);
-    ctx.font=`${Math.max(6,5*zoom)}px "Segoe UI",sans-serif`;ctx.fillStyle='#b3b9b2';
-    ctx.fillText('Pause détente · aucune mission IA',ox+58*cell,oy+worldY(11)*cell);ctx.restore();
   }
 }

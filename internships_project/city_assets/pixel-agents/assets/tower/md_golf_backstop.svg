@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="272" height="64" viewBox="0 0 272 64">
+  <defs>
+    <pattern id="mesh" width="8" height="8" patternUnits="userSpaceOnUse">
+      <path d="M0 0 8 8M8 0 0 8" fill="none" stroke="#9dc9b8" stroke-opacity=".46" stroke-width=".7"/>
+      <path d="M0 4H8" fill="none" stroke="#6fa898" stroke-opacity=".27" stroke-width=".5"/>
+    </pattern>
+  </defs>
+  <path d="M2 5H270V62H2Z" fill="#0d3035" fill-opacity=".52"/>
+  <path d="M3 8H269V59H3Z" fill="url(#mesh)"/>
+  <path d="M0 3H272V8H0Z" fill="#173941"/>
+  <path d="M2 3H270V5H2Z" fill="#8fc3b1"/>
+  <path d="M0 59H272V63H0Z" fill="#1a3b3e"/>
+  <path d="M3 59H269V60H3Z" fill="#82b6a1"/>
+  <g fill="#183a40" stroke="#a6d4bd" stroke-width="1">
+    <path d="M1 2H5V63H1Z"/>
+    <path d="M67 2H71V63H67Z"/>
+    <path d="M134 2H138V63H134Z"/>
+    <path d="M201 2H205V63H201Z"/>
+    <path d="M267 2H271V63H267Z"/>
+  </g>
+  <g fill="#d9e7b4">
+    <path d="M1 0H7V3H1Z"/>
+    <path d="M66 0H72V3H66Z"/>
+    <path d="M133 0H139V3H133Z"/>
+    <path d="M200 0H206V3H200Z"/>
+    <path d="M266 0H272V3H266Z"/>
+  </g>
+</svg>

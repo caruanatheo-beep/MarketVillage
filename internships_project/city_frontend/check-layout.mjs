@@ -16,7 +16,7 @@ export async function checkLayout() {
         export { buildTowerStructure } from './src/TowerArchitecture';
         export { TileType } from './vendor/pixel-agents/webview-ui/src/office/types';
         export { projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows } from './src/TowerPerspective';
-        export { GolfPractice, GOLF_BAYS, GOLF_BOUNDS, OFFICE_PORTAL, GOLF_PORTAL, golfSwingPose } from './src/GolfPractice';
+        export { GolfPractice, GOLF_BAYS, GOLF_BOUNDS, OFFICE_PORTAL, GOLF_PORTAL, golfSwingPose, golfBallPosition } from './src/GolfPractice';
         export { OfficeState } from './vendor/pixel-agents/webview-ui/src/office/engine/officeState';
         export { findPath } from './vendor/pixel-agents/webview-ui/src/office/layout/tileMap';`,
       resolveDir: base,
@@ -24,7 +24,7 @@ export async function checkLayout() {
     },
     bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
   });
-  const { loadFurniture, buildOfficeLayout, validateAgentRoutes, OfficeState, findPath, GolfPractice, GOLF_BAYS, GOLF_BOUNDS, OFFICE_PORTAL, GOLF_PORTAL, golfSwingPose, worldY,
+  const { loadFurniture, buildOfficeLayout, validateAgentRoutes, OfficeState, findPath, GolfPractice, GOLF_BAYS, GOLF_BOUNDS, OFFICE_PORTAL, GOLF_PORTAL, golfSwingPose, golfBallPosition, worldY,
     projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows, buildTowerStructure, TileType,
     notificationRows, isPendingProposal, needsDecision, parisDay, cockpitData, resultSummary } =
     await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString("base64")}`);
@@ -71,6 +71,8 @@ export async function checkLayout() {
   const golfWidthAt=row=>projectTowerX(67*16,row*16,0,0,1)-projectTowerX(50*16,row*16,0,0,1);
   assert.ok(Math.abs(golfWidthAt(8)-golfWidthAt(29))<1e-8,'Detached golf deck keeps the same width at top and bottom');
   const assetPath = url => resolve(base, "../city_assets/pixel-agents/assets", url.split('?')[0].replace("/city/pixel-assets/", ""));
+  const backstop=await readFile(assetPath('/city/pixel-assets/tower/md_golf_backstop.svg'),'utf8');
+  assert.match(backstop,/width="272" height="64"/,'Backstop spans the detached golf deck');
   const assets = await loadFurniture(
     async url => JSON.parse(await readFile(assetPath(url), "utf8")),
     async (url, width, height) => {
@@ -209,6 +211,11 @@ export async function checkLayout() {
   assert.ok(golfSwingPose(1.5).angle<golfSwingPose(0).angle,'Backswing lifts the club');
   assert.ok(golfSwingPose(2.7).flight>0,'Ball launches after contact');
   assert.equal(golfSwingPose(4.4).flight,0,'Ball and swing reset before the next shot');
+  for(const bay of GOLF_BAYS){
+    const tee=golfBallPosition(bay,0),middle=golfBallPosition(bay,.5),net=golfBallPosition(bay,1);
+    assert.ok(tee.y>middle.y&&middle.y>net.y,'Ball travels upward toward the backstop');
+    assert.ok(Math.abs(net.x-tee.x)<10,'Ball stays in its lane');
+  }
   const idle=roster.map(id=>({id,status:'idle'}));
   const played=new Set();
   let maxVisitors=0;
