@@ -50,19 +50,23 @@ def _observation_age(value: object) -> dict:
             "note": "Âge calendaire de l'observation, pas une cotation temps réel."}
 
 
+def _news_timestamp(value: object) -> datetime | None:
+    """Normalize provider publication times without platform timestamp limits."""
+    try:
+        stamp = datetime.fromisoformat(str(value or "").replace(" UTC", "+00:00").replace("Z", "+00:00"))
+        return (stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None
+                else stamp.astimezone(timezone.utc))
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
 def market_news() -> dict:
     from src.news import load_news
     items, errors = load_news()
     articles = []
     for item in items:
         raw_date = str(item.published or "")
-        try:
-            # News providers emit "YYYY-MM-DD HH:MM UTC"; accept ISO dates too.
-            stamp = datetime.fromisoformat(raw_date.replace(" UTC", "+00:00").replace("Z", "+00:00"))
-            stamp = (stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None
-                     else stamp.astimezone(timezone.utc))
-        except (ValueError, OverflowError):
-            stamp = None
+        stamp = _news_timestamp(raw_date)
         articles.append((stamp, {"title": item.title, "publisher": str(getattr(item, "source", "")),
                                     "published": raw_date, "url": item.url,
                                     "date_known": stamp is not None}))
@@ -293,7 +297,11 @@ def _market_sentiment(points: list, news: list) -> dict:
     up = re.compile(r"\b(rise|rises|rose|gain|gains|rally|rallies|climb|climbs|rebound|rebounds|surge|surges|advance|advances|lift|lifts|boost|boosts)\b", re.I)
     trusted = ("reuters", "bloomberg", "wsj", "financial times", "ft.com", "associated press", "ap news", "cnbc", "marketwatch")
     supporting = []
-    for item in news:
+    dated_news = [(stamp, item) for item in news
+                  if (stamp := _news_timestamp(item.published)) is not None]
+    dated_news.sort(key=lambda row: row[0], reverse=True)
+    seen_urls = set()
+    for _, item in dated_news:
         if not item.url.startswith(('https://', 'http://')) or not any(name in item.source.casefold() for name in trusted):
             continue
         # Apply the same UTC calendar freshness window as the price signals.
@@ -303,6 +311,10 @@ def _market_sentiment(points: list, news: list) -> dict:
         lead = re.split(r"[,;:]|\b(?:as|while|but|despite)\b", item.title, maxsplit=1, flags=re.I)[0]
         if topic.search(lead) and ((direction == -1 and down.search(lead) and not up.search(lead))
                                    or (direction == 1 and up.search(lead) and not down.search(lead))):
+            key = item.url.split("#")[0].rstrip("/")
+            if key in seen_urls:
+                continue
+            seen_urls.add(key)
             supporting.append(item)
         if len(supporting) == 2:
             break
