@@ -424,11 +424,19 @@ def network_contacts(username: str, query: str = "", page: int = 1) -> dict:
     if not isinstance(page, int) or isinstance(page, bool) or page < 1:
         raise CityError("La page doit être un entier positif.")
     contacts = load_user_data(username, "mail_contacts")
+    # A malformed imported record must not hide the rest of the directory.
+    # Filter a local view only; never rewrite the user's saved contacts here.
+    ignored = sum(not isinstance(item, dict) for item in contacts.values())
+    contacts = {key: item for key, item in contacts.items() if isinstance(item, dict)}
+    warning = "Aucune recherche externe n'est lancée par cette consultation. Les contacts publics collectés par Lina restent à vérifier."
+    if ignored:
+        warning += f" {ignored} fiche(s) au format invalide ignorée(s), sans modification des données enregistrées."
     if not contacts:
         return {"title": "Réseau professionnel", "contacts": [], "count": 0,
                 "total_matches": 0, "page": page, "page_size": 12, "has_more": False,
-                "text": "Aucun contact enregistré. Consulte la collecte quotidienne de Lina dans City → Contacts, ou importe tes contacts dans Mail.",
-                "source": "Network · dossier personnel", "warning": "Aucune recherche externe n'est lancée par cette consultation du dossier."}
+                "text": ("Aucune fiche de contact lisible." if ignored else "Aucun contact enregistré.")
+                        + " Consulte la collecte quotidienne de Lina dans City → Contacts, ou importe tes contacts dans Mail.",
+                "source": "Network · dossier personnel", "warning": warning}
     terms = search_text(query).split()
     scored = []
     for key, item in contacts.items():
@@ -450,7 +458,7 @@ def network_contacts(username: str, query: str = "", page: int = 1) -> dict:
     return {"title": "Contacts pertinents déjà enregistrés", "contacts": records, "count": len(records),
             "total_matches": len(scored), "page": page, "page_size": 12, "has_more": page * 12 < len(scored),
             "text": f"{len(scored)} contact(s) correspondent aux mots-clés fournis parmi {len(contacts)} contacts sauvegardés ; {len(records)} sur cette page.",
-            "source": "Network · dossier personnel", "warning": "Aucune recherche externe n'est lancée par cette consultation. Les contacts publics collectés par Lina restent à vérifier."}
+            "source": "Network · dossier personnel", "warning": warning}
 
 
 def prepare_outreach(username: str, contact_id: str, profile_id: str, language: str) -> dict:

@@ -133,7 +133,12 @@ def _cached_jobs(query: str = "", bank: str = "", location: str = "", start: str
 def _contact(username: str, contact_id: str) -> dict:
     from .state_store import load_user_data
     contacts = load_user_data(username, "mail_contacts")
-    contact = contacts.get(_bounded(contact_id, 100))
+    key = _bounded(contact_id, 100)
+    if key not in contacts:
+        raise CityError("Ce contact n'est pas enregistré sur ton compte.")
+    contact = contacts[key]
+    if not isinstance(contact, dict):
+        raise CityError("Cette fiche de contact est illisible. Les données enregistrées n'ont pas été modifiées.")
     if not contact:
         raise CityError("Ce contact n'est pas enregistré sur ton compte.")
     fields = ("name", "role", "company", "location", "linkedin_url", "experiences", "education",
