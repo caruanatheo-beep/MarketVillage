@@ -68,6 +68,8 @@ export async function checkLayout() {
   }
   assert.equal(worldY(40),38,'Five redundant facade rows removed');
   assert.ok(towerDepthFactor(23,23,1)<towerDepthFactor(23+worldY(40)*16,23,1),'Base is larger than penthouse');
+  const golfWidthAt=row=>projectTowerX(67*16,row*16,0,0,1)-projectTowerX(50*16,row*16,0,0,1);
+  assert.ok(Math.abs(golfWidthAt(8)-golfWidthAt(29))<1e-8,'Detached golf deck keeps the same width at top and bottom');
   const assetPath = url => resolve(base, "../city_assets/pixel-agents/assets", url.split('?')[0].replace("/city/pixel-assets/", ""));
   const assets = await loadFurniture(
     async url => JSON.parse(await readFile(assetPath(url), "utf8")),
@@ -194,6 +196,10 @@ export async function checkLayout() {
     assert.equal(findPath(seat.seatCol,seat.seatRow,GOLF_PORTAL.col,GOLF_PORTAL.row,office.tileMap,blocked).length,0,'Crossing golf without portal must be impossible');
   }
   for(const bay of GOLF_BAYS){
+    const mat=office.layout.furniture.find(item=>item.uid===`marketdesk-golf-mat-${bay.index}`);
+    assert.ok(mat,'Each golfer has a mat');
+    assert.ok(bay.col>=mat.col&&bay.col<mat.col+5&&bay.row>=mat.row&&bay.row<mat.row+2,
+      `Golf stance ${bay.index} must be on its mat`);
     assert.ok(findPath(GOLF_PORTAL.col,GOLF_PORTAL.row,bay.col,bay.row,office.tileMap,office.blockedTiles).length,`Cannot reach golf bay ${bay.index} from portal`);
     assert.ok(findPath(bay.col,bay.row,GOLF_PORTAL.col,GOLF_PORTAL.row,office.tileMap,office.blockedTiles).length,`Cannot leave golf bay ${bay.index}`);
   }

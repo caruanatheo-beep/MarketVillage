@@ -9,7 +9,7 @@ export const OFFICE_PORTAL = {col:47,row:worldY(28)};
 export const GOLF_PORTAL = {col:64,row:worldY(28)};
 export const GOLF_BOUNDS = {left:50,right:66,top:worldY(8),bottom:worldY(31)};
 export const GOLF_BAYS = [12,20,25].flatMap((matRow)=>[51,59].map(matCol=>({
-  index:0,col:matCol+1,row:worldY(matRow+2),matCol,matRow,
+  index:0,col:matCol+1,row:worldY(matRow)+1,matCol,matRow,
 }))).map((bay,index)=>({...bay,index}));
 export const GOLF_ROWS = worldY(33);
 type Visit = { bay:number; stage:'to_portal'|'walking'|'playing'|'to_exit'|'returning'; elapsed:number; swing:number };
