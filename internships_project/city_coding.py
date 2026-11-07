@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from typing import Callable
 from zoneinfo import ZoneInfo
 
@@ -77,14 +78,23 @@ def codex_usage_percent(binary: str, env: dict) -> float:
             process.stdin.flush()
             if item.get('id') is None:
                 continue
+            deadline = time.monotonic() + 15
             while True:
-                reply = json.loads(output.get(timeout=15))
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise Empty()
+                reply = json.loads(output.get(timeout=remaining))
+                if not isinstance(reply, dict):
+                    raise ValueError('Invalid Codex response')
                 if reply.get('id') == item['id']:
                     if reply.get('error'):
                         raise CityError('Quota Codex indisponible : missions de développement suspendues.')
                     break
-        limits = reply.get('result', {}).get('rateLimitsByLimitId') or {
-            'codex': reply.get('result', {}).get('rateLimits') or {}}
+        result = reply.get('result')
+        if not isinstance(result, dict):
+            raise ValueError('Invalid Codex quota result')
+        limits = result.get('rateLimitsByLimitId') or {
+            'codex': result.get('rateLimits') or {}}
         return _weekly_usage_percent(limits)
     except (OSError, Empty, ValueError, TypeError, BrokenPipeError) as exc:
         raise CityError('Quota Codex indisponible : missions de développement suspendues.') from exc
@@ -99,6 +109,8 @@ def codex_usage_percent(binary: str, env: dict) -> float:
 
 
 def _weekly_usage_percent(limits: dict) -> float:
+    if not isinstance(limits, dict):
+        raise CityError('Quota Codex indisponible : missions de développement suspendues.')
     weekly = [window['usedPercent'] for bucket in limits.values() if isinstance(bucket, dict)
               for window in (bucket.get('primary'), bucket.get('secondary'))
               if isinstance(window, dict) and window.get('windowDurationMins') == 10080
