@@ -299,9 +299,10 @@ AUTONOMOUS_FOCUS = {
     'job_hunter': ('Priorité : fiabiliser les missions City de bout en bout — lancement, planification, '
                    'reprise après échec, budget Codex, intégration Git et compte rendu compréhensible. '
                    'Cherche une panne ou une incohérence qui empêche réellement un agent de travailler.'),
-    'city_ui_engineer': ('Priorité : rendre les parcours sur ordinateur faciles à comprendre et à terminer '
-                         'dans City et Internships — suivre une mission, agir sur un échec, retrouver un résultat, '
-                         'parcourir les contacts ou les offres. Corrige un parcours complet, pas une couleur isolée.'),
+    'city_ui_engineer': ('Priorité : améliorer le parcours Contacts de Clara et Lina sur ordinateur : '
+                         'rendre visibles les sources de chaque fiche, les doublons écartés et les raisons '
+                         'd’une collecte vide, puis faciliter une nouvelle recherche ciblée. '
+                         'Corrige un parcours complet et vérifiable, pas une couleur isolée.'),
     'internships_engineer': ('Priorité : améliorer la couverture et la justesse des offres de stage et VIE — '
                              'sources carrières bancaires françaises, dates de première détection et de publication, '
                              'doublons, fraîcheur et offres internationales. Appuie-toi sur un défaut vérifiable '

@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sqlite3
 import tempfile
 import time
 import unicodedata
@@ -37,6 +38,18 @@ SECURITIES_ENTITIES = (
     ("Clearstream", ("clearstream",), ("securities financing", "collateral", "treasury")),
     ("Uptevia", ("uptevia",), ("services aux émetteurs", "titres")),
 )
+SECURITIES_SITES = {
+    'Société Générale Securities Services': 'securities-services.societegenerale.com',
+    'BNP Paribas Securities Services': 'securities.cib.bnpparibas',
+    'CACEIS': 'caceis.com',
+    'CIC Market Solutions': 'cic.fr',
+    'Euroclear France': 'euroclear.com',
+    'Euroclear Bank': 'euroclear.com',
+    'Clearstream': 'clearstream.com',
+    'Uptevia': 'uptevia.com',
+}
+SECURITIES_ASSOCIATIONS = ('icmagroup.org', 'islaemea.org', 'afme.eu',
+                           'amafi.fr', 'paris-europlace.com')
 SOURCE_GROUPS = {
     'banks_and_managers': ('group.bnpparibas','cib.bnpparibas','globalmarkets.bnpparibas.com',
                           'wholesale.banking.societegenerale.com','ca-cib.com','natixis.com',
@@ -422,6 +435,51 @@ def parse_results(html: str, query: str, *, service_roles: bool = False) -> list
     return _contacts_from_results(parser.results, query, "DuckDuckGo", service_roles=service_roles)
 
 
+_PERSON = r"[A-ZÀ-ÖØ-Ý][a-zà-öø-ÿ'’-]+(?:\s+[A-ZÀ-ÖØ-Ý][a-zà-öø-ÿ'’-]+){1,3}"
+def _service_contacts_from_results(results: list[dict], query: str, engine: str) -> list[dict]:
+    """Read named roles from public biographies/articles, without inferring employment."""
+    contacts = []
+    for result in results[:20]:
+        url = source_url(result.get('url', ''))
+        if not url or linkedin_url(url):
+            continue
+        title = ' '.join(result.get('title', '').split())
+        snippet = ' '.join(result.get('snippet', '').split())
+        evidence = title + ' · ' + snippet
+        known = [(entity, aliases) for entity, aliases, _ in SECURITIES_ENTITIES
+                 if any(alias in normalized(evidence) for alias in aliases)]
+        if len(known) != 1:
+            continue
+        entity, aliases = known[0]
+        title_name = re.match(rf'^({_PERSON})\s*[-–|]\s*', title)
+        names = [title_name.group(1)] if title_name else []
+        names += [match.group(1) for match in re.finditer(rf'\b({_PERSON})\s*,\s*(?=(?:[^,.;]{{0,35}})?(?:head of|director|managing director|senior|sales|product manager|responsable))', snippet, re.I)]
+        for name in dict.fromkeys(names[:3]):
+            if normalized(name) not in normalized(snippet):
+                continue
+            match = re.search(re.escape(name) + r'\s*(?:,|\bis\s+(?:a\s+)?|\best\s+)\s*([^.;]{5,170})', snippet, re.I)
+            role = match.group(1) if match else ''
+            if not role and title_name:
+                role = re.split(r'\s+[-–|]\s+', title[title_name.end():], maxsplit=1)[0]
+            role = re.sub(rf'^{re.escape(entity)}[’\']s\s+', '', role, flags=re.I)
+            role = re.split(r',\s*(?:adds?|says?|explains?|discusses?|ajoute|explique|déclare)\b', role, maxsplit=1, flags=re.I)[0].strip(' ,:-')[:160]
+            if not role or not SERVICE_MARKETS.search(normalized(role)) or EXCLUDED.search(normalized(role)):
+                continue
+            # Outside an employer site, the employer must appear alongside this person.
+            host = urlsplit(url).hostname or ''
+            official = host == SECURITIES_SITES.get(entity) or host.endswith('.' + SECURITIES_SITES.get(entity, 'invalid'))
+            nearby = normalized(snippet[max(0, snippet.find(name)-30):snippet.find(name)+260])
+            if not official and not any(alias in nearby for alias in aliases):
+                continue
+            contacts.append({'name': name[:160], 'role': role, 'company': entity,
+                             'location': '', 'linkedin_url': '', 'source_url': url,
+                             'source_title': title[:500], 'source_excerpt': evidence[:1400],
+                             'source_type': 'Biographie ou article public', 'search_query': query,
+                             'search_engine': engine, 'verification_status': 'À vérifier',
+                             'employment_status': 'Poste actuel à confirmer', 'origin': 'securities_public_search'})
+    return contacts
+
+
 def _contacts_from_results(results: list[dict], query: str, engine: str, *, service_roles: bool = False) -> list[dict]:
     contacts = []
     for result in results[:20]:
@@ -451,24 +509,30 @@ def _contacts_from_results(results: list[dict], query: str, engine: str, *, serv
                          "search_query": query, "search_engine": engine, "verification_status": "À vérifier",
                          "employment_status": "Poste actuel à confirmer", "email": "",
                          "conversation": "Non contacté", "origin": "lina_public_search"})
+    if service_roles:
+        contacts.extend(_service_contacts_from_results(results, query, engine))
     return contacts
 
 
 def search_public(query: str, *, service_roles: bool = False) -> list[dict]:
     try:
-        return parse_results(_search_response(SEARCH_URL, {"q": query}), query, service_roles=service_roles)
+        found = parse_results(_search_response(SEARCH_URL, {"q": query}), query, service_roles=service_roles)
+        if found:
+            return found
     except (requests.RequestException, ValueError):
-        # Public RSS fallback, no API key or authentication. All evidence filters still apply.
-        xml = _search_response("https://www.bing.com/search", {"format": "rss", "q": query})
-        try:
-            items = ElementTree.fromstring(xml).findall("./channel/item")
-        except ElementTree.ParseError as exc:
-            raise ValueError("Le moteur de secours ne renvoie pas un flux public exploitable.") from exc
-        results = [{"title": i.findtext("title", ""), "snippet": i.findtext("description", ""),
-                    "url": i.findtext("link", "")} for i in items]
-        if not any(linkedin_url(r['url']) for r in results):
-            raise ValueError("Recherche publique indisponible : accès principal refusé et aucun profil LinkedIn renvoyé par le flux de secours.")
-        return _contacts_from_results(results, query, "Bing RSS", service_roles=service_roles)
+        pass
+    # Public RSS fallback, no API key or authentication. All evidence filters still apply.
+    xml = _search_response("https://www.bing.com/search", {"format": "rss", "q": query})
+    try:
+        items = ElementTree.fromstring(xml).findall("./channel/item")
+    except ElementTree.ParseError as exc:
+        raise ValueError("Le moteur de secours ne renvoie pas un flux public exploitable.") from exc
+    results = [{"title": i.findtext("title", ""), "snippet": i.findtext("description", ""),
+                "url": i.findtext("link", "")} for i in items]
+    found = _contacts_from_results(results, query, "Bing RSS", service_roles=service_roles)
+    if not found:
+        raise ValueError("Recherche publique indisponible : aucun profil documenté dans les deux moteurs.")
+    return found
 
 
 def _search_response(url: str, params: dict) -> str:
@@ -611,7 +675,7 @@ def import_assisted_page(username: str, payload: dict) -> dict:
                    f'{len(leads)} contacts de marché repérés ; {len(excluded)} profils écartés.'}
 
 
-def _search_service_contacts_with_codex() -> list[dict]:
+def _search_service_contacts_with_codex(target: int = 10) -> list[dict]:
     """One subscription-backed search when both free public engines are unavailable."""
     from .marketdesk_city import CityError
     from .city_coding import (_execute, codex_binary, codex_environment,
@@ -637,10 +701,12 @@ def _search_service_contacts_with_codex() -> list[dict]:
                    '--json', '--output-schema', str(schema), '--output-last-message', str(report), '-']
         entities = [{'entity': name, 'activities': activities} for name, _, activities in SECURITIES_ENTITIES]
         prompt = ('Tu es Clara. Fais une recherche Web publique et limitée sur ces services titres. '
-                  'Trouve au plus 10 personnes nommées avec poste professionnel et établissement dans '
+                  f'Trouve au plus {target} personnes nommées avec poste professionnel et établissement dans '
                   'collateral, securities financing/lending, repo, FX, settlement ou treasury. '
-                  'Priorise les entités françaises. Cherche aussi les biographies officielles, les intervenants '
-                  'AMAFI, Paris Europlace et AFME, et les articles publics de nominations de la presse de marché. '
+                  'Priorise les entités françaises et varie les employeurs. Recherche des biographies officielles '
+                  'sur caceis.com, securities.cib.bnpparibas, securities-services.societegenerale.com, '
+                  'euroclear.com et clearstream.com ; explore aussi les intervenants ICMA, ISLA, AFME, '
+                  'AMAFI et Paris Europlace, puis les interviews et nominations de la presse de marché. '
                   'Les annuaires d’entreprises servent à repérer des employeurs, pas à prouver un poste. '
                   'Pour chaque personne, source_url doit être une URL '
                   'présente dans les résultats de recherche, dont le titre ou l’extrait contient '
@@ -672,7 +738,7 @@ def _search_service_contacts_with_codex() -> list[dict]:
     if not sources:
         raise CityError('Recherche Codex de Clara sans source Web vérifiable.')
     leads = []
-    for candidate in candidates[:12]:
+    for candidate in candidates[:target]:
         if not isinstance(candidate, dict) or any(not isinstance(candidate.get(field), str) for field in fields):
             continue
         name, role, company = (candidate[field].strip() for field in ('name', 'role', 'company'))
@@ -701,10 +767,24 @@ def _search_service_contacts_with_codex() -> list[dict]:
 def discover_service_contacts(username: str) -> dict:
     """Find sourced, less visible securities-services profiles without a paid API."""
     from .marketdesk_city import CityError
-    queries = [(entity, aliases, 'site:linkedin.com/in/ (' +
-                ' OR '.join('"' + name + '"' for name in (entity, *aliases)) + ') (' +
-                ' OR '.join('"' + term + '"' for term in activities) + ')')
-               for entity, aliases, activities in SECURITIES_ENTITIES]
+    with state_store._connect() as db:
+        try:
+            rotation = db.execute("SELECT COUNT(*) FROM city_tasks WHERE username=? AND agent_id='securities_scout'",
+                                  (username,)).fetchone()[0]
+        except sqlite3.OperationalError:
+            rotation = 0
+    queries = []
+    for index, (entity, aliases, activities) in enumerate(SECURITIES_ENTITIES):
+        names = '(' + ' OR '.join('"' + name + '"' for name in (entity, *aliases)) + ')'
+        term = '"' + activities[(rotation + index) % len(activities)] + '"'
+        mode = (rotation + index) % 3
+        if mode == 0:
+            query = f'site:linkedin.com/in/ {names} {term}'
+        elif mode == 1 and entity in SECURITIES_SITES:
+            query = f'site:{SECURITIES_SITES[entity]} {names} {term}'
+        else:
+            query = f'{names} {term} (interview OR speaker OR nomination OR expert)'
+        queries.append((entity, aliases, query))
     leads, warnings = [], []
 
     def collect(item):
@@ -720,32 +800,57 @@ def discover_service_contacts(username: str) -> dict:
                     or contact_focus(lead)['contact_segment'] not in {'sales', 'secondary'}):
                 continue
             matched.append({**lead, 'company': entity, 'origin': 'securities_public_search',
-                            'source_type': 'Profil professionnel indexé',
+                            'source_type': lead.get('source_type') or 'Profil professionnel indexé',
                             'employment_status': 'Poste actuel à confirmer'})
         return matched, ''
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        for found, warning in pool.map(collect, queries):
-            leads.extend(found)
-            if warning:
-                warnings.append(warning)
+    def run_queries(batch):
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            for found, warning in pool.map(collect, batch):
+                leads.extend(found)
+                if warning:
+                    warnings.append(warning)
+
+    run_queries(queries)
+    queries_attempted = len(queries)
     added, duplicates = save_leads(username, leads, limit=10)
+    # Search a different publisher for the least represented services before
+    # spending a Codex call. Repeated runs rotate both the services and sites.
+    if len(added) < 10:
+        existing = list_contacts(username)
+        counts = {entity: sum(c.get('company') == entity for c in existing)
+                  for entity, _, _ in SECURITIES_ENTITIES}
+        ranked = sorted(SECURITIES_ENTITIES,
+                        key=lambda item: (counts[item[0]],
+                                          (SECURITIES_ENTITIES.index(item) - rotation) % len(SECURITIES_ENTITIES)))[:5]
+        extra_queries = []
+        for index, (entity, aliases, activities) in enumerate(ranked):
+            site = SECURITIES_ASSOCIATIONS[(rotation + index) % len(SECURITIES_ASSOCIATIONS)]
+            extra_queries.append((entity, aliases,
+                                  f'site:{site} "{entity}" "{activities[(rotation + index + 1) % len(activities)]}"'))
+        leads.clear()
+        run_queries(extra_queries)
+        queries_attempted += len(extra_queries)
+        more, repeated = save_leads(username, leads, limit=10-len(added))
+        added.extend(more)
+        duplicates += repeated
     used_codex = False
-    if not added:
+    if len(added) < 10:
         try:
-            extra = _search_service_contacts_with_codex()
-            added, repeated = save_leads(username, [{**lead, 'origin': 'securities_public_search'}
-                                                      for lead in extra], limit=10)
+            extra = _search_service_contacts_with_codex(10 - len(added))
+            more, repeated = save_leads(username, [{**lead, 'origin': 'securities_public_search'}
+                                                for lead in extra], limit=10 - len(added))
+            added.extend(more)
             duplicates += repeated
             used_codex = True
         except CityError as exc:
-            if len(warnings) == len(queries):
+            if len(warnings) == queries_attempted:
                 raise
             warnings.append('Recherche complémentaire indisponible : ' + str(exc))
     return {'title': 'Clara · services titres', 'contacts': added, 'count': len(added),
             'duplicates': duplicates, 'target': 10, 'entities_searched': len(queries),
-            'warnings': warnings[:3], 'source': ('Codex · recherche Web sur abonnement ChatGPT' if used_codex
-                                              else 'Profils publics indexés · DuckDuckGo / Bing RSS'),
+            'warnings': warnings[:3], 'source': ('Sources publiques et Codex · abonnement ChatGPT' if used_codex
+                                              else 'Sources publiques · DuckDuckGo / Bing RSS'),
             'text': f'{len(added)} nouveaux contacts enregistrés en services titres ; '
                     f'{duplicates} doublons écartés. Postes actuels à confirmer.'}
 

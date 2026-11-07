@@ -13,6 +13,40 @@ def test_service_roles_are_accepted_only_for_the_specialized_search():
     assert len(found) == 1 and found[0]['company'] == 'BP2S'
 
 
+def test_clara_reads_named_roles_from_official_public_articles_only():
+    results = [
+        {'url': 'https://www.caceis.com/fr/actualites/market-solutions/',
+         'title': 'Market Solutions | CACEIS',
+         'snippet': 'Donia Rouigueb, Head of Sales Securities Finance and Repo at CACEIS, explains the service.'},
+        {'url': 'https://www.euroclear.com/campaigns/en/biographies/marije-verhelst.html',
+         'title': 'Marije Verhelst - Euroclear Bank',
+         'snippet': 'Marije Verhelst is Head of Collateral Management at Euroclear Bank.'},
+        {'url': 'https://unrelated.example/profile', 'title': 'John Smith - Other Bank',
+         'snippet': 'John Smith, Head of Collateral Management at Other Bank.'},
+    ]
+    found = network._contacts_from_results(results, 'collateral', 'Bing RSS', service_roles=True)
+    assert {lead['name'] for lead in found} == {'Donia Rouigueb', 'Marije Verhelst'}
+    assert all(lead['source_type'] == 'Biographie ou article public' for lead in found)
+    assert all(lead['linkedin_url'] == '' for lead in found)
+    assert network._contacts_from_results(results, 'collateral', 'Bing RSS') == []
+
+
+def test_clara_uses_rss_when_public_html_has_no_usable_people(monkeypatch):
+    calls = []
+    rss = ('<rss><channel><item><title>Donia Rouigueb - CACEIS</title>'
+           '<description>Donia Rouigueb, Head of Sales Securities Finance and Repo at CACEIS.</description>'
+           '<link>https://www.caceis.com/fr/actualites/market-solutions/</link>'
+           '</item></channel></rss>')
+    def response(url, params):
+        calls.append(url)
+        return ('<a class="result__a" href="https://example.org/irrelevant">Other</a>'
+                if url == network.SEARCH_URL else rss)
+    monkeypatch.setattr(network, '_search_response', response)
+    found = network.search_public('CACEIS repo', service_roles=True)
+    assert len(found) == 1 and found[0]['name'] == 'Donia Rouigueb'
+    assert calls == [network.SEARCH_URL, 'https://www.bing.com/search']
+
+
 def test_clara_runs_on_request_and_deduplicates_bp2s_in_shared_contacts(tmp_path, monkeypatch):
     monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
     store = CityStore(state_store.USER_DB_PATH)
@@ -40,12 +74,14 @@ def test_clara_runs_on_request_and_deduplicates_bp2s_in_shared_contacts(tmp_path
         return []
 
     monkeypatch.setattr(network, 'search_public', search)
+    monkeypatch.setattr(network, '_search_service_contacts_with_codex', lambda target: [])
     task = store.create_task('alice', 'securities_scout', 'Chercher des contacts en services titres',
                              {'operation': 'discover_service_contacts'}, auto_run=True)
     assert CityWorker(store).run_once()
     done = next(row for row in store.snapshot('alice')['tasks'] if row['id'] == task['id'])
     assert done['status'] == 'completed' and done['result']['count'] == 2
-    assert len(queries) == 9
+    assert len(queries) == 14
+    assert any('site:icmagroup.org' in query for query in queries)
     contacts = network.list_contacts('alice')
     assert {row['company'] for row in contacts} == {'BNP Paribas Securities Services', 'CACEIS'}
     assert all(row['origin'] == 'securities_public_search' for row in contacts)
@@ -55,7 +91,9 @@ def test_clara_runs_on_request_and_deduplicates_bp2s_in_shared_contacts(tmp_path
     assert network.list_contacts('bob') == []
 
     second = network.discover_service_contacts('alice')
-    assert second['count'] == 0 and second['duplicates'] == 2
+    assert second['count'] == 0 and second['duplicates'] >= 2
+    assert any('site:linkedin.com/in/' in query for query in queries)
+    assert any('site:' in query and 'linkedin.com' not in query for query in queries)
 
 
 def test_clara_without_summary_keeps_network_directory_available(tmp_path, monkeypatch):
@@ -134,14 +172,14 @@ def test_clara_uses_codex_when_public_engines_return_no_people(tmp_path, monkeyp
     monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
     monkeypatch.setattr(network, 'search_public', lambda *_args, **_kwargs: [])
     calls = []
-    def fallback():
-        calls.append(True)
+    def fallback(target):
+        calls.append(target)
         return [{'name': 'Luc Bernard', 'role': 'Securities Lending Sales',
                  'company': 'CACEIS', 'source_url': 'https://example.org/speakers',
                  'source_excerpt': 'Luc Bernard, Securities Lending Sales at CACEIS.'}]
     monkeypatch.setattr(network, '_search_service_contacts_with_codex', fallback)
     report = network.discover_service_contacts('alice')
-    assert report['count'] == 1 and len(calls) == 1
+    assert report['count'] == 1 and calls == [10]
     assert network.list_contacts('alice')[0]['source_url'] == 'https://example.org/speakers'
 
 
