@@ -56,13 +56,14 @@ def test_career_dotted_publication_dates(displayed, expected):
     assert job.published == expected
 
 
-def test_structured_publication_keeps_priority_over_invalid_displayed_date():
+@pytest.mark.parametrize("displayed", ["31/02/2026", "31/12/9999"])
+def test_structured_publication_keeps_priority_over_invalid_displayed_date(displayed):
     posting = json.dumps({"@type": "JobPosting", "datePosted": "2024-02-29"})
     job = _career_detail(
         "https://jobs.amundi.com/offre-de-emploi/emploi-stage-trading_123.aspx",
         "Amundi", html_override=("<h1>Stage Assistant Trading</h1>"
                                  "<p>Localisation Paris Niveau Bac+5 "
-                                 "Date de publication : 31/02/2026</p>"
+                                 f"Date de publication : {displayed}</p>"
                                  f'<script type="application/ld+json">{posting}</script>'))
 
     assert job is not None
@@ -93,3 +94,53 @@ def test_invalid_publication_reaches_board_as_detected_offer(monkeypatch):
     assert jobs[0].published_inferred
     assert internships.matching_opportunities(jobs, daily=True, today=now.date()) == jobs
     writer.assert_called_once_with(now, jobs, [])
+
+
+@pytest.mark.parametrize("url,company,label", [
+    ("https://jobs.amundi.com/offre-de-emploi/emploi-stage-trading_123.aspx",
+     "Amundi", "Date de publication"),
+    ("https://jobs.amundi.com/offre-de-emploi/emploi-stage-trading_123.aspx",
+     "Amundi", "Date de parution"),
+    ("https://coveafinance-recrute.talent-soft.com/offre-de-emploi/emploi-stage-trading_123.aspx",
+     "Covéa Finance", "Date de début de diffusion"),
+])
+@pytest.mark.parametrize("displayed", ["07/11/2026", "07.11.2026", "06/11/2027"])
+def test_future_publication_becomes_detection_without_losing_offer(monkeypatch, url, company, label, displayed):
+    now = datetime(2026, 11, 6, 23, 30, tzinfo=timezone.utc)
+    clock = Mock(wraps=datetime)
+    clock.now.return_value = now
+    monkeypatch.setattr(internships, "datetime", clock)
+    job = _career_detail(
+        url, company, html_override=("<h1>Stage Assistant Trading</h1>"
+                                 "<p>Localisation Paris Niveau Bac+5 "
+                                 f"{label} : {displayed}</p>"))
+    assert job is not None
+    assert job.published == ""
+    writer = Mock()
+    monkeypatch.setattr(internships, "_cache", None)
+    monkeypatch.setattr(internships, "_last_attempt", now)
+    monkeypatch.setattr(internships, "_refresh_previous_jobs", {})
+    monkeypatch.setattr(internships, "_refresh_first_seen", {})
+    monkeypatch.setattr(internships, "_write_cache", writer)
+
+    internships._publish_refresh_progress([job], [])
+
+    jobs = internships._cache[1]
+    assert len(jobs) == 1
+    assert jobs[0].url == job.url
+    assert jobs[0].published == "2026-11-06"
+    assert jobs[0].published_inferred
+    assert internships.matching_opportunities(jobs, daily=True, today=now.date()) == jobs
+    writer.assert_called_once_with(now, jobs, [])
+
+
+@pytest.mark.parametrize("displayed,expected", [
+    ("05/11/2026", "2026-11-05"),
+    ("06/11/2026", "2026-11-06"),
+])
+def test_displayed_publication_accepts_today_and_past_in_utc(monkeypatch, displayed, expected):
+    clock = Mock(wraps=datetime)
+    clock.now.return_value = datetime(2026, 11, 6, 0, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(internships, "datetime", clock)
+
+    assert internships._career_publication_date(displayed) == expected

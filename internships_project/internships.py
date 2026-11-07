@@ -985,7 +985,8 @@ def _jsonld_job_posted(page_html: str) -> str:
 def _career_publication_date(raw: str) -> str:
     """Keep a career offer usable when its displayed publication date is invalid."""
     try:
-        return datetime.strptime(raw.replace(".", "/"), "%d/%m/%Y").date().isoformat()
+        value = datetime.strptime(raw.replace(".", "/"), "%d/%m/%Y").date()
+        return value.isoformat() if value <= datetime.now(timezone.utc).date() else ""
     except ValueError:
         return ""
 
