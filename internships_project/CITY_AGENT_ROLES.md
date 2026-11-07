@@ -17,7 +17,7 @@ sont accessibles dans Réglages. Le chat du Manager et les contacts conservent l
 | Agent | Opérations serveur | Récurrence (Europe/Paris) | Livrable |
 |---|---|---|---|
 | Jules | `repository_audit`, `codex_review`, `develop`, préparation de branche historique | Audit quotidien et six missions de développement autonomes par jour pendant un mois | Correction City, commit local et vérifications dans un worktree isolé |
-| Camille | `develop` | Six missions autonomes par jour pendant un mois | Amélioration des interfaces City ou Internships, build et commit local |
+| Camille | `develop` | Six créneaux autonomes par jour pendant un mois, espacés de quatre heures | Correction visuelle concrète dans City ou Internships, build et commit local |
 | Sacha | `develop` | Six créneaux par jour pendant un mois, dont le premier dédié à une nouvelle source | Une source carrière vérifiée par jour visée, priorité aux petites banques et sociétés de gestion françaises ; autres créneaux consacrés notamment à la vitesse et à la fiabilité de collecte |
 | Maël | `develop` | Six missions autonomes par jour pendant un mois | Correction de régression ou fiabilisation, test et commit local |
 | Noé | `quant_report` | Sur demande uniquement | Courbe de capital, rendement net, Sharpe à taux sans risque nul, volatilité, drawdown, hypothèses et limites |

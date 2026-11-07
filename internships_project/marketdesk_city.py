@@ -47,7 +47,7 @@ AGENTS = (
     {"id": "internship_scout", "name": "Hugo", "role": "Internship Scout", "area": "Internships",
      "description": "Actualise Internships chaque jour et transmet les nouveaux stages détectés au Desk Manager. Recherche aussi sur demande.", "available": True},
     {"id": "city_ui_engineer", "name": "Camille", "role": "UI Engineer", "area": "Engineering",
-     "description": "Améliore les parcours sur ordinateur : suivi des missions, actions, contacts et offres dans City et Internships.", "available": True},
+     "description": "Améliore le visuel sur ordinateur : mise en page, lisibilité et navigation dans City et Internships.", "available": True},
     {"id": "internships_engineer", "name": "Sacha", "role": "Sources Engineer", "area": "Engineering",
      "description": "Ajoute chaque jour une source carrière vérifiée, en priorité petite banque ou société de gestion française, et accélère la collecte Internships.", "available": True},
     {"id": "quality_engineer", "name": "Maël", "role": "Quality Engineer", "area": "Engineering",

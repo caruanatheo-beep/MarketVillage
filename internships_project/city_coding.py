@@ -312,10 +312,11 @@ AUTONOMOUS_FOCUS = {
     'job_hunter': ('Priorité : fiabiliser les missions City de bout en bout — lancement, planification, '
                    'reprise après échec, budget Codex, intégration Git et compte rendu compréhensible. '
                    'Cherche une panne ou une incohérence qui empêche réellement un agent de travailler.'),
-    'city_ui_engineer': ('Priorité : améliorer le parcours Contacts de Clara et Lina sur ordinateur : '
-                         'rendre visibles les sources de chaque fiche, les doublons écartés et les raisons '
-                         'd’une collecte vide, puis faciliter une nouvelle recherche ciblée. '
-                         'Corrige un parcours complet et vérifiable, pas une couleur isolée.'),
+    'city_ui_engineer': ('Priorité : améliorer visuellement les interfaces City et Internships sur ordinateur. '
+                         'Inspecte la mise en page, les chevauchements, la lisibilité et la hiérarchie des informations ; '
+                         'choisis le défaut visible qui gêne le plus un parcours utilisateur et corrige-le de bout en bout. '
+                         'Vérifie le rendu ou le build et décris précisément ce qui change à l’écran. '
+                         'Évite de revenir aux Contacts si aucun défaut visuel concret ne le justifie.'),
     'internships_engineer': ('Priorité : accélérer la collecte des sources Internships et améliorer leur fiabilité. '
                              'Mesure un chargement lent, corrige sa cause et vérifie le gain. '
                              'La première mission quotidienne est réservée à une nouvelle source carrière, '

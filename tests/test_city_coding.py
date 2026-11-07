@@ -142,6 +142,8 @@ def test_autonomous_engineer_integrates_validated_code_without_approval(repo, mo
 def test_every_autonomous_engineer_has_a_distinct_product_focus():
     assert set(coding.AUTONOMOUS_FOCUS) == set(specialists.CODING_AGENTS)
     assert len(set(coding.AUTONOMOUS_FOCUS.values())) == len(specialists.CODING_AGENTS)
+    assert 'améliorer visuellement' in coding.AUTONOMOUS_FOCUS['city_ui_engineer']
+    assert 'parcours Contacts de Clara et Lina' not in coding.AUTONOMOUS_FOCUS['city_ui_engineer']
 
 
 def test_codex_daily_budget_prevents_a_new_worktree(repo, store, monkeypatch):
