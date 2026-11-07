@@ -98,6 +98,7 @@ CAREER_PORTALS = {
     "Ofi Invest": "https://ofi-invest.com/fr/carriere/nos-offres",
     "Tikehau Capital": "https://tikehau-capital-career.talentview.io/jobs",
     "CFM": "https://jobs.cfm.com/go/Internship/9276655/",
+    "DNCA": "https://www.dnca-investments.com/carrieres",
 }
 CAREER_LISTINGS = {
     "Crédit Mutuel / CIC": ("https://recrutement.creditmutuel.fr/fr/nos_offres.html?offres=true&tc=3",
@@ -157,7 +158,7 @@ _MARKET_ROLE = re.compile(
     r"fixed income|rates|forex|fx|quant\w*|equity|equities|bond\w*|"
     r"commodit\w*|markets?|finance de marches?|analyste des marches|marches? (?:financiers?|de capitaux|actions?|"
     r"obligataires?|monetaires?|des changes)|asset management|equity research|"
-    r"credit desk|credit trading|credit derivatives|market risk|risque de marche|"
+    r"credit desk|credit trading|credit derivatives|market risk|risques? de marches?|"
     r"salle des marches|dcm|ecm|alm|broker|broking|pricing|valuation|valorisation|negociat\w*|"
     r"portfolio management|portfolio manager|portfolio analytics|portfolio engineering|"
     r"portfolio construction|gestion de portefeuille\w*|gerant de portefeuille\w*|"
@@ -686,6 +687,7 @@ def is_trusted_offer_url(url: str) -> bool:
         "ofiinvestassetmanagement.flatchr.io", "recrutement.altays-progiciels.com",
         "www.groupama-gan-recrute.com", "bdf.wd103.myworkdayjobs.com",
         "recrutement.axa.fr",
+        "www.dnca-investments.com",
         *(board[0] for board in WORKDAY.values()),
     }
     try:
@@ -1607,6 +1609,61 @@ def _career_page_jobs(company: str, config: tuple[str, str, str]) -> list[Opport
         jobs = [job for job in pool.map(load, list(links.items())) if job]
     if not jobs and detail_errors:
         raise detail_errors[0]
+    return jobs
+
+
+def _dnca_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
+    """Collect DNCA's public HTML offers, excluding the surrounding career listing."""
+    listing = CAREER_PORTALS["DNCA"]
+    response = requests.get(listing, timeout=(4, 15))
+    response.raise_for_status()
+    page = _CareerHTML()
+    page.feed(response.text)
+    links = dict.fromkeys(
+        urljoin(listing, href).split("?", 1)[0].split("#", 1)[0]
+        for href, _ in page.links
+        if urlparse(urljoin(listing, href)).hostname == "www.dnca-investments.com"
+        and re.fullmatch(r"/carrieres/[A-Za-z0-9]+", urlparse(urljoin(listing, href)).path)
+        and is_trusted_offer_url(urljoin(listing, href))
+    )
+    errors: list[Exception] = []
+
+    def load(url: str) -> Opportunity | None:
+        try:
+            detail = requests.get(url, timeout=(4, 12))
+            detail.raise_for_status()
+            article = re.search(
+                r'<article\b[^>]*data-careers=["\']detail["\'][^>]*>(.*?)</article>',
+                detail.text, re.DOTALL | re.IGNORECASE,
+            )
+            if not article:
+                raise ValueError("fiche DNCA absente de la page publique")
+            offer = _CareerHTML()
+            offer.feed(article.group(1))
+            title = offer.headings[0] if offer.headings else ""
+            metadata = []
+            for raw in re.findall(r'<span\b[^>]*data-role=["\']meta-item["\'][^>]*>(.*?)</span>',
+                                  article.group(1), re.DOTALL | re.IGNORECASE):
+                field = _CareerHTML()
+                field.feed(raw)
+                metadata.append(" ".join(field.parts))
+            # Publication belongs to this offer, never to a neighbouring vacancy.
+            published = next((match.group(1) for value in metadata
+                              if (match := re.search(r"Publiée le\s+(\d{2}/\d{2}/\d{4})", value))), "")
+            description = " ".join(offer.parts)
+            job = _opportunity(title, "DNCA", metadata[1] if len(metadata) > 1 else "",
+                               metadata[0] if metadata else "", url,
+                               _career_publication_date(published), _start_period(description),
+                               role_context=description)
+            return replace(job, source="Site carrière · DNCA", description=description[:12_000]) if job else None
+        except (requests.RequestException, ValueError) as exc:
+            errors.append(exc)
+            return None
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        jobs = [job for job in pool.map(load, links) if job]
+    if not jobs and errors:
+        raise errors[0]
     return jobs
 
 
@@ -2536,6 +2593,7 @@ def _fetch_opportunities_progressive() -> tuple[list[Opportunity], list[str]]:
         ("Cr\u00e9dit Mutuel Ark\u00e9a", _arkea_jobs, ("", "")),
         ("Cov\u00e9a Finance", _covea_finance_jobs, ("", "")),
         ("Comgest", _comgest_jobs, ("", "")),
+        ("DNCA", _dnca_jobs, ("", "")),
         ("BPCE Open Data", _bpce_open_data_jobs, ("", "")),
         ("JobTeaser \u00b7 sitemap", _jobteaser_jobs, ("", "")),
         ("ODDO BHF", lambda *_: _oddo_jobs(), ()),

@@ -78,7 +78,7 @@ SOURCE_COVERAGE: dict[str, SourceCoverage] = {
     "Federal Finance Gestion": SourceCoverage("shared", "https://recrutement.arkea.com/accueil.aspx", "Crédit Mutuel Arkéa"),
     "Schelcher Prince Gestion": SourceCoverage("unverified"),
     "Carmignac": SourceCoverage("portal", "https://www.carmignac.com/en-fr/about-us/careers"),
-    "DNCA": SourceCoverage("shared", "https://recrutement.bpce.fr/", "BPCE / Natixis / BRED"),
+    "DNCA": SourceCoverage("connected", "https://www.dnca-investments.com/carrieres", "Public HTML listing and individual offer articles; publication dates scoped to each offer"),
     "La Financière de l’Échiquier": SourceCoverage("portal", "https://www.lfde.com/fr-fr/nous-connaitre/carrieres/"),
     "Sycomore": SourceCoverage("connected", "https://jobs.smartrecruiters.com/SycomoreAssetManagement"),
     "Moneta": SourceCoverage("portal", "https://www.moneta.fr/contact/stagiaires-apprentis"),

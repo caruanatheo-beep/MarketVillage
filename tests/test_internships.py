@@ -103,6 +103,9 @@ def test_source_checks_distinguish_results_empty_and_error_and_survive_cache(tmp
     assert offer is not None
     monkeypatch.setattr(internships, "SMARTRECRUITERS", {"a": "Bank A", "b": "Bank B", "c": "Bank C"})
     monkeypatch.setattr(internships, "GREENHOUSE", {})
+    monkeypatch.setattr(internships, "LEVER", {})
+    monkeypatch.setattr(internships, "ASHBY", {})
+    monkeypatch.setattr(internships, "ORACLE_CAREER_BOARDS", {})
     monkeypatch.setattr(internships, "WORKDAY", {})
     monkeypatch.setattr(internships, "CAREER_LISTINGS", {})
     monkeypatch.setattr(internships, "_source_checks", {})
@@ -116,7 +119,8 @@ def test_source_checks_distinguish_results_empty_and_error_and_survive_cache(tmp
 
     monkeypatch.setattr(internships, "_smart_jobs", smart)
     for name in ("_socgen_jobs", "_vie_jobs", "_ca_cib_jobs", "_bnp_cib_jobs", "_bnp_tal_jobs",
-                 "_banque_de_france_jobs",
+                 "_banque_de_france_jobs", "_dnca_jobs", "_covea_finance_jobs", "_comgest_jobs",
+                 "_bnp_group_jobs", "_oddo_jobs", "_tikehau_jobs", "_groupama_am_jobs", "_axa_jobs",
                  "_amundi_jobs", "_arkea_jobs", "_bpce_open_data_jobs", "_jobteaser_jobs"):
         monkeypatch.setattr(internships, name, lambda *args: [])
 
