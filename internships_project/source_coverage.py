@@ -17,6 +17,7 @@ SOURCE_COVERAGE: dict[str, SourceCoverage] = {
     "BNP Paribas": SourceCoverage("connected", "https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/stage/france", "Public Playwright collector in graphical Chromium; requires an interactive desktop"),
     "Société Générale": SourceCoverage("connected", "https://careers.societegenerale.com/en/Technical/all-job-offers", "Global English job index and direct public offer pages; includes international locations"),
     "Crédit Agricole CIB": SourceCoverage("connected", "https://jobs.ca-cib.com/offre-de-emploi/liste-offres.aspx?mode=layer&lcid=1036"),
+    "AXA": SourceCoverage("connected", "https://recrutement.axa.fr/recherche-d%27offres?acm=ALL&alrpm=ALL&ascf=%5B%7B%22key%22%3A%22custom_fields.LocalContractType%22%2C%22value%22%3A%22Stage%22%7D%5D", "Public Stage listing and official offer pages; market-role filtering"),
     "Santander CIB": SourceCoverage("connected", "https://santander.wd3.myworkdayjobs.com/SantanderCareers", "Public Workday CXS board; filtered by existing market-role, contract and hub rules"),
     "CIBC Capital Markets": SourceCoverage("connected", "https://cibc.wd3.myworkdayjobs.com/campus", "Public Workday CXS board; detail pages provide the job posting when available"),
     "TD Securities": SourceCoverage("connected", "https://td.wd3.myworkdayjobs.com/TD_Bank_Careers", "Public Workday CXS board; detail pages provide the job posting when available"),

@@ -593,7 +593,7 @@ def _market_relevant_with_context(title: str, context: str = "") -> bool:
         r"equity investment teams|analysts?\s*/\s*portfolio managers?|"
         r"financial analysis of companies|investment opportunities|"
         r"cash and executions? on (?:the )?different markets|cash.*executions?.{0,60}marches|"
-        r"portfolio liquidity|liquidite des portefeuilles|risque des portefeuilles|"
+        r"portfolio liquidity|liquidite des portefeuilles|classes d.actifs liquides|risque des portefeuilles|"
         r"market risk|risk management.*(?:markets?|portfolios?)|"
         r"credit analyst.{0,100}(?:issuer|bond|fixed income)|"
         r"analyste.{0,80}credit.{0,100}(?:obligat|obligation|bond)|"
@@ -685,6 +685,7 @@ def is_trusted_offer_url(url: str) -> bool:
         "jpmc.fa.oraclecloud.com", "hdpc.fa.us2.oraclecloud.com", "ekbq.fa.em2.oraclecloud.com",
         "ofiinvestassetmanagement.flatchr.io", "recrutement.altays-progiciels.com",
         "www.groupama-gan-recrute.com", "bdf.wd103.myworkdayjobs.com",
+        "recrutement.axa.fr",
         *(board[0] for board in WORKDAY.values()),
     }
     try:
@@ -1446,6 +1447,64 @@ def _groupama_am_jobs() -> list[Opportunity]:
         return _career_detail(pair[0], "Groupama AM", pair[1])
     with ThreadPoolExecutor(max_workers=4) as pool:
         return [job for job in pool.map(load, offers.items()) if job]
+
+
+def _axa_jobs() -> list[Opportunity]:
+    """Read AXA's public Stage list and verify market roles on their direct offer pages."""
+    listing = "https://recrutement.axa.fr/recherche-d%27offres"
+    params = {"acm": "ALL", "alrpm": "ALL", "ascf": '[{"key":"custom_fields.LocalContractType","value":"Stage"}]'}
+    candidates: dict[str, tuple[str, str, str]] = {}
+    pages = 1
+    for number in range(1, 11):
+        if number > pages:
+            break
+        response = requests.get(listing, params={**params, **({"p": number} if number > 1 else {})}, timeout=(4, 15))
+        response.raise_for_status()
+        body = response.text
+        anchors = list(re.finditer(r'<a\b(?=[^>]*\bsearch-results-list__job-link\b)[^>]*>.*?</a>', body, re.I | re.S))
+        if number == 1 and not anchors:
+            raise ValueError("AXA : aucune fiche de stage dans la liste publique")
+        total = re.search(r'class="pagination-current"[^>]*max="(\d+)"', body)
+        if total:
+            pages = min(10, int(total.group(1)))
+        for index, anchor in enumerate(anchors):
+            tag = anchor.group()
+            href = re.search(r'\bhref="([^"]+)"', tag)
+            if not href:
+                continue
+            url = urljoin(listing, html.unescape(href.group(1)))
+            if urlparse(url).hostname != "recrutement.axa.fr" or not urlparse(url).path.startswith("/emploi/"):
+                continue
+            title = _plain_text(tag)
+            if not re.search(r'\b(?:investment|investissement|portfolio|portefeuille|asset management|'
+                             r'march[eé]s?|trading|trader|sales|structur|fixed income|fx|quant|credit)\b',
+                             title, re.I):
+                continue
+            card = body[anchor.end():anchors[index + 1].start() if index + 1 < len(anchors) else anchor.end() + 1800]
+            def field(name: str) -> str:
+                match = re.search(rf'<li\b[^>]*class="[^"]*\bjob-{name}\b[^"]*"[^>]*>(.*?)</li>', card, re.I | re.S)
+                return _plain_text(match.group(1)) if match else ""
+            if field("contract").casefold() != "stage" or not field("location"):
+                continue
+            candidates[url] = (title, field("location"), field("entity") or "AXA")
+    jobs: list[Opportunity] = []
+    detail_errors: list[requests.RequestException] = []
+    for url, (title, location, company) in candidates.items():
+        try:
+            detail = requests.get(url, timeout=(4, 12))
+            detail.raise_for_status()
+        except requests.RequestException as exc:
+            detail_errors.append(exc)
+            continue
+        posting = _jsonld_jobposting(detail.text)
+        description = _plain_text(str(posting.get("description") or ""))
+        job = _opportunity(title, company, location, "Stage", url,
+                           _jsonld_job_posted(detail.text), role_context=description)
+        if job:
+            jobs.append(replace(job, source="Site carrière · AXA", description=description[:12_000]))
+    if not jobs and detail_errors:
+        raise detail_errors[0]
+    return jobs
 
 
 def _career_page_jobs(company: str, config: tuple[str, str, str]) -> list[Opportunity]:
@@ -2449,6 +2508,7 @@ def _fetch_opportunities_progressive() -> tuple[list[Opportunity], list[str]]:
         ("ODDO BHF", lambda *_: _oddo_jobs(), ()),
         ("Tikehau Capital", lambda *_: _tikehau_jobs(), ()),
         ("Groupama AM", lambda *_: _groupama_am_jobs(), ()),
+        ("AXA", lambda *_: _axa_jobs(), ()),
     ])
     tasks.extend((company, _workday_jobs, (company, board)) for company, board in WORKDAY.items())
     tasks.extend((name, _oracle_jobs, (name, board)) for name, board in ORACLE_CAREER_BOARDS.items())
