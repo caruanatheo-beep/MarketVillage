@@ -334,6 +334,22 @@ def test_coding_history_is_private_compact_and_keeps_full_detail(store):
     assert compact['result']['already_present'] is True
 
 
+def test_automatic_coding_history_is_shared_but_manual_work_stays_private(store):
+    automatic = store.create_task('alice', 'job_hunter', 'Améliorer City',
+                                  {'operation': 'develop', 'period': '2026-11-07'})
+    store.claim_next()
+    store.finish(automatic['id'], result={'plain_summary': 'City améliorée.', 'integrated': True})
+    manual = store.create_task('alice', 'job_hunter', 'Demande privée',
+                               {'operation': 'code_change', 'request': 'Corriger un bouton dans City.'})
+    with store.db() as db:
+        db.execute('INSERT INTO city_specialist_schedule VALUES(?,?,?,?)',
+                   ('alice', 'develop:job_hunter:1', '2026-11-07', automatic['id']))
+    history = store.coding_history('bob')
+    assert [task['id'] for task in history['tasks']] == [automatic['id']]
+    assert store.task_detail('bob', automatic['id'])['description'] == 'Améliorer City'
+    assert store.task_detail('bob', manual['id']) is None
+
+
 def test_coding_history_distinguishes_integrated_from_live(store):
     task = store.create_task('alice', 'job_hunter', 'Corriger un affichage', {'operation': 'develop'})
     store.claim_next()

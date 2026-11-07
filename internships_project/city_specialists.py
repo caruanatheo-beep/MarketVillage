@@ -211,7 +211,18 @@ def prepare_branch(task_id: str, audit: dict, approval: bool) -> dict:
     if directory.exists():
         raise CityError("Cette branche a déjà été préparée. Consulte son résultat existant.")
     directory.parent.mkdir(exist_ok=True)
-    git(root, "worktree", "add", "-b", branch, directory.relative_to(root).as_posix(), revision)
+    isolation = 'worktree'
+    try:
+        git(root, "worktree", "add", "-b", branch, directory.relative_to(root).as_posix(), revision)
+    except CityError:
+        # A City server may read the main Git directory but cannot write its refs.
+        # Keep an actual branch in a writable local clone in that case.
+        if directory.exists():
+            raise
+        git(root, "clone", "--local", "--shared", "--no-checkout", ".",
+            directory.relative_to(root).as_posix())
+        git(directory, "checkout", "-b", branch, revision)
+        isolation = 'clone'
     target = directory / "tests" / "test_city_syntax_audit.py"
     target.parent.mkdir(exist_ok=True)
     if target.exists():
@@ -225,7 +236,10 @@ def prepare_branch(task_id: str, audit: dict, approval: bool) -> dict:
     for source in [target, *tested]:
         ast.parse(source.read_text(encoding="utf-8-sig"), filename=source.name)
     context = branch_context(root,revision)
+    if isolation == 'clone':
+        context['base_note'] += ' Branche créée dans un clone local isolé, car le dépôt principal ne permet pas à City de modifier ses références Git.'
     return {"title": "Jules · branche prête à examiner", "branch": branch, "file": str(target.relative_to(root)),**context,
+            "isolation": isolation,
             "tests": {"method": "AST syntax regression", "passed": len(tested) + 1}, "approval_required": True,
             "text": f"Branche locale {branch} : test de compilation ajouté, {len(tested)+1} fichiers validés. Aucun commit, push ou merge automatique.\n\n"+context['base_note'],
             "role_version": VERSION}

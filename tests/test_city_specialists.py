@@ -345,6 +345,30 @@ def test_prepare_branch_is_isolated_and_never_merges(tmp_path, monkeypatch):
     assert specialists.git(repo,'rev-parse','HEAD') == audit['revision']
 
 
+def test_prepare_branch_uses_writable_clone_when_main_git_refs_are_locked(tmp_path, monkeypatch):
+    repo = tmp_path / 'repository'; repo.mkdir()
+    subprocess.run(['git', 'init'], cwd=repo, check=True, capture_output=True)
+    subprocess.run(['git', 'config', 'user.name', 'Test'], cwd=repo, check=True, capture_output=True)
+    subprocess.run(['git', 'config', 'user.email', 'test@example.invalid'], cwd=repo, check=True, capture_output=True)
+    (repo / 'internships_project').mkdir()
+    (repo / 'internships_project/city_sample.py').write_text('x=1\n')
+    subprocess.run(['git', 'add', '.'], cwd=repo, check=True, capture_output=True)
+    subprocess.run(['git', 'commit', '-m', 'Fixture'], cwd=repo, check=True, capture_output=True)
+    revision = specialists.git(repo, 'rev-parse', 'HEAD')
+    original_git = specialists.git
+    def restricted_git(root, *args):
+        if args[:2] == ('worktree', 'add'):
+            raise CityError('Git indisponible pour cette opération.')
+        return original_git(root, *args)
+    monkeypatch.setattr(specialists, 'repo_root', lambda: repo)
+    monkeypatch.setattr(specialists, 'git', restricted_git)
+    result = specialists.prepare_branch('b' * 32, {'revision': revision}, True)
+    assert result['isolation'] == 'clone'
+    assert (repo / result['file']).is_file()
+    assert original_git(repo / '.city-worktrees' / ('b' * 32), 'branch', '--show-current') == result['branch']
+    assert original_git(repo, 'rev-parse', 'HEAD') == revision
+
+
 def test_ast_branch_remains_on_approved_snapshot_after_repository_updates(tmp_path,monkeypatch):
     repo=tmp_path/'repository';repo.mkdir()
     def git(*args):return specialists.git(repo,*args)

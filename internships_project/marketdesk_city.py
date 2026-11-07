@@ -1656,9 +1656,12 @@ class CityStore:
         with self.db() as db:
             rows = db.execute(
                 "SELECT id,agent_id,task_type,description,status,created_at,started_at,finished_at,"
-                "result_json,error,retry_count,parameters_json FROM city_tasks WHERE username=? AND created_at>=? "
+                "result_json,error,retry_count,parameters_json FROM city_tasks WHERE created_at>=? "
                 "AND json_extract(parameters_json,'$.operation') IN ('develop','code_change','prepare_branch') "
-                "ORDER BY created_at DESC,rowid DESC LIMIT 700", (username, since)).fetchall()
+                "AND (username=? OR (json_extract(parameters_json,'$.operation')='develop' AND EXISTS "
+                "(SELECT 1 FROM city_specialist_schedule s WHERE s.task_id=city_tasks.id "
+                "AND s.username=city_tasks.username AND s.operation LIKE 'develop:%'))) "
+                "ORDER BY created_at DESC,rowid DESC LIMIT 700", (since, username)).fetchall()
             ids = [row['id'] for row in rows]
             events = []
             if ids:
@@ -1684,7 +1687,11 @@ class CityStore:
 
     def task_detail(self, username: str, task_id: str) -> dict | None:
         with self.db() as db:
-            row = db.execute('SELECT * FROM city_tasks WHERE id=? AND username=?', (task_id, username)).fetchone()
+            row = db.execute("SELECT * FROM city_tasks WHERE id=? AND (username=? OR "
+                             "(json_extract(parameters_json,'$.operation')='develop' AND EXISTS "
+                             "(SELECT 1 FROM city_specialist_schedule s WHERE s.task_id=city_tasks.id "
+                             "AND s.username=city_tasks.username AND s.operation LIKE 'develop:%')))",
+                             (task_id, username)).fetchone()
         if row is None:
             return None
         task = dict(row)
