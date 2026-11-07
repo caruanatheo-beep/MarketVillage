@@ -347,6 +347,7 @@ def test_failed_development_can_retry_with_other_missions_queued(store):
                        "VALUES(?,?,'job_hunter','agent:job_hunter',?,'queued',?,?)",
                        (f'{index + 1:032x}', 'alice', f'Mission planifiée {index}',
                         '2026-11-07T12:00:00+00:00', json.dumps({'operation': 'develop'})))
+        db.execute("UPDATE city_tasks SET status='running' WHERE id=?", (f'{1:032x}',))
     assert store.retry_task('alice', failed['id']) == {'id': failed['id'], 'status': 'queued'}
 
 
