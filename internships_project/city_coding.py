@@ -189,7 +189,6 @@ def review_repository() -> dict:
     root = repo_root()
     binary, env = codex_binary(), codex_environment()
     require_chatgpt(binary, env)
-    usage_before = require_daily_codex_budget(binary, env)
     revision = git(root,'rev-parse','HEAD')
     candidates = git(root,'ls-files','--','internships_project/city_*.py',
                      'internships_project/marketdesk_city.py',
@@ -233,6 +232,8 @@ def review_repository() -> dict:
                   'les tests attendus ; evidence cite le fichier et le code observé ; limitations '
                   'décrit ce qui reste à vérifier. Réponds en français selon le schéma JSON.\n\n'+
                   json.dumps(excerpts,ensure_ascii=False))
+        # Preparation can fail without running Codex; reserve only once ready.
+        usage_before = require_daily_codex_budget(binary, env)
         try:
             events = _execute(command,directory,prompt,env)
         finally:
