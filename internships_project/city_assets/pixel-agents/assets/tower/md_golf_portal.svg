@@ -15,7 +15,8 @@
       <stop offset="1" stop-color="#091e31"/>
     </linearGradient>
   </defs>
-  <!-- A side-facing gateway: its front plane follows the building's diagonal edge. -->
+  <!-- Its open face points back toward the approaching agents. -->
+  <g transform="translate(64 0) scale(-1 1)">
   <path d="M1 72 44 61 63 69 20 78Z" fill="#071722" opacity=".65"/>
   <path d="M43 9 56 15 60 65 43 69Z" fill="url(#side)" stroke="#122b39" stroke-width="2"/>
   <path d="M43 12 55 18 55 61 43 65Z" fill="#0a2535" stroke="#4daea9"/>
@@ -32,4 +33,5 @@
   <path d="M5 71 43 62 59 67 19 77 2 76Z" fill="#173d4b" stroke="#8edccd"/>
   <path d="M10 72 43 64 53 67 19 75M20 77 57 68" fill="none" stroke="#befced"/>
   <path d="M4 77 20 78 62 69" fill="none" stroke="#102b39" stroke-width="2"/>
+  </g>
 </svg>
