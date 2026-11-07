@@ -14,6 +14,58 @@ from internships_project.city_routes import add_city_routes
 from internships_project.marketdesk_city import CityStore, CityWorker
 
 
+@pytest.mark.parametrize("failed_step", [
+    "recover_stale", "enqueue_network_daily", "enqueue_specialist_schedules", "enqueue_daily_digest",
+])
+def test_scheduler_storage_failure_does_not_block_ready_missions(
+        tmp_path, monkeypatch, caplog, failed_step):
+    path = tmp_path / "scheduling.sqlite3"
+    monkeypatch.setattr(state_store, "USER_DB_PATH", path)
+    store = CityStore(path)
+    project = store.create_custom_workflow("alice", "Review", "Review and prepare questions", [
+        {"id": "market", "agent_id": "market_analyst", "description": "Review markets",
+         "depends_on": []},
+        {"id": "interview", "agent_id": "developer", "operation": "daily_questions",
+         "description": "Prepare questions", "depends_on": ["market"]},
+    ])
+    worker = CityWorker(store)
+    calls = {name: 0 for name in (
+        "recover_stale", "enqueue_network_daily", "enqueue_specialist_schedules", "enqueue_daily_digest",
+    )}
+
+    def schedule(name):
+        calls[name] += 1
+        if name == failed_step and calls[name] <= 2:
+            raise sqlite3.OperationalError("private scheduling storage detail")
+
+    for name in calls:
+        monkeypatch.setattr(store, name, lambda name=name: schedule(name))
+    monkeypatch.setattr(city_services, "run_agent", lambda *args: {"text": "Review complete"})
+    clock = [0.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    run_once = worker.run_once
+
+    def tick():
+        worked = run_once()
+        clock[0] += 30.0
+        return worked
+
+    monkeypatch.setattr(worker, "run_once", tick)
+    # Stop on idle; also bounds the old failure path that never reached run_once.
+    monkeypatch.setattr(worker._stop, "wait", lambda seconds: worker._stop.set())
+    worker._loop()
+    assert store.workflow_details("alice", project["id"])["status"] == "completed"
+    assert all(count == 2 for count in calls.values())
+    assert failed_step in caplog.text
+    assert "OperationalError" in caplog.text
+    assert "private scheduling storage detail" not in caplog.text
+
+    # The next scheduled pass retries the failed step and the worker stays usable.
+    worker._stop.clear()
+    worker._loop()
+    assert all(count == 3 for count in calls.values())
+
+
 def test_live_project_survives_temporary_heartbeat_storage_failure(tmp_path, monkeypatch, caplog):
     path = tmp_path / "heartbeat.sqlite3"
     monkeypatch.setattr(state_store, "USER_DB_PATH", path)
