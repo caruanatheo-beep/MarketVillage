@@ -345,6 +345,26 @@ def test_prepare_branch_is_isolated_and_never_merges(tmp_path, monkeypatch):
     assert specialists.git(repo,'rev-parse','HEAD') == audit['revision']
 
 
+def test_jules_does_not_repropose_a_syntax_test_already_integrated(tmp_path, monkeypatch):
+    repo = tmp_path / 'repository'
+    (repo / 'internships_project').mkdir(parents=True)
+    (repo / 'internships_project/city_sample.py').write_text('x = 1\n')
+    (repo / 'tests').mkdir()
+    (repo / 'tests/test_city_syntax_audit.py').write_text('def test_compile(): pass\n')
+    subprocess.run(['git', 'init'], cwd=repo, check=True, capture_output=True)
+    subprocess.run(['git', 'config', 'user.name', 'Test'], cwd=repo, check=True, capture_output=True)
+    subprocess.run(['git', 'config', 'user.email', 'test@example.invalid'], cwd=repo, check=True, capture_output=True)
+    subprocess.run(['git', 'add', '.'], cwd=repo, check=True, capture_output=True)
+    subprocess.run(['git', 'commit', '-m', 'Syntax test integrated'], cwd=repo, check=True, capture_output=True)
+    monkeypatch.setattr(specialists, 'repo_root', lambda: repo)
+
+    result = specialists.repository_audit()
+
+    assert result['proposal'] is None
+    assert not result['approval_required']
+    assert 'déjà intégré' in result['text']
+
+
 def test_prepare_branch_uses_writable_clone_when_main_git_refs_are_locked(tmp_path, monkeypatch):
     repo = tmp_path / 'repository'; repo.mkdir()
     subprocess.run(['git', 'init'], cwd=repo, check=True, capture_output=True)

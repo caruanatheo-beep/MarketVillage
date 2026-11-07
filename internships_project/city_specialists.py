@@ -125,7 +125,10 @@ def repository_audit() -> dict:
         dirty = bool(git(root, "status", "--porcelain", "--untracked-files=no"))
     except CityError as exc:
         blocked = str(exc)
-    proposal = {"issue": "Ajouter un test AST de non-régression des modules City", "file": "tests/test_city_syntax_audit.py", "severity": "proposal"}
+    syntax_test = root / "tests" / "test_city_syntax_audit.py"
+    proposal = (None if syntax_test.is_file() else
+                {"issue": "Ajouter un test AST de non-régression des modules City",
+                 "file": "tests/test_city_syntax_audit.py", "severity": "proposal"})
     remote = {}
     repository = os.getenv('MARKETDESK_GITHUB_REPO', '').strip()
     if not repository:
@@ -156,15 +159,19 @@ def repository_audit() -> dict:
         except (requests.RequestException, ValueError, KeyError, TypeError):
             remote = {'blockage': 'API GitHub publique inaccessible ; aucune authentification supplémentaire activée.'}
             remote_note = f"Dépôt GitHub reconnu : {repository}, mais son API publique est inaccessible. L’audit porte sur les fichiers locaux."
-    next_step = ("Audit terminé, aucun fichier généré à cette étape. Clique sur « Valider la proposition » pour préparer "
+    next_step = ("Le test AST des modules City est déjà intégré ; aucune nouvelle validation n’est nécessaire."
+                 if not proposal else
+                 "Audit terminé, aucun fichier généré à cette étape. Clique sur « Valider la proposition » pour préparer "
                  "le test AST dans une branche locale isolée, puis consulter son résultat. Aucun commit, push ou merge automatique."
-                 if revision else "Préparation de branche bloquée : crée un dépôt Git local avec une première révision, puis relance l’audit.")
+                 if revision else
+                 "Préparation de branche bloquée : crée un dépôt Git local avec une première révision, puis relance l’audit.")
     if dirty:
         remote_note += " Des fichiers suivis ont des modifications locales non commitées ; l’audit lit leur contenu actuel."
     return {"title": "Jules · revue du code MarketDesk City", "revision": revision, "working_tree_dirty":dirty, "checked_files": checked,
             "findings": findings[:15], "proposal": proposal, "blockage": blocked, "github": remote,
             "source": "Analyse AST du clone local, référence Git" if revision else "Analyse AST locale · Git non disponible",
-            "approval_required": True, "text": f"{checked} modules City analysés. Proposition : {proposal['issue']}.\n\n"
+            "approval_required": bool(proposal and revision), "text": f"{checked} modules City analysés. "
+            + (f"Proposition : {proposal['issue']}." if proposal else "Test AST déjà présent.") + "\n\n"
             + remote_note + "\n\n" + next_step,
             "as_of": datetime.now(timezone.utc).isoformat(), "role_version": VERSION}
 
