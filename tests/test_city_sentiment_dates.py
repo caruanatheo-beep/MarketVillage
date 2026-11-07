@@ -82,3 +82,33 @@ def test_quiet_older_indicator_does_not_invalidate_same_day_signals(monkeypatch,
     assert result["sentiment"]["label"] == "Défensif"
     assert result["sentiment"]["signal_dates"] == {
         "Actions": "2026-11-06", "Volatilité": "2026-11-06"}
+
+
+@pytest.mark.parametrize("direction", [-1, 1])
+@pytest.mark.parametrize("observed,published,corroborates", [
+    ("2026-11-06", "2026-11-05", False),
+    ("2026-11-05", "2026-11-06", False),
+    ("2026-11-05", "2026-11-05", True),
+    ("2026-11-06", "2026-11-07T00:30:00+02:00", True),
+    ("2026-11-06", "2026-11-06T00:30:00+02:00", False),
+])
+def test_brief_corroboration_requires_the_observed_session(
+    monkeypatch, brief_sources, direction, observed, published, corroborates,
+):
+    points = [point("SP500", observed, 100, direction * 2),
+              point("VIXCLS", observed, 20, -direction * 2)]
+    monkeypatch.setattr(data, "load_snapshot", lambda: (points, {}))
+    headline = "Stocks rise" if direction > 0 else "Stocks fall"
+    monkeypatch.setattr(news, "fetch_global_news", lambda: ([NewsItem(
+        headline, "Reuters", published, "https://example.org/session")], []))
+
+    result = city_services.run_agent("market_analyst", "synthetic", {"operation": "collect_markets"})
+
+    sentiment = result["sentiment"]
+    assert sentiment["label"] == ("Constructif" if direction > 0 else "Défensif")
+    assert len(sentiment["signals"]) == 2
+    assert sentiment["confidence"] == ("modérée" if corroborates else "faible")
+    assert bool(sentiment["supporting_news"]) == corroborates
+    assert (headline in result["text"]) == corroborates
+    assert ("même date UTC" in result["text"]) != corroborates
+    assert len(result["market_data"]) == 2

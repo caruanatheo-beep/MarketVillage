@@ -223,7 +223,7 @@ def market_brief() -> dict:
             "## Analyse et sentiment\n" + f"**{sentiment['label']} · confiance {sentiment['confidence'].lower()}**\n"
             + sentiment['explanation'] + "\n"
             + ("\n".join(corroboration) if corroboration else
-               "Aucun titre récent suffisamment précis ne corrobore ce sentiment ; lecture fondée sur les cours observés."),
+               "Aucun titre suffisamment précis à la même date UTC que les variations ne corrobore ce sentiment ; lecture fondée sur les cours observés."),
             "## À retenir\n" + ("\n".join(f"- {fact}" for fact in facts) or "- Données disponibles, sans mouvement majeur vérifié."),
             "## Prochains rendez-vous\n" + ("\n".join(agenda) or "- Aucun rendez-vous daté récupéré."),
             "## Publications de marché\n" + ("\n".join(publications) or "- Aucune publication monétaire ou de marché pertinente dans les sources récupérées."),
@@ -315,12 +315,16 @@ def _market_sentiment(points: list, news: list) -> dict:
                   if (stamp := _news_timestamp(item.published)) is not None]
     dated_news.sort(key=lambda row: row[0], reverse=True)
     seen_urls = set()
-    for _, item in dated_news:
+    for stamp, item in dated_news:
         if not item.url.startswith(('https://', 'http://')) or not any(name in item.source.casefold() for name in trusted):
             continue
         # Apply the same UTC calendar freshness window as the price signals.
         age = _observation_age(item.published)['age_days']
         if age is None or not 0 <= age <= 4:
+            continue
+        # A matching direction on another session is context, not evidence for
+        # the observed move. Compare normalized UTC dates, including offsets.
+        if not direction or stamp.date().isoformat() not in set(signal_dates.values()):
             continue
         lead = re.split(r"[,;:]|\b(?:as|while|but|despite)\b", item.title, maxsplit=1, flags=re.I)[0]
         # Keyword matching cannot resolve a negated move ("fail to rise").

@@ -13,7 +13,7 @@ from src.models import MarketPoint, NewsItem
 
 @pytest.mark.parametrize("published,eligible", [
     ("2026-11-05", True),
-    ("2026-11-01", True),
+    ("2026-11-01", False),
     ("2026-10-31", False),
     ("2025-11-05", False),
     ("2026-11-06", False),
@@ -22,7 +22,7 @@ from src.models import MarketPoint, NewsItem
     ("not a date", False),
     ("2026-11-05 09:00 UTC", True),
     ("2026-11-01T00:30:00+02:00", False),
-    ("2026-10-31T23:30:00-02:00", True),
+    ("2026-10-31T23:30:00-02:00", False),
 ])
 @pytest.mark.parametrize("constructive", [False, True])
 def test_only_recent_dated_news_can_strengthen_sentiment(monkeypatch, published, eligible, constructive):
