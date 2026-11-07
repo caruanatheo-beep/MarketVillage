@@ -555,8 +555,11 @@ def save_leads(username: str, leads: list[dict], limit: int = 10, *, sales_first
         db.execute("BEGIN IMMEDIATE")
         row = db.execute("SELECT payload FROM user_data WHERE username=? AND kind='mail_contacts'", (username,)).fetchone()
         contacts = json.loads(row[0]) if row else {}
-        urls = {linkedin_url(str(c.get("linkedin_url") or "")) for c in contacts.values()}
-        identities = {(normalized(str(c.get("name") or "")), normalized(str(c.get("company") or ""))) for c in contacts.values()}
+        # Malformed records must not block collection or assisted imports. Keep
+        # them in the saved payload, using only readable records for deduplication.
+        readable = [c for c in contacts.values() if isinstance(c, dict)]
+        urls = {linkedin_url(str(c.get("linkedin_url") or "")) for c in readable}
+        identities = {(normalized(str(c.get("name") or "")), normalized(str(c.get("company") or ""))) for c in readable}
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         candidates = sorted(leads, key=lambda c: (not contact_focus(c)['sales_priority'],
                                                  contact_focus(c)['specialty'] == 'Sales & Trading')) if sales_first else leads
@@ -934,4 +937,5 @@ def list_contacts(username: str) -> list[dict]:
               "conversation", "detected_at", "source_url", "source_title", "source_excerpt", "employment_status", "notes",
               "school", "school_source_url", "school_evidence", "source_type", "source_date", "location_source_url", "location_evidence")
     return [{"id": key, **{f: str(c.get(f) or "") for f in fields}, **contact_focus(c)}
-            for key, c in contacts.items() if c.get("origin") in {"lina_public_search","lina_assisted","lina_assisted_paste","securities_public_search"}]
+            for key, c in contacts.items() if isinstance(c, dict)
+            and c.get("origin") in ("lina_public_search","lina_assisted","lina_assisted_paste","securities_public_search")]
