@@ -157,6 +157,18 @@ def record_daily_codex_usage(binary: str, env: dict, before: float | None) -> No
                    (row[0] + delta, after if after is not None else row[1], day))
 
 
+def release_unused_codex_reservation(before: float | None) -> None:
+    """Return a fallback slot when preparation failed before Codex started."""
+    if before is not None:
+        return
+    day = datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
+    with sqlite3.connect(state_store.USER_DB_PATH, timeout=15) as db:
+        db.execute('BEGIN IMMEDIATE')
+        db.execute('UPDATE city_codex_agent_usage SET consumed=MAX(0,consumed-?), '
+                   'fallback_calls=MAX(0,fallback_calls-1) WHERE day=? AND fallback_calls>0',
+                   (CODEX_DAILY_USAGE_PERCENT / CODEX_DAILY_FALLBACK_CALLS, day))
+
+
 def change_proposal(request: str) -> dict:
     binary = codex_binary()
     require_chatgpt(binary, codex_environment())
@@ -311,15 +323,19 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
     if site_packages.is_dir():
         env['MARKETDESK_TEST_SITE_PACKAGES'] = str(site_packages)
     usage_before = require_daily_codex_budget(binary, env)
-    if directory.exists():
-        raise CityError('Un espace existe déjà pour cette mission. Consulte-le ou soumets une nouvelle demande.')
-    directory.parent.mkdir(exist_ok=True)
-    git(root,'worktree','add','-b',branch,directory.relative_to(root).as_posix(),revision)
-    report = directory/'.jules-result.json'
-    schema = directory/'.jules-schema.json'
-    schema.write_text(json.dumps({'type':'object','additionalProperties':False,
-        'properties':{name:{'type':'string'} for name in ('summary','tests','limitations')},
-        'required':['summary','tests','limitations']}),encoding='utf-8')
+    try:
+        if directory.exists():
+            raise CityError('Un espace existe déjà pour cette mission. Consulte-le ou soumets une nouvelle demande.')
+        directory.parent.mkdir(exist_ok=True)
+        git(root,'worktree','add','-b',branch,directory.relative_to(root).as_posix(),revision)
+        report = directory/'.jules-result.json'
+        schema = directory/'.jules-schema.json'
+        schema.write_text(json.dumps({'type':'object','additionalProperties':False,
+            'properties':{name:{'type':'string'} for name in ('summary','tests','limitations')},
+            'required':['summary','tests','limitations']}),encoding='utf-8')
+    except Exception:
+        release_unused_codex_reservation(usage_before)
+        raise
     command = [binary,'--sandbox','workspace-write','--model','gpt-6.1-sol',
                '-c','model_reasoning_effort="medium"','exec','--approve-for-me',
                '--ignore-user-config','--ephemeral','--disable','apps','--disable','plugins',

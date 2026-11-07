@@ -146,6 +146,23 @@ def test_codex_daily_budget_prevents_a_new_worktree(repo, store, monkeypatch):
     assert not (root/'.city-worktrees'/('9'*32)).exists()
 
 
+def test_git_failure_does_not_consume_codex_fallback_budget(repo, store, monkeypatch):
+    root, _ = repo
+    original_git = coding.git
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: (_ for _ in ()).throw(CityError('Quota indisponible')))
+    def locked_git(directory, *args):
+        if args[:2] == ('worktree', 'add'):
+            raise CityError('Git indisponible pour cette opération.')
+        return original_git(directory, *args)
+    monkeypatch.setattr(coding, 'git', locked_git)
+    with pytest.raises(CityError, match='Git indisponible'):
+        coding.implement_change('f' * 32, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
+    with store.db() as db:
+        consumed, calls = db.execute('SELECT consumed,fallback_calls FROM city_codex_agent_usage').fetchone()
+    assert consumed == 0 and calls == 0
+    assert not (root / '.city-worktrees' / ('f' * 32)).exists()
+
+
 def test_codex_daily_budget_reads_weekly_window_only():
     assert coding._weekly_usage_percent({'codex': {
         'primary': {'usedPercent': 85, 'windowDurationMins': 300},
