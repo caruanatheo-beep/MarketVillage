@@ -1339,12 +1339,23 @@ class CityStore:
             next_try = (datetime.now(timezone.utc) + timedelta(minutes=delay_minutes)).isoformat(timespec='seconds')
             retry_message = f' Nouvelle tentative dans {delay_minutes} minutes.'
         with self.db() as db:
+            # Serialize with project cancellation: a running step may finish its
+            # current attempt, but must not schedule another after cancellation.
+            db.execute('BEGIN IMMEDIATE')
             task = db.execute("SELECT * FROM city_tasks WHERE id=? AND status='running'", (task_id,)).fetchone()
             if not task:
+                return
+            workflow = db.execute("SELECT status FROM city_workflows WHERE id=?",
+                                  (task['workflow_id'],)).fetchone() if task['workflow_id'] else None
+            if workflow and workflow['status'] == 'cancelled':
+                db.execute("UPDATE city_tasks SET status='cancelled',finished_at=?,heartbeat_at=NULL,"
+                           "scheduled_at=NULL WHERE id=?", (_utc(), task_id))
+                self._event(db, task, 'cancelled', 'Projet annulé : aucune nouvelle tentative ne sera lancée.')
                 return
             db.execute("UPDATE city_tasks SET status='queued',scheduled_at=?,started_at=NULL,heartbeat_at=NULL "
                        "WHERE id=?", (next_try, task_id))
             self._event(db, task, 'queued', reason + retry_message)
+            self._refresh_workflow(db, task['workflow_id'])
 
     @classmethod
     def _remember_task_result(cls, db, task: dict, result: dict) -> None:

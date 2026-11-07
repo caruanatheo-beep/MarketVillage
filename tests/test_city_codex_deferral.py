@@ -114,3 +114,56 @@ def test_branch_without_approval_is_not_deferred_or_executed(store, monkeypatch)
                         lambda *args, **kwargs: pytest.fail('Approval is required'))
     assert CityWorker(store).run_once()
     assert store.task_detail('alice', task['id'])['status'] == 'failed'
+
+
+@pytest.mark.parametrize('cancel_timing', ['during_execution', 'after_deferral', None])
+def test_project_deferral_respects_cancellation_and_resumes_dependencies(
+        store, monkeypatch, cancel_timing):
+    project = store.create_custom_workflow('alice', 'Correction City', 'Fiabilise City', [
+        {'id': 'code', 'agent_id': 'job_hunter', 'operation': 'develop',
+         'description': 'Corrige la reprise', 'depends_on': []},
+        {'id': 'review', 'agent_id': 'developer', 'operation': 'daily_questions',
+         'description': 'Prépare les questions', 'depends_on': ['code']},
+    ])
+    task_id, dependent_id = project['task_ids']
+    calls = []
+
+    def execute(*args, **kwargs):
+        calls.append(args)
+        if len(calls) == 1:
+            assert store.workflow_details('alice', project['id'])['status'] == 'running'
+            if cancel_timing == 'during_execution':
+                assert store.cancel_workflow('alice', project['id'])
+            raise CityError('Développement reporté : budget Codex quotidien atteint.')
+        return {'text': 'Correction terminée.'}
+
+    monkeypatch.setattr(city_coding, 'implement_change', execute)
+    worker = CityWorker(store)
+    assert worker.run_once()
+    if cancel_timing == 'after_deferral':
+        assert store.cancel_workflow('alice', project['id'])
+
+    expected = 'cancelled' if cancel_timing else 'queued'
+    assert store.workflow_details('alice', project['id'])['status'] == expected
+    assert store.task_detail('alice', task_id)['status'] == expected
+    assert store.task_detail('alice', dependent_id)['status'] == expected
+    assert not worker.run_once()
+    assert len(calls) == 1
+
+    # Even once the delayed attempt is due, cancellation must remain final.
+    with store.db() as db:
+        db.execute('UPDATE city_tasks SET scheduled_at=NULL WHERE id=?', (task_id,))
+    if cancel_timing:
+        assert not worker.run_once()
+        assert len(calls) == 1
+        assert store.task_detail('alice', task_id)['finished_at']
+        event = next(item for item in store.snapshot('alice')['events'] if item['task_id'] == task_id)
+        assert event['status'] == 'cancelled'
+        assert 'annul' in event['message'].lower()
+    else:
+        assert worker.run_once()
+        assert len(calls) == 2
+        dependent = store.claim_next()
+        assert dependent['id'] == dependent_id
+        store.finish(dependent_id, result={'text': 'Questions prêtes.'})
+        assert store.workflow_details('alice', project['id'])['status'] == 'completed'
