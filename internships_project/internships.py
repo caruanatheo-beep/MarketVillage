@@ -2374,10 +2374,20 @@ def _deduplicate_opportunities(jobs: list[Opportunity]) -> list[Opportunity]:
 
 def _date_detected_offer(job: Opportunity, previous: Opportunity | None, today: date) -> Opportunity:
     """Use only valid calendar dates for publication and first detection."""
+    earlier = [value for value in (_refresh_first_seen.get(job.url, ""),
+                                   previous.published if previous else "")
+               if _publication_sort_value(value)]
     if _publication_sort_value(job.published) and not job.published_inferred:
+        first_seen = min(earlier, default=job.published)
+        if first_seen < job.published:
+            confirmed_previous = previous and not previous.published_inferred and previous.published == first_seen
+            job = replace(job, published=first_seen, published_inferred=not confirmed_previous)
+        _refresh_first_seen[job.url] = min(_refresh_first_seen.get(job.url, job.published), job.published)
         return job
     if previous and _publication_sort_value(previous.published) and not previous.published_inferred:
-        return replace(job, published=previous.published, published_inferred=False)
+        first_seen = min(_refresh_first_seen.get(job.url, previous.published), previous.published)
+        _refresh_first_seen[job.url] = first_seen
+        return replace(job, published=first_seen, published_inferred=first_seen < previous.published)
     candidates = [value for value in (job.published, previous.published if previous else "",
                                       _refresh_first_seen.get(job.url, ""))
                   if _publication_sort_value(value)]
@@ -2506,8 +2516,8 @@ def _read_cache() -> tuple[datetime, list[Opportunity], list[str]] | None:
         jobs = [replace(job, published=updated.date().isoformat(), published_inferred=True)
                 if not job.published else job for job in jobs]
         first_seen = _first_seen_from_history(_read_history_document())
-        jobs = [replace(job, published=min(job.published, first_seen[job.url]))
-                if job.published_inferred and job.url in first_seen else job for job in jobs]
+        jobs = [replace(job, published=first_seen[job.url], published_inferred=True)
+                if job.url in first_seen and first_seen[job.url] < job.published else job for job in jobs]
         jobs = _without_jobteaser_duplicates(jobs)
         checks = payload.get("source_checks") or {}
         _source_checks = {str(name): dict(check) for name, check in checks.items()
@@ -2539,15 +2549,17 @@ def _first_seen_from_history(payload: dict) -> dict[str, str]:
     """Recover the earliest detection, including snapshots from before the durable index existed."""
     dates: dict[str, str] = {}
     def remember(url: object, value: object) -> None:
-        if isinstance(url, str) and url and isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        if isinstance(url, str) and url and isinstance(value, str) and _publication_sort_value(value):
             dates[url] = min(dates.get(url, value), value)
     for url, value in (payload.get("first_seen") or {}).items():
         remember(url, value)
     for snapshot in [payload.get("baseline"), *(payload.get("snapshots") or [])]:
         if not isinstance(snapshot, dict):
             continue
+        observed = str(snapshot.get("updated") or "")[:10]
         for job in snapshot.get("jobs") or []:
-            if isinstance(job, dict) and job.get("published_inferred"):
+            if isinstance(job, dict):
+                remember(job.get("url"), observed)
                 remember(job.get("url"), job.get("published"))
     return dates
 
@@ -2563,8 +2575,10 @@ def _remember_opportunity_snapshot(updated: datetime, jobs: list[Opportunity],
             payload = _read_history_document()
             first_seen = _first_seen_from_history(payload)
             for job in jobs:
-                if job.published_inferred and job.published:
-                    first_seen[job.url] = min(first_seen.get(job.url, job.published), job.published)
+                observed = updated.date().isoformat()
+                first_seen[job.url] = min(first_seen.get(job.url, observed),
+                                          job.published if _publication_sort_value(job.published) else observed,
+                                          observed)
             payload["first_seen"] = first_seen
             if baseline:
                 if payload.get("baseline") is not None:
@@ -2654,7 +2668,7 @@ def refresh_opportunities(force: bool = False, *, notify_email: bool = True,
             _force_source_refresh = force
         _refresh_first_seen = _first_seen_from_history(_read_history_document())
         for job in previous_jobs.values():
-            if job.published_inferred and job.published:
+            if _publication_sort_value(job.published):
                 _refresh_first_seen[job.url] = min(_refresh_first_seen.get(job.url, job.published), job.published)
         if baseline_snapshot:
             _remember_opportunity_snapshot(*baseline_snapshot, baseline=True)
