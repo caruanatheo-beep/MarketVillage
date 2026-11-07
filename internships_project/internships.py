@@ -1487,21 +1487,22 @@ def _axa_jobs() -> list[Opportunity]:
             if field("contract").casefold() != "stage" or not field("location"):
                 continue
             candidates[url] = (title, field("location"), field("entity") or "AXA")
-    jobs: list[Opportunity] = []
     detail_errors: list[requests.RequestException] = []
-    for url, (title, location, company) in candidates.items():
+    def load(pair: tuple[str, tuple[str, str, str]]) -> Opportunity | None:
+        url, (title, location, company) = pair
         try:
             detail = requests.get(url, timeout=(4, 12))
             detail.raise_for_status()
         except requests.RequestException as exc:
             detail_errors.append(exc)
-            continue
+            return None
         posting = _jsonld_jobposting(detail.text)
         description = _plain_text(str(posting.get("description") or ""))
         job = _opportunity(title, company, location, "Stage", url,
                            _jsonld_job_posted(detail.text), role_context=description)
-        if job:
-            jobs.append(replace(job, source="Site carrière · AXA", description=description[:12_000]))
+        return replace(job, source="Site carrière · AXA", description=description[:12_000]) if job else None
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="axa-detail") as pool:
+        jobs = [job for job in pool.map(load, candidates.items()) if job]
     if not jobs and detail_errors:
         raise detail_errors[0]
     return jobs

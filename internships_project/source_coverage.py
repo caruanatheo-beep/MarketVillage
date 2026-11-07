@@ -35,6 +35,7 @@ SOURCE_COVERAGE: dict[str, SourceCoverage] = {
     "CACEIS": SourceCoverage("connected", "https://jobs.caceis.com/pages/offre/listeoffre.aspx?lcid=1036"),
     "Banque de France": SourceCoverage("connected", "https://bdf.wd103.myworkdayjobs.com/fr-FR/recrutement-banque-de-France", "Public Workday CXS board; contract verified on each detail page"),
     "Bpifrance": SourceCoverage("indirect", "https://talents.bpifrance.fr/opportunites/", "JobTeaser public sitemap only; official career site returned HTTP 403 during local checks"),
+    "Banque Richelieu": SourceCoverage("portal", "https://banquerichelieu.com/recrutements", "Public recruitment page checked on 2026-11-07; no direct vacancy links or public feed exposed, only unsolicited applications; automatic collection is not enabled"),
     # Brokers
     "Aurel BGC": SourceCoverage("blocked", "https://www.bgcg.com/careers/", "BGC Group"),
     "BGC": SourceCoverage("blocked", "https://www.bgcg.com/careers/"),
