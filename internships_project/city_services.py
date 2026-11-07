@@ -308,6 +308,7 @@ def _market_sentiment(points: list, news: list) -> dict:
     topic = re.compile(r"\b(stocks?|shares?|equities|ftse|s&p|nasdaq|wall street)\b", re.I)
     down = re.compile(r"\b(fall|falls|fell|drop|drops|slip|slips|slide|slides|sell-?off|retreats?|tumbles?|weighs?|snaps)\b", re.I)
     up = re.compile(r"\b(rise|rises|rose|gain|gains|rally|rallies|climb|climbs|rebound|rebounds|surge|surges|advance|advances|lift|lifts|boost|boosts)\b", re.I)
+    negated = re.compile(r"\b(?:not|never|no\s+longer|fail(?:s|ed|ing)?\s+to|unable\s+to)\b|\b\w+n['’]t\b", re.I)
     trusted = ("reuters", "bloomberg", "wsj", "financial times", "ft.com", "associated press", "ap news", "cnbc", "marketwatch")
     supporting = []
     dated_news = [(stamp, item) for item in news
@@ -322,6 +323,11 @@ def _market_sentiment(points: list, news: list) -> dict:
         if age is None or not 0 <= age <= 4:
             continue
         lead = re.split(r"[,;:]|\b(?:as|while|but|despite)\b", item.title, maxsplit=1, flags=re.I)[0]
+        # Keyword matching cannot resolve a negated move ("fail to rise").
+        # Keep confidence conservative without reversing the headline's meaning;
+        # a negation in a later clause does not invalidate an explicit lead.
+        if negated.search(lead):
+            continue
         if topic.search(lead) and ((direction == -1 and down.search(lead) and not up.search(lead))
                                    or (direction == 1 and up.search(lead) and not down.search(lead))):
             key = item.url.split("#")[0].rstrip("/")
