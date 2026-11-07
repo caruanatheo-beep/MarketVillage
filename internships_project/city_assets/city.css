@@ -1748,3 +1748,84 @@ body { overflow:hidden; }
 .network-targeted-search form { display:flex; flex-wrap:wrap; align-items:end; gap:12px; }
 .network-targeted-search label { display:flex; flex:1 1 260px; flex-direction:column; gap:8px; }
 .network-targeted-search input { box-sizing:border-box; width:100%; }
+
+/* Desktop workspaces: one purpose per view, with the city kept as navigation. */
+.game-app .command-topbar { grid-template-columns:220px minmax(180px,1fr) auto; gap:16px; background:linear-gradient(100deg,#194842,#102f34); }
+.game-app .command-topbar .command-search { width:min(100%,390px); justify-self:center; }
+.game-app .command-topbar .game-hud { gap:2px; background:#0d2c30; }
+.game-app .command-topbar .game-hud button { padding-inline:10px; }
+.game-app .command-topbar .game-hud .city-logout { margin-left:2px; }
+.game-hud-divider { align-self:stretch; width:1px; margin:5px 3px; background:#63958a80; }
+.game-app :is(.game-mission-control,.game-code-control,.team-directory,.mission-results-window) {
+  top:88px; right:16px; bottom:14px; left:16px; border:1px solid #6caaa0;
+  background:#102e33; box-shadow:0 25px 70px #03171bd9;
+}
+.game-app .game-mission-control .game-popup-heading,
+.game-app .team-directory .game-popup-heading,
+.game-app .mission-results-window .game-popup-heading { min-height:78px; padding:15px 28px; background:linear-gradient(100deg,#226158,#18444a); }
+.game-app .game-mission-control .game-popup-heading strong,
+.game-app .team-directory .game-popup-heading strong { font-size:24px; letter-spacing:-.035em; }
+.game-app .game-mission-control .game-popup-heading small,
+.game-app .team-directory .game-popup-heading small { margin-top:5px; color:#c8e7dd; font-size:12px; }
+.mission-view-tabs { gap:5px; padding:10px 28px; background:#123a3d; }
+.mission-view-tabs button { min-width:110px; font-size:13px; text-align:center; }
+.game-app .game-mission-control .manager-panel { display:block; flex:1; min-height:0; overflow:auto; padding:24px 30px 36px; }
+.game-app .game-mission-control .manager-panel>div,.game-app .game-mission-control .manager-panel>section { max-width:1460px; margin-inline:auto; }
+.game-app .game-mission-control .mission-control-register { grid-column:auto; grid-row:auto; display:block; padding:0; border:0; background:transparent; }
+.game-app .mission-control-register .section-heading { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+.game-app .mission-control-register .section-heading h3 { margin:0 0 5px; font-size:21px; }
+.game-app .mission-control-register .section-heading small { color:#afd5c9; font-size:12px; }
+.game-app .mission-filters { margin-bottom:18px; }
+.game-app .mission-record-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.game-app .mission-record { padding:18px; border:1px solid #4e817b; background:#19444a; }
+.game-app .mission-record:hover { border-color:#8ad9c0; }
+.mission-organize { display:grid; grid-template-columns:minmax(330px,420px) minmax(0,1fr); align-items:start; gap:18px; }
+.game-app .game-mission-control .mission-organize .manager-form { grid-column:auto; grid-row:auto; margin:0; padding:22px; background:#19454a; }
+.mission-organize .workflow-builder { grid-column:2; margin:0; }
+.mission-organize .memory-center { grid-column:1 / -1; }
+.mission-projects-view .manager-projects { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:14px; }
+.mission-projects-view .manager-projects>.section-heading { grid-column:1 / -1; }
+.mission-projects-view .workflow-card { min-width:0; background:#19454a; }
+.game-code-control .code-team-panel { padding:24px 30px 36px; }
+.code-team-brief { border:1px solid #5a9788; border-radius:13px; background:#19474b; }
+.code-team-brief>summary { display:flex; justify-content:space-between; gap:20px; padding:14px 18px; color:#effcf4; font-size:14px; font-weight:700; cursor:pointer; }
+.code-team-brief>summary span { color:#abd8ca; font-size:12px; font-weight:400; }
+.code-team-brief form { display:grid; gap:11px; padding:18px; border-top:1px solid #52877b; }
+.code-team-brief label { color:#d9efe6; font-size:12px; font-weight:700; }
+.code-team-brief textarea { box-sizing:border-box; width:100%; min-height:90px; padding:12px; border:1px solid #5d9a8e; border-radius:9px; background:#103238; color:#f4fff9; font:inherit; resize:vertical; }
+.code-team-brief form>div { display:flex; flex-wrap:wrap; gap:10px; }
+.game-app .code-team-feed-list { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.notification-center[open],.network-window.manager-chat-window[open],.network-window:not(.notification-center)[open] { top:88px; right:16px; bottom:14px; left:16px; border-color:#6caaa0; background:#102e33; }
+.notification-heading,.network-window-heading { min-height:78px; padding:15px 28px; background:linear-gradient(100deg,#226158,#18444a); }
+.notification-heading h2,.network-window-heading h2 { margin:5px 0; font-size:24px; }
+.notification-content { background:#102e33; }
+.notification-summary { gap:12px; padding:16px 28px 8px; }
+.notification-summary button { min-height:68px; background:#19434a; }
+.notification-summary .decision { background:#3b392d; }
+.notification-summary .failure { background:#3b3038; }
+.notification-summary .success { background:#1c5049; }
+.notification-commands { align-items:center; justify-content:space-between; padding-block:9px; color:#b9d9d0; font-size:12px; }
+.notification-tabs { padding-top:7px; }
+.notification-feed { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; align-content:start; }
+.notification-count,.notification-empty,.notification-journal { grid-column:1 / -1; }
+.notification-card { min-width:0; margin:0; background:#19434a; }
+.notification-card p { display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+.notification-footer { background:#12363b; }
+.network-workspace-tabs { background:#123a3d; }
+.network-workspace-body { background:#102e33; }
+.game-app :is(.game-mission-control,.game-code-control,.team-directory) :is(button,summary),.network-window :is(button,summary) { transition:background-color .15s,border-color .15s; }
+@media(max-width:1450px) {
+  .game-app .command-topbar { grid-template-columns:185px minmax(130px,1fr) auto; gap:8px; padding-inline:12px; }
+  .game-app .command-topbar .game-hud button { padding-inline:7px; }
+  .game-app .command-topbar .game-hud button span { font-size:11px; }
+  .game-app .mission-record-list,.game-app .code-team-feed-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:1180px) {
+  .game-app .command-topbar { height:104px; grid-template-columns:180px minmax(0,1fr); }
+  .game-app .command-topbar .game-hud { grid-column:1 / -1; justify-self:center; }
+  .game-app .city-dashboard.command-center.city-full-width { padding-top:108px; }
+  .game-app :is(.game-mission-control,.game-code-control,.team-directory,.mission-results-window),
+  .notification-center[open],.network-window[open] { top:114px; }
+  .mission-organize { grid-template-columns:1fr; }
+  .mission-organize .workflow-builder,.mission-organize .memory-center { grid-column:1; }
+}

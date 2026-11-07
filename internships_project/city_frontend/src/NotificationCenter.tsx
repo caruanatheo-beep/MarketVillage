@@ -4,26 +4,23 @@ import {isPendingProposal,needsDecision,notificationRows,parisDay,type Notificat
 import {agentGroup,groupedAgents} from './agentGroups';
 
 type Props={tasks:NotificationTask[];events:NotificationEvent[];agents:{id:string;name:string}[];readThrough:number;initialFilter?:string;initialAgent?:string;
-  onClose:()=>void;onOpen:(id:string)=>void;onRead:()=>Promise<unknown>;onRelaunch:()=>Promise<unknown>;onCodeRequest:(request:string)=>Promise<unknown>;onCodexReview:()=>Promise<unknown>;
+  onClose:()=>void;onOpen:(id:string)=>void;onRead:()=>Promise<unknown>;
   onApprove:(id:string)=>Promise<unknown>;onCancel:(id:string)=>Promise<unknown>;onReview:(id:string,approved:boolean)=>Promise<unknown>;onRetry:(id:string)=>Promise<unknown>;onRefresh:()=>Promise<void>};
 const LABELS:Record<string,string>={completed:'Terminée',failed:'Erreur',queued:'En attente',running:'En cours',waiting_approval:'À valider',cancelled:'Annulée'};
 export function NotificationCenter(props:Props){
   const dialog=useRef<HTMLDialogElement>(null);
   const [filter,setFilter]=useState(props.initialFilter||'all'),[query,setQuery]=useState(''),[agent,setAgent]=useState(props.initialAgent||'');
-  const [team,setTeam]=useState<'all'|'code'|'business'>('all');
   const [busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState('');
-  const [codeRequest,setCodeRequest]=useState('');
   useEffect(()=>{const el=dialog.current,previous=document.activeElement as HTMLElement|null;el?.show();el?.querySelector<HTMLInputElement>('input')?.focus();return()=>{el?.close();previous?.focus();};},[]);
   const rows=notificationRows(props.tasks,props.events,props.readThrough);
   const decisions=props.tasks.filter(needsDecision).length,failures=props.tasks.filter(t=>t.status==='failed').length,completed=props.tasks.filter(t=>t.status==='completed'&&!isPendingProposal(t)).length;
-  const visible=rows.filter(({task,unread})=>(!agent||task.agent_id===agent)&&(team==='all'||(team==='code')===(agentGroup(task.agent_id)==='Développement'))&&
+  const visible=rows.filter(({task,unread})=>(!agent||task.agent_id===agent)&&
     (filter==='all'||filter==='decision'&&needsDecision(task)||filter==='completed'&&task.status==='completed'&&!isPendingProposal(task)||filter==='completed_today'&&task.status==='completed'&&!isPendingProposal(task)&&parisDay(task.finished_at||task.created_at)===parisDay(new Date())||filter==='failed'&&task.status==='failed'||filter==='active'&&['queued','running'].includes(task.status)||filter==='unread'&&unread)&&
     `${task.description} ${task.result.title||''} ${task.error||''} ${task.id}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   async function action(key:string,operation:()=>Promise<unknown>,success:string){
     if(busy)return;setBusy(key);setError('');setNotice('');
     try{await operation();await props.onRefresh();setNotice(success);}catch(exc){setError(exc instanceof Error?exc.message:'Action impossible.');}finally{setBusy('');}
   }
-  const julesActive=props.tasks.some(t=>t.agent_id==='job_hunter'&&['running','queued','waiting_approval'].includes(t.status));
   return <dialog ref={dialog} className="network-window notification-center" aria-labelledby="notifications-title" onCancel={props.onClose} onKeyDown={e=>{if(e.key==="Escape")props.onClose();}}>
     <header className="notification-heading"><div><span className="notification-eyebrow">TON VILLAGE, EN UN COUP D’ŒIL</span><h2 id="notifications-title">Centre de notifications</h2><p>Les décisions à prendre, les résultats à consulter et les missions à suivre.</p></div><button type="button" className="network-close" onClick={props.onClose} aria-label="Fermer les notifications">×</button></header>
     <div className="notification-content">
@@ -32,17 +29,8 @@ export function NotificationCenter(props:Props){
       <button className="success" onClick={()=>setFilter('completed')}><span>Missions terminées</span><strong>{completed}</strong><small>Résultats disponibles</small></button>
       <button className="failure" onClick={()=>setFilter('failed')}><span>À examiner</span><strong>{failures}</strong><small>Erreurs et relances</small></button>
     </div>
-    <div className="notification-commands"><button disabled={!!busy||julesActive} onClick={()=>void action('jules',props.onRelaunch,'Nouvel audit Jules ajouté aux missions.')}>{busy==='jules'?'Lancement…':julesActive?'Jules a une mission active':'↻ Relancer l’audit de Jules'}</button><button disabled={!!busy} onClick={()=>void action('read',props.onRead,'Notifications marquées comme lues. Les décisions restent à traiter.')}>Tout marquer comme lu</button></div>
-    <details className="notification-tools"><summary>Outils de Jules · proposer une amélioration ou confier une mission</summary>
-    <form className="jules-coding-form" onSubmit={e=>{e.preventDefault();void action('code',async()=>{await props.onCodeRequest(codeRequest);setCodeRequest('');},'Développement confié à Jules. L’intégration locale suit les vérifications automatiques.');}}>
-      <div><strong>Jules · développeur Codex</strong><button type="button" disabled={!!busy||julesActive} onClick={()=>void action('codex-review',props.onCodexReview,'Analyse Codex demandée. Jules proposera une amélioration à valider.')}>Proposer une amélioration avec Codex</button></div>
-      <label htmlFor="jules-code-request">Confier une correction ou fonctionnalité à Jules</label>
-      <textarea id="jules-code-request" value={codeRequest} onChange={e=>setCodeRequest(e.target.value)} minLength={10} maxLength={3000} required rows={3} placeholder="Exemple : ajoute un filtre par agent dans le journal des missions…"/>
-      <div><small>Codex · connexion ChatGPT locale · worktree séparé, tests automatiques et compte rendu quotidien.</small><button type="submit" disabled={!!busy||julesActive||codeRequest.trim().length<10}>Lancer la mission</button></div>
-    </form>
-    </details>
-    <div className="notification-tabs" role="group" aria-label="Filtrer les notifications">{[['all','Tout'],['decision','Décisions'],['unread','Non lues'],['completed','Terminées'],['completed_today','Aujourd’hui'],['active','En cours'],['failed','Erreurs']].map(([id,label])=><button key={id} aria-pressed={filter===id} className={filter===id?'selected':''} onClick={()=>setFilter(id)}>{label}</button>)}</div>
-    <div className="notification-team-tabs" role="group" aria-label="Équipe des notifications"><button type="button" aria-pressed={team==='all'} onClick={()=>setTeam('all')}>Toute l’équipe</button><button type="button" aria-pressed={team==='code'} onClick={()=>setTeam('code')}>Développement</button><button type="button" aria-pressed={team==='business'} onClick={()=>setTeam('business')}>Agents métier</button></div>
+    <div className="notification-commands"><span>Les actions à prendre apparaissent en premier dans le fil.</span><button disabled={!!busy} onClick={()=>void action('read',props.onRead,'Notifications marquées comme lues. Les décisions restent à traiter.')}>Tout marquer comme lu</button></div>
+    <div className="notification-tabs" role="group" aria-label="Filtrer les notifications">{[['all','Tout'],['decision','Décisions'],['unread','Non lues'],['failed','Erreurs']].map(([id,label])=><button key={id} aria-pressed={filter===id} className={filter===id?'selected':''} onClick={()=>setFilter(id)}>{label}</button>)}</div>
     <div className="notification-filters"><input aria-label="Rechercher une notification" placeholder="Mission, résultat ou identifiant…" value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="Agent des notifications" value={agent} onChange={e=>setAgent(e.target.value)}><option value="">Tous les agents</option><optgroup label="Développement">{groupedAgents(props.agents).code.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</optgroup><optgroup label="Agents métier">{groupedAgents(props.agents).business.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</optgroup></select></div>
     {error&&<p className="notification-feedback error" role="alert">{error}</p>}{notice&&<p className="notification-feedback" role="status">{notice}</p>}
     <div className="notification-feed"><p className="notification-count">{visible.length} mission(s) affichée(s) · décisions en priorité</p>
