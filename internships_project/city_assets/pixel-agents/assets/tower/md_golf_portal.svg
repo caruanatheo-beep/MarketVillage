@@ -1,29 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="56" height="68" viewBox="0 0 56 68">
+<svg xmlns="http://www.w3.org/2000/svg" width="52" height="84" viewBox="0 0 52 84">
   <defs>
-    <linearGradient id="metal" x2="1" y2="0">
-      <stop stop-color="#40616a"/>
-      <stop offset=".55" stop-color="#75918c"/>
-      <stop offset="1" stop-color="#254452"/>
-    </linearGradient>
-    <linearGradient id="threshold" x2="0" y2="1">
-      <stop stop-color="#1a5e65"/>
-      <stop offset="1" stop-color="#14303e"/>
+    <linearGradient id="steel" x2="1" y2="0">
+      <stop stop-color="#142d3a"/>
+      <stop offset=".5" stop-color="#527f80"/>
+      <stop offset="1" stop-color="#183946"/>
     </linearGradient>
   </defs>
-  <!-- Open architectural arch: the floor and characters remain visible through it. -->
-  <path d="M4 61 43 55 55 61 16 68 2 65Z" fill="#071923" opacity=".58"/>
-  <path d="M5 59 43 53 53 59 15 66 4 64Z" fill="url(#threshold)" stroke="#6caba5"/>
-  <path d="M13 60 43 55M16 63 46 58M23 64 49 60" fill="none" stroke="#b7dfbf" stroke-width="1" opacity=".7"/>
-  <path d="M6 16 14 12 16 59 9 62 6 59Z" fill="#163643" stroke="#9bb7a8" stroke-width="1"/>
-  <path d="M9 19 13 17 13 56 9 58Z" fill="url(#metal)"/>
-  <path d="M11 23V54" stroke="#8de5c7" stroke-width="2" opacity=".8"/>
-  <path d="M43 8 49 12 49 58 43 55Z" fill="#173745" stroke="#91b7aa" stroke-width="1"/>
-  <path d="M44 15 47 17 47 53 44 51Z" fill="url(#metal)"/>
-  <path d="M45 21V49" stroke="#a5f3d7" stroke-width="2" opacity=".8"/>
-  <path d="M6 16 14 8 43 7 49 12 42 18 14 22Z" fill="#284d59" stroke="#a8bba8"/>
-  <path d="M9 16 15 11 41 10 45 13 41 17 14 20Z" fill="#315b64"/>
-  <path d="M13 20 41 17" stroke="#b3e8d0" stroke-width="2"/>
-  <path d="M15 23 41 19M15 57 41 52" stroke="#6cbaaa" stroke-width="1" opacity=".8"/>
-  <path d="M6 17 14 12M43 8 49 12M9 62 16 59M43 55 49 58" stroke="#d2c59d" stroke-width="1"/>
-  <path d="M6 65 16 68 54 61" fill="none" stroke="#152c38" stroke-width="2"/>
+  <!-- A side-facing arch: its opening runs north-south, across east-west travel. -->
+  <path d="M9 63 37 78 49 73 20 57Z" fill="#071a22" opacity=".55"/>
+  <path d="M13 58 39 73 46 69 19 54Z" fill="#173f49" stroke="#79b0a6"/>
+  <path d="M17 58 41 72M20 56 44 70" stroke="#aae1c5" opacity=".7"/>
+  <path d="M10 12 17 9 19 56 13 60 10 57Z" fill="url(#steel)" stroke="#b7c1a8"/>
+  <path d="M13 16 16 15 17 53 14 55Z" fill="#7ab8af" opacity=".8"/>
+  <path d="M36 28 42 25 44 72 38 76 36 72Z" fill="url(#steel)" stroke="#c7c6a4"/>
+  <path d="M39 31 41 30 42 69 39 71Z" fill="#8de1c0" opacity=".75"/>
+  <path d="M10 12 16 7 42 25 36 31Z" fill="#254c57" stroke="#a7bfaa"/>
+  <path d="M14 11 17 10 38 25 36 27Z" fill="#8abbb0"/>
+  <path d="M17 14 34 26M18 54 37 67" fill="none" stroke="#bdf0cd" opacity=".65"/>
+  <path d="M10 57 13 60 19 56M36 72 38 76 44 72" fill="none" stroke="#e4c58a"/>
 </svg>

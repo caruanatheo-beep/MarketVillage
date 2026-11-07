@@ -7,7 +7,7 @@ import { worldY } from './worldGeometry';
 // ambient animation only: never create tasks, tool events or backend statuses.
 // The office gate stands on the shared east gallery, outside every desk.
 export const OFFICE_PORTAL = {col:47,row:worldY(19)};
-export const GOLF_PORTAL = {col:65,row:worldY(28)};
+export const GOLF_PORTAL = {col:50,row:worldY(19)};
 export const GOLF_BOUNDS = {left:50,right:66,top:worldY(8),bottom:worldY(31)};
 export const GOLF_BAYS = [12,20,25].flatMap((matRow)=>[51,59].map(matCol=>({
   index:0,col:matCol+1,row:worldY(matRow)+1,matCol,matRow,
@@ -52,7 +52,7 @@ export class GolfPractice {
       const image=new Image();image.onload=()=>{this.assets[name]=image;resolve();};
       image.onerror=()=>reject(new Error(`Impossible de charger le décor du practice : ${name}`));
       image.src=name==='md_golf_backstop'?'/city/pixel-assets/tower/md_golf_backstop.svg':
-        name==='md_golf_portal'?'/city/pixel-assets/tower/md_golf_portal.svg?v=arch-1':
+        name==='md_golf_portal'?'/city/pixel-assets/tower/md_golf_portal.svg?v=side-1':
         name==='md_golf_deck'?'/city/pixel-assets/tower/turf.png':`/city/pixel-assets/furniture/MARKETDESK_GOLF/${name}.png`;
     })));
   }
@@ -154,10 +154,10 @@ export class GolfPractice {
     const gate=this.assets.md_golf_portal;
     if(gate)for(const [portal,label] of [[OFFICE_PORTAL,'GOLF'],[GOLF_PORTAL,'DESKS']] as const){
       const px=ox+(portal.col+.5)*cell,foot=oy+(portal.row+1)*cell;
-      const frameX=px-12*zoom; // Seat the frame on the deck, inside its exposed edge.
-      ctx.drawImage(gate,frameX-28*zoom,foot-68*zoom,56*zoom,68*zoom);
+      const frameX=px+(portal===OFFICE_PORTAL?-12:12)*zoom; // Both frames sit inside their facing edges.
+      ctx.drawImage(gate,frameX-26*zoom,foot-84*zoom,52*zoom,84*zoom);
       ctx.fillStyle='#dcfff7';ctx.font=`700 ${7*zoom}px "Segoe UI",sans-serif`;
-      ctx.textAlign='center';ctx.fillText(label,frameX,foot-53*zoom);
+      ctx.textAlign='center';ctx.fillText(label,frameX,foot-62*zoom);
     }
   }
 
@@ -166,12 +166,12 @@ export class GolfPractice {
     // Only the floor threshold pulses; the open arch never masks a character.
     for(const portal of [OFFICE_PORTAL,GOLF_PORTAL]){
       const px=ox+(portal.col+.5)*cell,foot=oy+(portal.row+1)*cell;
-      const frameX=px-12*zoom;
+      const frameX=px+(portal===OFFICE_PORTAL?-12:12)*zoom;
       ctx.strokeStyle=`rgba(115,255,223,${.22+.13*Math.sin(this.time*2.4)})`;
       ctx.lineWidth=Math.max(1,zoom);
       ctx.beginPath();
-      ctx.moveTo(frameX-15*zoom,foot-7*zoom);
-      ctx.lineTo(frameX+15*zoom,foot-12*zoom);
+      ctx.moveTo(frameX-12*zoom,foot-27*zoom);
+      ctx.lineTo(frameX+12*zoom,foot-12*zoom);
       ctx.stroke();
     }
     // Local additive light pools brighten wood, characters and the green.
