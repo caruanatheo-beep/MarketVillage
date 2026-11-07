@@ -482,7 +482,7 @@ class CityStore:
         return {"enabled": bool(row['enabled']), "last_day": row['last_day'],
                 "last_task_id": row['last_task_id'], "status": task['status'] if task else "idle",
                 "error": task['error'] if task else "", "finished_at": task['finished_at'] if task else "",
-                "report": {k: report[k] for k in ('count', 'sales_count', 'duplicates', 'rejected', 'target', 'model', 'source', 'text', 'warnings') if k in report}}
+                "report": {k: report[k] for k in ('count', 'sales_count', 'duplicates', 'duplicate_examples', 'rejected', 'target', 'model', 'source', 'text', 'warnings') if k in report}}
 
     def securities_scout_status(self, username: str) -> dict:
         with self.db() as db:
@@ -496,7 +496,7 @@ class CityStore:
         return {"id": task['id'], "status": task['status'], "created_at": task['created_at'],
                 "finished_at": task['finished_at'], "error": task['error'],
                 "summary": summary[0][:300] if summary else '',
-                "report": {k: result[k] for k in ('count', 'duplicates', 'rejected', 'target', 'source', 'text', 'warnings') if k in result}}
+                "report": {k: result[k] for k in ('count', 'duplicates', 'duplicate_examples', 'rejected', 'target', 'source', 'text', 'warnings') if k in result}}
 
     def enqueue_network_daily(self, username: str | None = None, *, manual: bool = False) -> int:
         if manual:

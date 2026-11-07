@@ -55,6 +55,9 @@ def test_directory_collection_empty_report_and_assisted_retry(tmp_path, monkeypa
         report = client.get('/city/api/network', headers=headers).json()[report_key]['report']
         assert report['count'] == 0
         assert report['duplicates'] >= 1
+        assert report['duplicate_examples'] == [{
+            'name': lead['name'], 'role': lead['role'], 'company': lead['company'],
+            'source_url': lead['source_url'], 'reason': 'Même nom et même entreprise'}]
         assert 'doublons' in report['text']
         # A targeted assisted search can still add a new profile after the empty collection.
         selected = {'name': 'Camille Exemple', 'role': 'Rates Sales', 'company': 'Synthetic Bank',

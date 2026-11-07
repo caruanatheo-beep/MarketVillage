@@ -1,5 +1,6 @@
 """Contacts journey with synthetic reports and no external requests."""
 import json
+import re
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -57,6 +58,44 @@ def test_empty_clara_report_stays_compatible(tmp_path):
     assert status['summary'] == ''
 
 
+def test_duplicate_examples_are_bounded_public_evidence_and_do_not_modify_saved_records(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path / 'synthetic.sqlite3')
+    leads = [{'name': f'Alex Exemple {i}', 'company': 'Banque Exemple', 'role': 'FX Sales',
+              'linkedin_url': f'https://www.linkedin.com/in/synthetic-{i}',
+              'source_url': f'https://example.invalid/bio/{i}', 'notes': 'Synthetic private note'}
+             for i in range(8)]
+    network_discovery.save_leads('synthetic-owner', leads)
+    before = state_store.load_user_data('synthetic-owner', 'mail_contacts')
+    examples = []
+    added, count = network_discovery.save_leads('synthetic-owner', leads + leads, duplicate_examples=examples)
+    assert not added and count == 16
+    assert len(examples) == 5
+    assert examples[0] == {k: leads[0][k] for k in ('name', 'role', 'company', 'source_url')} | {
+        'reason': 'Même profil LinkedIn'}
+    assert all(set(example) == {'name', 'role', 'company', 'source_url', 'reason'} for example in examples)
+    assert state_store.load_user_data('synthetic-owner', 'mail_contacts') == before
+    assert network_discovery.save_leads('synthetic-other', leads, duplicate_examples=[])[1] == 0
+
+
+def test_lina_web_research_reports_duplicates_without_an_extra_search(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path / 'synthetic.sqlite3')
+    monkeypatch.setenv('MARKETDESK_NETWORK_SEARCH_MODE', 'ai')
+    known = {'name': 'Alex Exemple', 'company': 'Banque Exemple', 'role': 'FX Sales',
+             'source_url': 'https://example.invalid/bio'}
+    network_discovery.save_leads('synthetic-owner', [known])
+    calls = []
+
+    def research(username):
+        calls.append(username)
+        return [known] + [{**known, 'name': f'Autre Exemple {i}'} for i in range(10)], 0
+
+    monkeypatch.setattr(network_discovery, 'research_contacts', research)
+    report = network_discovery.discover_contacts('synthetic-owner')
+    assert report['count'] == 10 and report['duplicates'] == 1
+    assert report['duplicate_examples'] == [{**known, 'reason': 'Même nom et même entreprise'}]
+    assert calls == ['synthetic-owner']
+
+
 def test_lina_report_reaches_contacts_with_empty_collection_reasons(tmp_path, monkeypatch):
     store = CityStore(tmp_path / 'synthetic.sqlite3')
     store.enqueue_network_daily('synthetic-owner', manual=True)
@@ -83,17 +122,21 @@ def test_desktop_contacts_empty_report_targeted_retry_and_visible_evidence():
 
     root = Path(__file__).resolve().parents[1]
     bundle = (root / 'internships_project/city_assets/city.js').read_text(encoding='utf-8')
-    report_source = (root / 'internships_project/city_frontend/src/ContactCollectionReport.tsx').read_text(encoding='utf-8')
-    report_function = report_source[report_source.index('export function'):].replace('export function', 'function', 1)
-    report_function = report_function.replace(':{report?:CollectionReport}', '').replace('React.createElement', 'Be.createElement')
-    assert report_function in bundle
     # Mount the shipped Contacts component alone, with synthetic API responses.
-    entry = '(0,u.jsx)(lw,{})'
+    mount = re.search(r'\.render\((\(0,\w+\.jsx\))\(\w+,\{\}\)\)', bundle)
+    component = re.search(r'\(0,(\w+)\.jsx\)\((\w+),\{\}\),\(0,\1\.jsxs\)\("footer",\{className:"network-window-footer"', bundle)
+    assert mount and component
+    entry = mount.group(0)[len('.render('):-1]
     assert bundle.count(entry) == 1
-    bundle = bundle.replace(entry, '(0,u.jsx)(sw,{})')
+    bundle = bundle.replace(entry, f'{mount.group(1)}({component.group(2)},{{}})')
     state = {'contacts': [], 'schedule': {'enabled': True, 'status': 'completed',
              'report': {'count': 0, 'duplicates': 3, 'rejected': 2,
-                        'warnings': ['Source indisponible']}},
+                        'warnings': ['Source indisponible'],
+                        'duplicate_examples': [
+                            {'name': 'Alex Doublon', 'role': 'FX Sales', 'company': 'Banque Exemple',
+                             'reason': 'Même nom et même entreprise', 'source_url': 'https://example.invalid/duplicate'},
+                            {'name': 'Sans lien sûr', 'role': 'Trader', 'company': 'Banque Exemple',
+                             'reason': 'Même profil LinkedIn', 'source_url': 'javascript:alert(1)'}]}},
              'clara': {'status': 'completed', 'report': {'count': 0, 'duplicates': 1}}}
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -118,6 +161,12 @@ def test_desktop_contacts_empty_report_targeted_retry_and_visible_evidence():
         assert page.get_by_text('2 fiches insuffisamment sourcées écartées', exact=False).is_visible()
         assert page.get_by_text('Source indisponible', exact=True).is_visible()
         assert page.get_by_text('1 doublons écartés', exact=False).is_visible()
+        page.get_by_text('Voir les doublons écartés', exact=True).click()
+        assert page.get_by_text('Alex Doublon', exact=True).is_visible()
+        assert page.get_by_text('Même nom et même entreprise.', exact=False).is_visible()
+        duplicate_link = page.get_by_role('link', name='Source du doublon')
+        assert duplicate_link.count() == 1
+        assert duplicate_link.get_attribute('href') == 'https://example.invalid/duplicate'
         page.get_by_label('Critères de recherche').fill('Collateral CACEIS Paris')
         page.get_by_role('button', name='Préparer dans l’import assisté').click()
         assert page.get_by_label('Requête LinkedIn').input_value() == 'Collateral CACEIS Paris'

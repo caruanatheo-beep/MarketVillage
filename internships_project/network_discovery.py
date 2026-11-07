@@ -548,7 +548,7 @@ def _search_response(url: str, params: dict) -> str:
 
 
 def save_leads(username: str, leads: list[dict], limit: int = 10, *, sales_first: bool = False,
-               allow_pasted: bool = False) -> tuple[list[dict], int]:
+               allow_pasted: bool = False, duplicate_examples: list[dict] | None = None) -> tuple[list[dict], int]:
     """Merge inside one transaction; never overwrite manual edits or existing contacts."""
     added, duplicates = [], 0
     with state_store._connect() as db:
@@ -574,6 +574,15 @@ def save_leads(username: str, leads: list[dict], limit: int = 10, *, sales_first
                 continue
             if (url and url in urls) or identity in identities:
                 duplicates += 1
+                # Keep bounded public evidence from the candidate, never fields
+                # from the saved record (which may contain private annotations).
+                if duplicate_examples is not None and len(duplicate_examples) < 5:
+                    example = {field: str(lead.get(field) or '')[:300]
+                               for field in ('name', 'role', 'company')}
+                    example.update(source_url=evidence_url or url,
+                                   reason='Même profil LinkedIn' if url and url in urls else 'Même nom et même entreprise')
+                    if example not in duplicate_examples:
+                        duplicate_examples.append(example)
                 continue
             focus = contact_focus(lead)
             if sales_first and not focus['sales_priority']:
@@ -800,6 +809,7 @@ def discover_service_contacts(username: str) -> dict:
             query = f'{names} {term} (interview OR speaker OR nomination OR expert)'
         queries.append((entity, aliases, query))
     leads, warnings = [], []
+    duplicate_examples = []
 
     def collect(item):
         entity, aliases, query = item
@@ -827,7 +837,7 @@ def discover_service_contacts(username: str) -> dict:
 
     run_queries(queries)
     queries_attempted = len(queries)
-    added, duplicates = save_leads(username, leads, limit=10)
+    added, duplicates = save_leads(username, leads, limit=10, duplicate_examples=duplicate_examples)
     # Search a different publisher for the least represented services before
     # spending a Codex call. Repeated runs rotate both the services and sites.
     if len(added) < 10:
@@ -845,7 +855,7 @@ def discover_service_contacts(username: str) -> dict:
         leads.clear()
         run_queries(extra_queries)
         queries_attempted += len(extra_queries)
-        more, repeated = save_leads(username, leads, limit=10-len(added))
+        more, repeated = save_leads(username, leads, limit=10-len(added), duplicate_examples=duplicate_examples)
         added.extend(more)
         duplicates += repeated
     used_codex = False
@@ -859,7 +869,7 @@ def discover_service_contacts(username: str) -> dict:
             extra = _search_service_contacts_with_codex(10 - len(added), existing=existing,
                                                         priority_entities=priorities)
             more, repeated = save_leads(username, [{**lead, 'origin': 'securities_public_search'}
-                                                for lead in extra], limit=10 - len(added))
+                                                for lead in extra], limit=10 - len(added), duplicate_examples=duplicate_examples)
             added.extend(more)
             duplicates += repeated
             used_codex = True
@@ -868,7 +878,7 @@ def discover_service_contacts(username: str) -> dict:
                 raise
             warnings.append('Recherche complémentaire indisponible : ' + str(exc))
     return {'title': 'Clara · services titres', 'contacts': added, 'count': len(added),
-            'duplicates': duplicates, 'target': 10, 'entities_searched': len(queries),
+            'duplicates': duplicates, 'duplicate_examples': duplicate_examples, 'target': 10, 'entities_searched': len(queries),
             'warnings': warnings[:3], 'source': ('Sources publiques et Codex · abonnement ChatGPT' if used_codex
                                               else 'Sources publiques · DuckDuckGo / Bing RSS'),
             'text': f'{len(added)} nouveaux contacts enregistrés en services titres ; '
@@ -877,9 +887,10 @@ def discover_service_contacts(username: str) -> dict:
 
 def discover_contacts(username: str) -> dict:
     from .marketdesk_city import CityError
+    duplicate_examples = []
     if os.getenv("MARKETDESK_NETWORK_SEARCH_MODE", "ai") != "public":
         leads, rejected = research_contacts(username)
-        added, duplicates = save_leads(username, leads, sales_first=True)
+        added, duplicates = save_leads(username, leads, sales_first=True, duplicate_examples=duplicate_examples)
         warnings = []
         if len(added) < 10:
             from .city_chat import _budget_guard
@@ -888,7 +899,7 @@ def discover_contacts(username: str) -> dict:
                 # One targeted completion only; initial contacts are already saved and excluded.
                 _budget_guard(username, CityStore().get_settings(username), reserve_usd=0.05)
                 extra, refused = research_contacts(username, 10-len(added), top_up=True)
-                completed, repeated = save_leads(username, extra, limit=10-len(added), sales_first=True)
+                completed, repeated = save_leads(username, extra, limit=10-len(added), sales_first=True, duplicate_examples=duplicate_examples)
                 added.extend(completed)
                 rejected += refused
                 duplicates += repeated
@@ -897,7 +908,7 @@ def discover_contacts(username: str) -> dict:
         added.sort(key=lambda c:not contact_focus(c)['sales_priority'])
         sales_count = sum(contact_focus(c)['sales_priority'] for c in added)
         return {"title": "Collecte quotidienne de Lina", "contacts": added, "count": len(added),
-                "duplicates": duplicates, "rejected": rejected, "sales_count": sales_count, "target": 10, "model": "gpt-5.4-mini", "warnings":warnings,
+                "duplicates": duplicates, "duplicate_examples": duplicate_examples, "rejected": rejected, "sales_count": sales_count, "target": 10, "model": "gpt-5.4-mini", "warnings":warnings,
                 "source": "OpenAI · recherche Web sourcée", "text":
                     f"{len(added)} nouveaux contacts, dont {sales_count} Sales et {len(added)-sales_count} métiers de marché proches, sur un objectif de 10 ; {duplicates} doublons écartés, "
                     f"{rejected} fiches insuffisamment sourcées exclues. Les postes actuels restent à confirmer. "
@@ -922,9 +933,9 @@ def discover_contacts(username: str) -> dict:
                 errors.append(error)
     if len(errors) == len(queries):
         raise CityError("Collecte de contacts indisponible : " + errors[0] + ". Aucun contact inventé ou ajouté.")
-    added, duplicates = save_leads(username, leads, sales_first=True)
+    added, duplicates = save_leads(username, leads, sales_first=True, duplicate_examples=duplicate_examples)
     return {"title": "Collecte quotidienne de Lina", "contacts": added, "count": len(added),
-            "duplicates": duplicates, "sales_count": sum(contact_focus(c)['sales_priority'] for c in added), "target": 10, "queries": queries, "warnings": errors,
+            "duplicates": duplicates, "duplicate_examples": duplicate_examples, "sales_count": sum(contact_focus(c)['sales_priority'] for c in added), "target": 10, "queries": queries, "warnings": errors,
             "source": "Extraits publics indexés · DuckDuckGo / Bing RSS / LinkedIn",
             "text": f"{len(added)} nouveaux contacts enregistrés sur un objectif de 10 ; {duplicates} doublons écartés. "
                     "Identités, postes et localisation à confirmer dans les sources. "
