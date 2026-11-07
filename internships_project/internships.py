@@ -2562,8 +2562,11 @@ def _fetch_opportunities_progressive() -> tuple[list[Opportunity], list[str]]:
             with _lock:
                 _source_counts = dict(counts)
                 _source_checks = {key: dict(value) for key, value in checks.items()}
-            _write_source_job_cache()
             _publish_refresh_progress(collected, errors)
+    # The per-source cache is already shared in memory during collection. Flush
+    # it once: serializing every source after each completion makes even a
+    # fully cached refresh repeatedly write the entire collection to disk.
+    _write_source_job_cache()
     with _lock:
         _source_counts = counts
         _source_checks = checks
