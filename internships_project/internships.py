@@ -1774,18 +1774,26 @@ def _bnp_tal_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
 def _career_rss_jobs(company: str, host: str, contracts: tuple[int, ...]) -> list[Opportunity]:
     """Read the employer's public stage and VIE RSS feeds."""
     links: dict[str, str] = {}
-    last_error: requests.RequestException | None = None
+    last_error: Exception | None = None
     successful_feeds = 0
-    for contract in contracts:
+
+    def read_feed(contract: int) -> tuple[ElementTree.Element | None, Exception | None]:
         try:
             response = requests.get(
                 f"https://{host}/handlers/offerRss.ashx",
                 params={"LCID": 1036, "Rss_Contract": contract}, timeout=(4, 15),
             )
             response.raise_for_status()
-            root = ElementTree.fromstring(response.content)
-        except requests.RequestException as exc:
-            last_error = exc
+            return ElementTree.fromstring(response.content), None
+        except (requests.RequestException, ElementTree.ParseError) as exc:
+            return None, exc
+
+    with ThreadPoolExecutor(max_workers=min(4, max(1, len(contracts))),
+                            thread_name_prefix="career-rss") as pool:
+        feeds = list(pool.map(read_feed, contracts))
+    for root, error in feeds:
+        if error is not None:
+            last_error = error
             continue
         successful_feeds += 1
         for item in root.findall(".//item"):
@@ -1796,13 +1804,18 @@ def _career_rss_jobs(company: str, host: str, contracts: tuple[int, ...]) -> lis
             links[url] = title
     if not successful_feeds and last_error:
         raise last_error
+    detail_errors: list[Exception] = []
     def load(pair: tuple[str, str]) -> Opportunity | None:
         try:
             return _career_detail(pair[0], company, pair[1])
-        except (requests.RequestException, ValueError, TypeError):
+        except (requests.RequestException, ValueError, TypeError) as exc:
+            detail_errors.append(exc)
             return None
     with ThreadPoolExecutor(max_workers=5) as pool:
-        return [job for job in pool.map(load, list(links.items())) if job]
+        jobs = [job for job in pool.map(load, list(links.items())) if job]
+    if not jobs and detail_errors:
+        raise detail_errors[0]
+    return jobs
 
 
 def _ca_cib_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
