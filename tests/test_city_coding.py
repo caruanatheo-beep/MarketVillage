@@ -338,6 +338,18 @@ def test_dirty_main_requeues_development_and_retry_keeps_task_id(store, monkeypa
         assert db.execute('SELECT scheduled_at FROM city_tasks WHERE id=?', (task['id'],)).fetchone()[0] is None
 
 
+def test_failed_development_can_retry_with_other_missions_queued(store):
+    failed = store.create_task('alice', 'job_hunter', 'Mission interrompue', {'operation': 'develop'})
+    with store.db() as db:
+        db.execute("UPDATE city_tasks SET status='failed',error='Interrompue' WHERE id=?", (failed['id'],))
+        for index in range(4):
+            db.execute("INSERT INTO city_tasks(id,username,agent_id,task_type,description,status,created_at,parameters_json) "
+                       "VALUES(?,?,'job_hunter','agent:job_hunter',?,'queued',?,?)",
+                       (f'{index + 1:032x}', 'alice', f'Mission planifiée {index}',
+                        '2026-11-07T12:00:00+00:00', json.dumps({'operation': 'develop'})))
+    assert store.retry_task('alice', failed['id']) == {'id': failed['id'], 'status': 'queued'}
+
+
 def test_coding_history_is_private_compact_and_keeps_full_detail(store):
     task = store.create_task('alice', 'job_hunter', 'Corriger une date', {'operation': 'develop'})
     store.claim_next()

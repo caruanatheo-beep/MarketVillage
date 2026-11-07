@@ -1547,15 +1547,11 @@ class CityStore:
             raise CityError("This mission is not available for retry.")
         parameters = json.loads(row['parameters_json'] or '{}')
         if parameters.get('operation') == 'develop' and row['workflow_id'] is None:
-            settings = self.get_settings(username)
             with self.db() as db:
                 db.execute('BEGIN IMMEDIATE')
                 if db.execute("SELECT 1 FROM city_tasks WHERE username=? AND agent_id=? AND status='running' LIMIT 1",
                               (username, row['agent_id'])).fetchone():
                     raise CityError('Cet agent a déjà une mission en cours.')
-                if db.execute("SELECT COUNT(*) FROM city_tasks WHERE username=? AND status IN ('queued','running','waiting_approval')",
-                              (username,)).fetchone()[0] >= settings['max_concurrent_tasks']:
-                    raise CityError('Termine ou annule une mission avant de la relancer.')
                 changed = db.execute("UPDATE city_tasks SET status='queued',scheduled_at=NULL,error=NULL,started_at=NULL,"
                                      "finished_at=NULL,heartbeat_at=NULL,retry_count=retry_count+1 "
                                      "WHERE id=? AND username=? AND status='failed'", (task_id, username)).rowcount
