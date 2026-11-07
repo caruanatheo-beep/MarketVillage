@@ -237,7 +237,7 @@ def test_internship_service_does_not_claim_another_refresh(monkeypatch):
     monkeypatch.setattr(internships, "opportunities_loading", lambda: False)
     monkeypatch.setattr(internships, "load_opportunities", lambda **kwargs: ([], [], now))
     monkeypatch.setattr(internships, "refresh_opportunities", lambda **kwargs: (_ for _ in ()).throw(
-        RuntimeError("already running")))
+        internships.CollectionBusyError("already running")))
     with pytest.raises(CityError, match="déjà en cours"):
         refresh_jobs_workflow()
 

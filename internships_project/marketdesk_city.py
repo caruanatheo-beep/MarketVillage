@@ -137,6 +137,10 @@ class CityError(ValueError):
     """A safe error that may be returned to the browser."""
 
 
+class CityCollectionBusyError(CityError):
+    """A collection mission can resume when the shared collector is free."""
+
+
 def _due_schedule_periods(operation: str, known: list[str], today: date) -> list[tuple[str, date]]:
     """Group missed periods since the last recorded run; never backfill before first use."""
     if operation == 'innovation_review':
@@ -1329,6 +1333,7 @@ class CityStore:
 
     def defer_coding(self, task_id: str, reason: str, *, delay_minutes: int = 60,
                      until_next_day: bool = False) -> None:
+        """Reschedule a temporarily unavailable mission, preserving its identity."""
         if until_next_day:
             from zoneinfo import ZoneInfo
             paris = ZoneInfo('Europe/Paris')
@@ -1839,14 +1844,14 @@ def refresh_jobs_workflow(*, published_today: bool = False, detected_today: bool
     from . import internships
 
     if internships.opportunities_loading():
-        raise CityError("La collecte planifiée est déjà en cours. Réessaie après sa fin.")
+        raise CityCollectionBusyError("La collecte planifiée est déjà en cours.")
     before, _, previous_update = internships.load_opportunities(refresh=False)
     before_urls = {job.url for job in before}
     try:
         jobs, errors, updated = internships.refresh_opportunities(force=True, notify_email=False,
                                                                    fail_if_busy=True)
-    except RuntimeError as exc:
-        raise CityError("Une autre collecte est déjà en cours. Réessaie après sa fin.") from exc
+    except internships.CollectionBusyError as exc:
+        raise CityCollectionBusyError("Une autre collecte est déjà en cours.") from exc
     if updated <= previous_update:
         raise CityError("La collecte n'a pas produit de nouvelle donnée. Vérifie l'état des sources avant de réessayer.")
     discovered = [job for job in jobs if job.url not in before_urls]
@@ -2094,7 +2099,9 @@ class CityWorker:
             # Public logs and the UI receive only the exception type for unknown errors.
             from .llm_usage import GenerationLimitError
             safe = str(exc) if isinstance(exc, (CityError, GenerationLimitError)) else f"Erreur de mission ({type(exc).__name__})."
-            if (parameters.get('operation') in ('develop', 'repository_audit', 'codex_review', 'code_change', 'prepare_branch')
+            if isinstance(exc, CityCollectionBusyError):
+                self.store.defer_coding(task['id'], safe, delay_minutes=5)
+            elif (parameters.get('operation') in ('develop', 'repository_audit', 'codex_review', 'code_change', 'prepare_branch')
                     and isinstance(exc, CityError)
                     and safe.startswith(('Quota Codex indisponible', 'Développement reporté', 'Connecte Codex'))):
                 self.store.defer_coding(task['id'], safe,

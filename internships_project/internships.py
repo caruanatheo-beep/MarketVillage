@@ -2740,12 +2740,16 @@ def _write_cache(updated: datetime, jobs: list[Opportunity], errors: list[str]) 
         pass
 
 
+class CollectionBusyError(RuntimeError):
+    """Another refresh owns the collector; callers may retry later."""
+
+
 def refresh_opportunities(force: bool = False, *, notify_email: bool = True,
                           fail_if_busy: bool = False) -> tuple[list[Opportunity], list[str], datetime]:
     global _cache, _last_attempt, _force_source_refresh, _refresh_previous_jobs, _refresh_first_seen
     if not _refresh_guard.acquire(blocking=False):
         if fail_if_busy:
-            raise RuntimeError("Une autre collecte est déjà en cours.")
+            raise CollectionBusyError("Une autre collecte est déjà en cours.")
         with _lock:
             snapshot = _cache
         if snapshot is None:
