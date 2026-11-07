@@ -118,6 +118,9 @@ def test_autonomous_engineer_integrates_validated_code_without_approval(repo, mo
     def execute(command, directory, prompt, env):
         assert '--model' in command and command[command.index('--model') + 1] == 'gpt-6.1-sol'
         assert 'Sacha' in prompt
+        assert 'choisis celui qui gêne le plus l’utilisateur' in prompt
+        assert 'dates de première détection' in prompt
+        assert 'ne prétends pas avoir validé un site externe' in prompt
         assert 'scripts/city_test.py' in prompt
         assert env['MARKETDESK_TEST_SITE_PACKAGES'] == str(packages)
         target = directory/'internships_project/city_sample.py'
@@ -132,6 +135,11 @@ def test_autonomous_engineer_integrates_validated_code_without_approval(repo, mo
     assert result['integrated'] and result['commit'] == git('rev-parse', 'HEAD')
     assert 'intégrée' in result['base_note']
     assert (root/'internships_project/city_sample.py').read_text() == 'value = 2\n'
+
+
+def test_every_autonomous_engineer_has_a_distinct_product_focus():
+    assert set(coding.AUTONOMOUS_FOCUS) == set(specialists.CODING_AGENTS)
+    assert len(set(coding.AUTONOMOUS_FOCUS.values())) == len(specialists.CODING_AGENTS)
 
 
 def test_codex_daily_budget_prevents_a_new_worktree(repo, store, monkeypatch):

@@ -32,7 +32,7 @@ AGENTS = (
     {"id": "finance_tutor", "name": "Noé", "role": "Quant Research", "area": "Quant Research",
      "description": "Recherche quantitative, backtests datés et rapports sur demande avec coûts et limites.", "available": True},
     {"id": "job_hunter", "name": "Jules", "role": "Software Engineer", "area": "Engineering",
-     "description": "Audite le code City chaque jour et prépare des propositions sur branche isolée, sans intégration automatique.", "available": True},
+     "description": "Fiabilise les missions City, leur reprise, le budget Codex et l’intégration du code. Audite aussi le dépôt sur demande.", "available": True},
     {"id": "networker", "name": "Lina", "role": "Networker", "area": "Network",
      "description": "Recherche chaque jour des contacts publics en finance de marché à Paris et retrouve ton réseau enregistré.", "available": True},
     {"id": "securities_scout", "name": "Clara", "role": "Securities Services Scout", "area": "Network",
@@ -47,11 +47,11 @@ AGENTS = (
     {"id": "internship_scout", "name": "Hugo", "role": "Internship Scout", "area": "Internships",
      "description": "Actualise Internships chaque jour et transmet les nouveaux stages détectés au Desk Manager. Recherche aussi sur demande.", "available": True},
     {"id": "city_ui_engineer", "name": "Camille", "role": "UI Engineer", "area": "Engineering",
-     "description": "Développe les interfaces City et Internships dans un worktree Codex isolé.", "available": True},
+     "description": "Améliore les parcours sur ordinateur : suivi des missions, actions, contacts et offres dans City et Internships.", "available": True},
     {"id": "internships_engineer", "name": "Sacha", "role": "Sources Engineer", "area": "Engineering",
-     "description": "Améliore les sources, dates et doublons d'Internships dans un worktree Codex isolé.", "available": True},
+     "description": "Améliore la couverture bancaire et la fiabilité des dates, doublons et offres de stage ou VIE dans Internships.", "available": True},
     {"id": "quality_engineer", "name": "Maël", "role": "Quality Engineer", "area": "Engineering",
-     "description": "Corrige les régressions et fiabilise les tests dans un worktree Codex isolé.", "available": True},
+     "description": "Élimine les causes des échecs récurrents des missions, collectes et intégrations, avec leurs vérifications.", "available": True},
 )
 AGENT_BY_ID = {agent["id"]: agent for agent in AGENTS}
 TASK_REFRESH = "refresh_opportunities"

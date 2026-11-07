@@ -295,18 +295,40 @@ def _execute(command: list[str], directory: Path, prompt: str, env: dict,
     return events
 
 
+AUTONOMOUS_FOCUS = {
+    'job_hunter': ('Priorité : fiabiliser les missions City de bout en bout — lancement, planification, '
+                   'reprise après échec, budget Codex, intégration Git et compte rendu compréhensible. '
+                   'Cherche une panne ou une incohérence qui empêche réellement un agent de travailler.'),
+    'city_ui_engineer': ('Priorité : rendre les parcours sur ordinateur faciles à comprendre et à terminer '
+                         'dans City et Internships — suivre une mission, agir sur un échec, retrouver un résultat, '
+                         'parcourir les contacts ou les offres. Corrige un parcours complet, pas une couleur isolée.'),
+    'internships_engineer': ('Priorité : améliorer la couverture et la justesse des offres de stage et VIE — '
+                             'sources carrières bancaires françaises, dates de première détection et de publication, '
+                             'doublons, fraîcheur et offres internationales. Appuie-toi sur un défaut vérifiable '
+                             'dans le code ou les tests ; ne prétends pas avoir validé un site externe sans accès.'),
+    'quality_engineer': ('Priorité : éliminer les causes des échecs récurrents des missions et des collectes — '
+                          'reprises, concurrence, dépendances manquantes, tests serveur et intégration. '
+                          'Corrige le comportement en production avec sa vérification ; évite les tests seuls '
+                          'et les cas limites sans effet concret pour l’utilisateur.'),
+}
+
+
 def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunter',
                      auto_integrate: bool = False,
                      on_progress: Callable[[str], None] | None = None) -> dict:
     root = repo_root()
     request = str(proposal.get('coding_request') or '').strip()
+    self_chosen = auto_integrate and not request
     if not re.fullmatch(r'[a-f0-9]{32}', task_id) or len(request) > 3000 or (request and len(request) < 10) or (not request and not auto_integrate):
         raise CityError('Demande de développement invalide.')
-    if auto_integrate and not request:
+    if self_chosen:
         request = ('Analyse ton périmètre dans le dépôt actuel, choisis toi-même une amélioration utile et complète '
-                   'pour le produit ou sa fiabilité, puis implémente-la de bout en bout avec ses appelants et '
-                   'les tests pertinents. Évite les retouches cosmétiques et les tests déjà couverts. '
-                   'Si aucun changement fiable ne se justifie, explique pourquoi sans modifier de fichier.')
+                   'pour le produit ou sa fiabilité. Compare deux ou trois problèmes vérifiables et choisis celui '
+                   'qui gêne le plus l’utilisateur : mission bloquée, information fausse ou parcours difficile. '
+                   'Implémente la solution complète avec ses appelants et les tests pertinents. '
+                   'Une petite modification est bienvenue si elle règle un vrai problème ; évite les tests seuls, '
+                   'les retouches cosmétiques et le simple nettoyage interne. Si aucun problème important '
+                   'n’est démontrable, explique-le sans modifier de fichier.')
     directory = root/'.city-worktrees'/task_id
     branch = 'marketdesk/'+('jules' if agent_id == 'job_hunter' else agent_id.replace('_', '-'))+'-'+task_id[:12]
     if auto_integrate and directory.exists():
@@ -379,7 +401,8 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
                'en français courant : dis concrètement ce qui a changé pour la personne qui utilise City, '
                'sans noms de fichiers ni jargon technique. Détaille les commandes de test et leurs résultats '
                'dans tests, et les limites dans limitations. Si un outil manque, indique-le sans inventer un succès. '
-              f'Python disponible : {sys.executable}. Utilise ce chemin absolu pour lancer les tests '
+              + (AUTONOMOUS_FOCUS.get(agent_id, '') + ' ' if self_chosen else '')
+              + f'Python disponible : {sys.executable}. Utilise ce chemin absolu pour lancer les tests '
               '(python peut être un alias Windows sans interpréteur). '
               'Réponds en français avec le schéma JSON demandé.\n\nDemande utilisateur :\n'+request)
     if on_progress:
