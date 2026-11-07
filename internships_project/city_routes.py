@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import mimetypes
@@ -17,6 +18,33 @@ from .marketdesk_city import AGENTS, AGENT_BY_ID, CityError, CityStore, CityWork
 
 
 ASSETS = Path(__file__).with_name("city_assets")
+
+
+async def _chat_sse(events, heartbeat_seconds: float = 15):
+    """Keep idle tool calls connected without cancelling the event producer."""
+    async with aclosing(events):
+        pending = None
+        try:
+            while True:
+                if pending is None:
+                    pending = asyncio.create_task(anext(events))
+                ready, _ = await asyncio.wait({pending}, timeout=heartbeat_seconds)
+                if not ready:
+                    # SSE comments are ignored by the browser's chat parser.
+                    yield ": keep-alive\n\n"
+                    continue
+                try:
+                    line = pending.result()
+                except StopAsyncIteration:
+                    return
+                pending = None
+                yield f"data: {line}\n\n"
+        finally:
+            # Finish an in-flight read before aclosing closes the generator.
+            if pending is not None:
+                if not pending.done():
+                    pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
 
 
 def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) -> None:
@@ -434,11 +462,7 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
             from .city_chat import _budget_guard, stream_chat
             _budget_guard(username, store.get_settings(username))
             events = stream_chat(store, username, agent_id, message, selection)
-            async def sse():
-                async with aclosing(events):
-                    async for line in events:
-                        yield f"data: {line}\n\n"
-            return StreamingResponse(sse(), media_type="text/event-stream",
+            return StreamingResponse(_chat_sse(events), media_type="text/event-stream",
                                      headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
         except (ValueError, TypeError) as exc:
             return JSONResponse({"detail": str(exc)}, status_code=400)

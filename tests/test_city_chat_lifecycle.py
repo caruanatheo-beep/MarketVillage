@@ -12,6 +12,99 @@ from starlette.requests import Request
 from internships_project import city_chat, city_routes
 
 
+def test_idle_http_chat_emits_comments_and_keeps_the_same_read_alive():
+    async def scenario():
+        release = asyncio.Event()
+        closed = asyncio.Event()
+        reads = []
+
+        async def events():
+            try:
+                yield '{"type":"status"}'
+                reads.append("waiting")
+                await release.wait()
+                yield '{"type":"delta","text":"Réponse"}'
+                yield '{"type":"done"}'
+            finally:
+                closed.set()
+
+        stream = city_routes._chat_sse(events(), heartbeat_seconds=0.001)
+        try:
+            assert await anext(stream) == 'data: {"type":"status"}\n\n'
+            for _ in range(2):
+                assert await asyncio.wait_for(anext(stream), 1) == ": keep-alive\n\n"
+            assert reads == ["waiting"]
+            assert not closed.is_set()
+            release.set()
+            remaining = [frame async for frame in stream]
+            assert remaining == ['data: {"type":"delta","text":"Réponse"}\n\n',
+                                 'data: {"type":"done"}\n\n']
+            assert closed.is_set()
+        finally:
+            await stream.aclose()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("cancel_waiting", [False, True])
+def test_disconnect_after_heartbeat_closes_pending_read(cancel_waiting):
+    async def scenario():
+        closed = asyncio.Event()
+        producer = []
+
+        async def events():
+            producer.append(asyncio.current_task())
+            try:
+                await asyncio.Event().wait()
+                yield "unreachable"
+            finally:
+                closed.set()
+
+        stream = city_routes._chat_sse(events(), heartbeat_seconds=0.01)
+        try:
+            assert await asyncio.wait_for(anext(stream), 1) == ": keep-alive\n\n"
+            if cancel_waiting:
+                waiting = asyncio.create_task(anext(stream))
+                await asyncio.sleep(0)
+                waiting.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await waiting
+            else:
+                await stream.aclose()
+            assert closed.is_set()
+            assert producer[0].done()
+        finally:
+            await stream.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_heartbeat_does_not_hide_producer_failure():
+    async def scenario():
+        release = asyncio.Event()
+        closed = asyncio.Event()
+
+        async def events():
+            try:
+                await release.wait()
+                raise RuntimeError("synthetic stream failure")
+                yield "unreachable"
+            finally:
+                closed.set()
+
+        stream = city_routes._chat_sse(events(), heartbeat_seconds=0.001)
+        try:
+            assert await asyncio.wait_for(anext(stream), 1) == ": keep-alive\n\n"
+            release.set()
+            with pytest.raises(RuntimeError, match="synthetic stream failure"):
+                await anext(stream)
+            assert closed.is_set()
+        finally:
+            await stream.aclose()
+
+    asyncio.run(scenario())
+
+
 @pytest.fixture
 def chat(monkeypatch):
     messages = []
