@@ -347,7 +347,7 @@ export function buildOfficeLayout(): OfficeLayout {
     // Setback terraces join the executive floor at its west/east thresholds.
     (((col >= 4 && col <= 14) || (col >= 33 && col <= 43)) && row >= 7 && row <= 8) ||
     (col >= 22 && col <= 25 && row >= 30 && row <= 31) ||
-    (col === OFFICE_PORTAL.col && row === 28) ||
+    (col >= 47 && col <= OFFICE_PORTAL.col && row === 19) ||
     (col >= GOLF_BOUNDS.left && col <= GOLF_BOUNDS.right && row >= 8 && row <= 31) ||
     // Shared access gallery: required by the Tech Lab's alternate approach.
     (((col >= 6 && col <= 8) || col === 39 || (col >= 22 && col <= 25)) && row >= 19 && row <= 20) ||
@@ -576,7 +576,7 @@ export function buildOfficeLayout(): OfficeLayout {
 function renderCorridorFloor(ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number, zoom: number): void {
   // The caller clips once to the actual floor map. No duplicate room rectangles
   // or stale corner cuts may expose sky inside a navigable floor tile.
-  const width = 48 * TILE_SIZE * zoom, height = GOLF_ROWS * TILE_SIZE * zoom;
+  const width = 49 * TILE_SIZE * zoom, height = GOLF_ROWS * TILE_SIZE * zoom;
   ctx.save();
   ctx.fillStyle = '#9d6532'; ctx.fillRect(offsetX, offsetY, width, height);
   const wood = textiles['oak-night'];

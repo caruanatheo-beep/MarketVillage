@@ -5,8 +5,9 @@ import { worldY } from './worldGeometry';
 
 // The six stance areas face the backstop. Reservations are local
 // ambient animation only: never create tasks, tool events or backend statuses.
-export const OFFICE_PORTAL = {col:47,row:worldY(28)};
-export const GOLF_PORTAL = {col:64,row:worldY(28)};
+// The office gate stands on the shared east gallery, outside every desk.
+export const OFFICE_PORTAL = {col:48,row:worldY(19)};
+export const GOLF_PORTAL = {col:65,row:worldY(28)};
 export const GOLF_BOUNDS = {left:50,right:66,top:worldY(8),bottom:worldY(31)};
 export const GOLF_BAYS = [12,20,25].flatMap((matRow)=>[51,59].map(matCol=>({
   index:0,col:matCol+1,row:worldY(matRow)+1,matCol,matRow,
@@ -47,10 +48,12 @@ export class GolfPractice {
   constructor(private office:OfficeState,private roster:string[]){}
 
   async load():Promise<void>{
-    await Promise.all(['md_golf_backstop','md_golf_deck','md_golf_skyline'].map(name=>new Promise<void>((resolve,reject)=>{
+    await Promise.all(['md_golf_backstop','md_golf_deck','md_golf_skyline','md_golf_portal'].map(name=>new Promise<void>((resolve,reject)=>{
       const image=new Image();image.onload=()=>{this.assets[name]=image;resolve();};
       image.onerror=()=>reject(new Error(`Impossible de charger le décor du practice : ${name}`));
-      image.src=name==='md_golf_backstop'?'/city/pixel-assets/tower/md_golf_backstop.svg':name==='md_golf_deck'?'/city/pixel-assets/tower/turf.png':`/city/pixel-assets/furniture/MARKETDESK_GOLF/${name}.png`;
+      image.src=name==='md_golf_backstop'?'/city/pixel-assets/tower/md_golf_backstop.svg':
+        name==='md_golf_portal'?'/city/pixel-assets/tower/md_golf_portal.svg':
+        name==='md_golf_deck'?'/city/pixel-assets/tower/turf.png':`/city/pixel-assets/furniture/MARKETDESK_GOLF/${name}.png`;
     })));
   }
   sync(agents:Agent[],tasks:Task[]):void{
@@ -148,20 +151,23 @@ export class GolfPractice {
     }
     const backstop=this.assets.md_golf_backstop;
     if(backstop)ctx.drawImage(backstop,x,y,w,4*cell);
+    const gate=this.assets.md_golf_portal;
+    if(gate)for(const [portal,label] of [[OFFICE_PORTAL,'GOLF'],[GOLF_PORTAL,'DESKS']] as const){
+      const px=ox+(portal.col+.5)*cell,foot=oy+(portal.row+1)*cell;
+      ctx.drawImage(gate,px-32*zoom,foot-78*zoom,64*zoom,78*zoom);
+      ctx.fillStyle='#dcfff7';ctx.font=`700 ${7*zoom}px "Segoe UI",sans-serif`;
+      ctx.textAlign='center';ctx.fillText(label,px,foot-65*zoom);
+    }
   }
 
   render(ctx:CanvasRenderingContext2D,ox:number,oy:number,zoom:number):void{
     ctx.save();const cell=TILE_SIZE*zoom;
-    // The portals are animated in-world; their walkable tiles stay on separate islands.
-    for(const [portal,label] of [[OFFICE_PORTAL,'GOLF'],[GOLF_PORTAL,'DESKS']] as const){
-      const px=ox+(portal.col+.5)*cell,py=oy+(portal.row+.5)*cell;
-      const glow=ctx.createRadialGradient(px,py,0,px,py,cell*1.55);
-      glow.addColorStop(0,'#94ffe4bb');glow.addColorStop(.55,'#48d6bd66');glow.addColorStop(1,'#48d6bd00');
-      ctx.fillStyle=glow;ctx.fillRect(px-cell*1.55,py-cell*1.55,cell*3.1,cell*3.1);
-      ctx.strokeStyle='#a8ffe9';ctx.lineWidth=Math.max(2,zoom*1.8);
-      ctx.beginPath();ctx.ellipse(px,py-cell*.2,cell*.48,cell*.85,0,0,Math.PI*2);ctx.stroke();
-      ctx.font=`700 ${Math.max(7,6*zoom)}px "Segoe UI",sans-serif`;
-      ctx.textAlign='center';ctx.fillStyle='#e6fff5';ctx.fillText(label,px,py-cell*1.1);
+    // A restrained edge pulse keeps the doorway alive without covering agents.
+    for(const portal of [OFFICE_PORTAL,GOLF_PORTAL]){
+      const px=ox+(portal.col+.5)*cell,foot=oy+(portal.row+1)*cell;
+      ctx.strokeStyle=`rgba(115,255,223,${.22+.13*Math.sin(this.time*2.4)})`;
+      ctx.lineWidth=Math.max(1,zoom);
+      ctx.strokeRect(px-25*zoom,foot-68*zoom,50*zoom,59*zoom);
     }
     // Local additive light pools brighten wood, characters and the green.
     ctx.beginPath();ctx.rect(ox+50*cell,oy+GOLF_BOUNDS.top*cell,17*cell,(GOLF_BOUNDS.bottom-GOLF_BOUNDS.top+1)*cell);ctx.clip();

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="78" viewBox="0 0 64 78">
+  <defs>
+    <linearGradient id="frame" x2="1" y2="1">
+      <stop stop-color="#82a7ad"/>
+      <stop offset=".48" stop-color="#294f5c"/>
+      <stop offset="1" stop-color="#102b3b"/>
+    </linearGradient>
+    <linearGradient id="glass" x2="0" y2="1">
+      <stop stop-color="#0e5064" stop-opacity=".88"/>
+      <stop offset=".55" stop-color="#0b3445" stop-opacity=".78"/>
+      <stop offset="1" stop-color="#081b2c" stop-opacity=".9"/>
+    </linearGradient>
+    <linearGradient id="light" x2="0" y2="1">
+      <stop stop-color="#c9fff3"/>
+      <stop offset="1" stop-color="#39c7ba"/>
+    </linearGradient>
+  </defs>
+  <path d="M5 76V13L13 3h38l8 10v63H5Z" fill="#071724" stroke="#162d39" stroke-width="2"/>
+  <path d="M8 70V14l7-8h34l7 8v56H8Z" fill="url(#frame)" stroke="#9bb8b4" stroke-width="1"/>
+  <path d="M13 69V19l5-6h28l5 6v50H13Z" fill="#081b2a" stroke="#89efe1" stroke-width="2"/>
+  <path d="M17 65V21l3-4h24l3 4v44H17Z" fill="url(#glass)"/>
+  <path d="M20 23h24M20 28h24M20 33h24M20 38h24M20 43h24M20 48h24M20 53h24M20 58h24" stroke="#69d7d2" stroke-opacity=".15"/>
+  <path d="M18 63 29 40h6l11 23M20 64l12-32 12 32" fill="none" stroke="#91f8e7" stroke-opacity=".35" stroke-width="1"/>
+  <path d="M16 66V20l3-4M48 66V20l-3-4" fill="none" stroke="url(#light)" stroke-width="2"/>
+  <path d="M9 17v51M55 17v51" stroke="#81e7db" stroke-width="2"/>
+  <path d="M7 18h3M54 18h3M7 54h3M54 54h3" stroke="#d7fff4" stroke-width="2"/>
+  <path d="M19 7h26l5 7H14l5-7Z" fill="#0b2e3c" stroke="#8ed5c9"/>
+  <path d="M5 71h54l3 5H2l3-5Z" fill="#173c4b" stroke="#83d6c8"/>
+  <path d="M15 72h34M23 75h18" stroke="#b5f9e9" stroke-width="1"/>
+  <path d="M1 77h62" stroke="#102a38" stroke-width="2"/>
+</svg>

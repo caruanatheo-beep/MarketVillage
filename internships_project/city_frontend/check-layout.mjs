@@ -73,6 +73,8 @@ export async function checkLayout() {
   const assetPath = url => resolve(base, "../city_assets/pixel-agents/assets", url.split('?')[0].replace("/city/pixel-assets/", ""));
   const backstop=await readFile(assetPath('/city/pixel-assets/tower/md_golf_backstop.svg'),'utf8');
   assert.match(backstop,/width="272" height="64"/,'Backstop spans the detached golf deck');
+  const portalAsset=await readFile(assetPath('/city/pixel-assets/tower/md_golf_portal.svg'),'utf8');
+  assert.match(portalAsset,/width="64" height="78"/,'Portal is a full-height doorway');
   const assets = await loadFurniture(
     async url => JSON.parse(await readFile(assetPath(url), "utf8")),
     async (url, width, height) => {
@@ -111,6 +113,8 @@ export async function checkLayout() {
   const officeCells=floorCells.filter(({x})=>x<GOLF_BOUNDS.left);
   assert.equal(connected.size,officeCells.length,'Every desk remains on the connected office floor');
   assert.ok(connected.has(`${OFFICE_PORTAL.col},${OFFICE_PORTAL.row}`),'Office portal must be reachable');
+  assert.deepEqual(OFFICE_PORTAL,{col:48,row:worldY(19)},'Office portal belongs on the shared east gallery');
+  assert.equal(office.tileMap[OFFICE_PORTAL.row][47],TileType.FLOOR_1,'Gallery bridge reaches the portal');
   assert.ok(!connected.has(`${GOLF_PORTAL.col},${GOLF_PORTAL.row}`),'Golf requires the portal crossing');
   const golfCells=floorCells.filter(({x})=>x>=GOLF_BOUNDS.left);
   assert.equal(golfCells.length,(GOLF_BOUNDS.right-GOLF_BOUNDS.left+1)*(GOLF_BOUNDS.bottom-GOLF_BOUNDS.top+1),'Golf deck has no gaps');
