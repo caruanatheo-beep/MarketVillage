@@ -74,8 +74,8 @@ export async function checkLayout() {
   const backstop=await readFile(assetPath('/city/pixel-assets/tower/md_golf_backstop.svg'),'utf8');
   assert.match(backstop,/width="272" height="64"/,'Backstop spans the detached golf deck');
   const portalAsset=await readFile(assetPath('/city/pixel-assets/tower/md_golf_portal.svg'),'utf8');
-  assert.match(portalAsset,/width="64" height="78"/,'Portal is a full-height doorway');
-  assert.match(portalAsset,/transform="translate\(64 0\) scale\(-1 1\)"/,'Portal face points toward the approaching agents');
+  assert.match(portalAsset,/width="56" height="68"/,'Portal is a full-height doorway');
+  assert.match(portalAsset,/Open architectural arch/,'Portal has an open passage rather than a solid panel');
   const assets = await loadFurniture(
     async url => JSON.parse(await readFile(assetPath(url), "utf8")),
     async (url, width, height) => {

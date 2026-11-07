@@ -1,37 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="78" viewBox="0 0 64 78">
+<svg xmlns="http://www.w3.org/2000/svg" width="56" height="68" viewBox="0 0 56 68">
   <defs>
-    <linearGradient id="front" x2="1" y2="1">
-      <stop stop-color="#7da6a9"/>
-      <stop offset=".45" stop-color="#315564"/>
-      <stop offset="1" stop-color="#102e40"/>
+    <linearGradient id="metal" x2="1" y2="0">
+      <stop stop-color="#40616a"/>
+      <stop offset=".55" stop-color="#75918c"/>
+      <stop offset="1" stop-color="#254452"/>
     </linearGradient>
-    <linearGradient id="side" x2="1" y2="0">
-      <stop stop-color="#244958"/>
-      <stop offset="1" stop-color="#0c2434"/>
-    </linearGradient>
-    <linearGradient id="glass" x2="0" y2="1">
-      <stop stop-color="#14596a"/>
-      <stop offset=".5" stop-color="#0b3648"/>
-      <stop offset="1" stop-color="#091e31"/>
+    <linearGradient id="threshold" x2="0" y2="1">
+      <stop stop-color="#1a5e65"/>
+      <stop offset="1" stop-color="#14303e"/>
     </linearGradient>
   </defs>
-  <!-- Its open face points back toward the approaching agents. -->
-  <g transform="translate(64 0) scale(-1 1)">
-  <path d="M1 72 44 61 63 69 20 78Z" fill="#071722" opacity=".65"/>
-  <path d="M43 9 56 15 60 65 43 69Z" fill="url(#side)" stroke="#122b39" stroke-width="2"/>
-  <path d="M43 12 55 18 55 61 43 65Z" fill="#0a2535" stroke="#4daea9"/>
-  <path d="M47 18 52 21 52 59 47 61Z" fill="#245d68" opacity=".7"/>
-  <path d="M5 18 43 9 43 68 5 76Z" fill="url(#front)" stroke="#112d3b" stroke-width="2"/>
-  <path d="M11 24 37 18 37 64 11 70Z" fill="#061c2c" stroke="#8be9dc" stroke-width="2"/>
-  <path d="M14 27 34 22 34 61 14 66Z" fill="url(#glass)"/>
-  <path d="M16 30 32 26M16 36 32 32M16 42 32 38M16 48 32 44M16 54 32 50M16 60 32 56" stroke="#8cf4e5" stroke-opacity=".17"/>
-  <path d="M15 65 25 36 33 62M17 65 26 45 32 62" fill="none" stroke="#b4fff0" stroke-opacity=".33"/>
-  <path d="M12 68V25l24-6M37 64V18" fill="none" stroke="#85f7e0" stroke-width="2"/>
-  <path d="M6 22V70M42 13V65M56 18V61" fill="none" stroke="#b1eee3" stroke-width="2"/>
-  <path d="M6 19 18 10 56 15 43 9Z" fill="#305565" stroke="#a2c7c1"/>
-  <path d="M10 19 42 11 42 20 10 28Z" fill="#123b4b" stroke="#70d8cb"/>
-  <path d="M5 71 43 62 59 67 19 77 2 76Z" fill="#173d4b" stroke="#8edccd"/>
-  <path d="M10 72 43 64 53 67 19 75M20 77 57 68" fill="none" stroke="#befced"/>
-  <path d="M4 77 20 78 62 69" fill="none" stroke="#102b39" stroke-width="2"/>
-  </g>
+  <!-- Open architectural arch: the floor and characters remain visible through it. -->
+  <path d="M4 61 43 55 55 61 16 68 2 65Z" fill="#071923" opacity=".58"/>
+  <path d="M5 59 43 53 53 59 15 66 4 64Z" fill="url(#threshold)" stroke="#6caba5"/>
+  <path d="M13 60 43 55M16 63 46 58M23 64 49 60" fill="none" stroke="#b7dfbf" stroke-width="1" opacity=".7"/>
+  <path d="M6 16 14 12 16 59 9 62 6 59Z" fill="#163643" stroke="#9bb7a8" stroke-width="1"/>
+  <path d="M9 19 13 17 13 56 9 58Z" fill="url(#metal)"/>
+  <path d="M11 23V54" stroke="#8de5c7" stroke-width="2" opacity=".8"/>
+  <path d="M43 8 49 12 49 58 43 55Z" fill="#173745" stroke="#91b7aa" stroke-width="1"/>
+  <path d="M44 15 47 17 47 53 44 51Z" fill="url(#metal)"/>
+  <path d="M45 21V49" stroke="#a5f3d7" stroke-width="2" opacity=".8"/>
+  <path d="M6 16 14 8 43 7 49 12 42 18 14 22Z" fill="#284d59" stroke="#a8bba8"/>
+  <path d="M9 16 15 11 41 10 45 13 41 17 14 20Z" fill="#315b64"/>
+  <path d="M13 20 41 17" stroke="#b3e8d0" stroke-width="2"/>
+  <path d="M15 23 41 19M15 57 41 52" stroke="#6cbaaa" stroke-width="1" opacity=".8"/>
+  <path d="M6 17 14 12M43 8 49 12M9 62 16 59M43 55 49 58" stroke="#d2c59d" stroke-width="1"/>
+  <path d="M6 65 16 68 54 61" fill="none" stroke="#152c38" stroke-width="2"/>
 </svg>
