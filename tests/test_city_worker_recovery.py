@@ -1,6 +1,8 @@
 """Interrupted missions become retryable even when still fresh at startup."""
 
 from datetime import datetime, timedelta, timezone
+import sqlite3
+import threading
 import time
 
 from fastapi import FastAPI
@@ -10,6 +12,65 @@ import pytest
 from internships_project import city_services, state_store
 from internships_project.city_routes import add_city_routes
 from internships_project.marketdesk_city import CityStore, CityWorker
+
+
+def test_live_project_survives_temporary_heartbeat_storage_failure(tmp_path, monkeypatch, caplog):
+    path = tmp_path / "heartbeat.sqlite3"
+    monkeypatch.setattr(state_store, "USER_DB_PATH", path)
+    store = CityStore(path)
+    project = store.create_custom_workflow("alice", "Review", "Review and prepare questions", [
+        {"id": "market", "agent_id": "market_analyst", "description": "Review markets",
+         "depends_on": []},
+        {"id": "interview", "agent_id": "developer", "operation": "daily_questions",
+         "description": "Prepare questions", "depends_on": ["market"]},
+    ])
+    worker = CityWorker(store)
+    ready = threading.Event()
+    resumed = threading.Event()
+    heartbeat = store.heartbeat
+    attempts = []
+
+    def intermittent_heartbeat(task_id):
+        if not ready.wait(3):
+            return
+        attempts.append(task_id)
+        if len(attempts) == 1:
+            raise sqlite3.OperationalError("database is locked: private storage detail")
+        heartbeat(task_id)
+        resumed.set()
+
+    monkeypatch.setattr(store, "heartbeat", intermittent_heartbeat)
+    heartbeat_loop = worker._heartbeat
+
+    class FastHeartbeat:
+        def __init__(self, stopped):
+            self.stopped = stopped
+
+        def wait(self, seconds):
+            return self.stopped.wait(0.001)
+
+    monkeypatch.setattr(worker, "_heartbeat",
+                        lambda task_id, stopped: heartbeat_loop(task_id, FastHeartbeat(stopped)))
+
+    def run_agent(agent_id, username, parameters):
+        if agent_id == "market_analyst":
+            old = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(timespec="seconds")
+            with store.db() as db:
+                db.execute("UPDATE city_tasks SET heartbeat_at=? WHERE id=?", (old, project["task_ids"][0]))
+            ready.set()
+            assert resumed.wait(3), "The heartbeat stopped after a temporary storage failure"
+            assert store.recover_stale() == 0
+            assert store.task_detail("alice", project["task_ids"][0])["status"] == "running"
+        return {"text": "Review complete"}
+
+    monkeypatch.setattr(city_services, "run_agent", run_agent)
+    assert worker.run_once()
+    assert store.task_detail("alice", project["task_ids"][0])["status"] == "completed"
+    assert worker.run_once()
+    assert store.snapshot("alice")["workflows"][0]["status"] == "completed"
+    assert len(attempts) >= 2
+    assert "OperationalError" in caplog.text
+    assert "private storage detail" not in caplog.text
 
 
 @pytest.mark.parametrize("still_alive", [False, True])

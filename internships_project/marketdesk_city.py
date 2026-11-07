@@ -1936,17 +1936,22 @@ class CityWorker:
             if not worked:
                 self._stop.wait(2)
 
+    def _heartbeat(self, task_id: str, stopped: threading.Event) -> None:
+        while not stopped.wait(15):
+            try:
+                self.store.heartbeat(task_id)
+            except sqlite3.Error as exc:
+                # Keep tracking the active mission after a temporary storage
+                # failure; otherwise recovery can discard its eventual result.
+                logging.warning("MarketDesk City heartbeat temporarily unavailable (%s)", type(exc).__name__)
+
     def run_once(self) -> bool:
         task = self.store.claim_next()
         if task is None:
             return False
         beating = threading.Event()
 
-        def pulse() -> None:
-            while not beating.wait(15):
-                self.store.heartbeat(task["id"])
-
-        heartbeat = threading.Thread(target=pulse, daemon=True)
+        heartbeat = threading.Thread(target=self._heartbeat, args=(task["id"], beating), daemon=True)
         heartbeat.start()
         usage = None
         parameters = {}
