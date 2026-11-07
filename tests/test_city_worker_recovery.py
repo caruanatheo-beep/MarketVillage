@@ -14,6 +14,59 @@ from internships_project.city_routes import add_city_routes
 from internships_project.marketdesk_city import CityStore, CityWorker
 
 
+def test_api_retry_starts_worker_after_temporary_startup_storage_failure(
+        tmp_path, monkeypatch, caplog):
+    path = tmp_path / "startup.sqlite3"
+    monkeypatch.setattr(state_store, "USER_DB_PATH", path)
+    store = CityStore(path)
+    task = store.create_task("alice", "developer", "Prepare questions",
+                             {"operation": "daily_questions"})
+    assert store.claim_next()["id"] == task["id"]
+    store.finish(task["id"], error="Temporary source failure")
+    recover = store.recover_stale
+    recovered = threading.Event()
+    completed = threading.Event()
+    attempts = []
+
+    def intermittent_recovery():
+        attempts.append(True)
+        if len(attempts) == 1:
+            raise sqlite3.OperationalError("database is locked: private startup detail")
+        result = recover()
+        recovered.set()
+        return result
+
+    monkeypatch.setattr(store, "recover_stale", intermittent_recovery)
+    for name in ("enqueue_network_daily", "enqueue_specialist_schedules", "enqueue_daily_digest"):
+        monkeypatch.setattr(store, name, lambda: None)
+    monkeypatch.setattr(city_services, "run_agent", lambda *args: {"text": "Questions ready"})
+    finish = store.finish
+
+    def record_completion(task_id, **kwargs):
+        finish(task_id, **kwargs)
+        completed.set()
+
+    monkeypatch.setattr(store, "finish", record_completion)
+    worker = CityWorker(store)
+    app = FastAPI()
+    add_city_routes(app, lambda request: "alice", store, worker)
+    try:
+        with TestClient(app) as client:
+            response = client.post(f'/city/api/tasks/{task["id"]}/retry',
+                                   headers={"X-MarketDesk-City": "1"})
+            assert response.status_code == 201
+            retried_id = response.json()["task"]["id"]
+            assert recovered.wait(5), "Startup recovery was never retried"
+            assert completed.wait(5), "The retried mission never finished"
+            detail = client.get(f'/city/api/tasks/{retried_id}').json()
+        assert detail["status"] == "completed"
+        assert detail["result"]["text"] == "Questions ready"
+        assert "OperationalError" in caplog.text
+        assert "private startup detail" not in caplog.text
+    finally:
+        worker.stop()
+
+
 @pytest.mark.parametrize("failed_step", [
     "recover_stale", "enqueue_network_daily", "enqueue_specialist_schedules", "enqueue_daily_digest",
 ])

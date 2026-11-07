@@ -1923,7 +1923,14 @@ class CityWorker:
             if any(thread.is_alive() for thread in self._threads):
                 return
             self._stop.clear()
-            self.store.recover_stale()
+            try:
+                self.store.recover_stale()
+            except sqlite3.Error as exc:
+                # The worker loop retries recovery independently of queued work.
+                # A temporary storage failure must not prevent that loop from
+                # starting or fail an API request after its task was saved.
+                logging.warning("MarketDesk City startup recovery temporarily unavailable (%s)",
+                                type(exc).__name__)
             self._threads = [threading.Thread(target=self._loop, daemon=True,
                                               name=f"marketdesk-city-worker-{i}") for i in range(6)]
             for thread in self._threads:
