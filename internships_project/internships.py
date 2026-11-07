@@ -197,7 +197,7 @@ JOBTEASER_CACHE_PATH = CACHE_PATH.with_name("jobteaser_sitemap_cache.json")
 CACHE_SECONDS = CACHE_REFRESH_SECONDS
 PUBLIC_UPDATE_DELAY_SECONDS = 3 * 3600
 JOBTEASER_CACHE_SECONDS = 24 * 3600
-SOURCE_CONNECTOR_VERSIONS = {"Société Générale Careers": 3, "BNP Paribas": 2}
+SOURCE_CONNECTOR_VERSIONS = {"Société Générale Careers": 3, "BNP Paribas": 2, "BNP Paribas CIB": 2}
 JOBTEASER_INDEX = "https://assets-cf.jobteaser.com/sitemaps/sitemap.xml"
 JOBTEASER_EMPLOYERS = {
     "bpifrance": "Bpifrance",
@@ -1663,15 +1663,19 @@ def _bnp_cib_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
     # Some CIB internships are filed under a job domain rather than their
     # contract type. This official page has included Global Markets roles.
     archives.append(("https://careers.cib.bnpparibas/job-domain/temporary-status/", 1))
-    for base, pages in archives:
+    def read_archive(archive: tuple[str, int]) -> tuple[dict[str, tuple[str, str]], int, requests.RequestException | None]:
+        base, pages = archive
+        found: dict[str, tuple[str, str]] = {}
+        successful = 0
+        error: requests.RequestException | None = None
         for page_number in range(1, pages + 1):
             listing = base if page_number == 1 else f"{base}page/{page_number}/"
             try:
                 response = requests.get(listing, timeout=(4, 10))
                 response.raise_for_status()
-                successful_pages += 1
+                successful += 1
             except requests.RequestException as exc:
-                last_error = exc
+                error = exc
                 break
             page = _CareerHTML()
             page.feed(response.text)
@@ -1688,7 +1692,20 @@ def _bnp_cib_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
                     published = datetime.strptime(date_match.group(1), "%d %B %Y").date().isoformat() if date_match else ""
                 except ValueError:
                     published = ""
-                candidates[url] = (title, published)
+                previous = found.get(url)
+                found[url] = (title, published or (previous[1] if previous else ""))
+        return found, successful, error
+
+    # Archives are independent, but pagination within each remains sequential so
+    # an unavailable archive stops immediately without spending further requests.
+    # map preserves archive order when a vacancy appears in several listings.
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="cib-archive") as pool:
+        for found, successful, error in pool.map(read_archive, archives):
+            successful_pages += successful
+            last_error = error or last_error
+            for url, (title, published) in found.items():
+                previous = candidates.get(url)
+                candidates[url] = (title, published or (previous[1] if previous else ""))
 
     if not successful_pages and last_error:
         raise last_error
@@ -1697,7 +1714,9 @@ def _bnp_cib_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
         url, (title, published) = pair
         try:
             job = _career_detail(url, "BNP Paribas", title)
-            return replace(job, published=published) if job else None
+            if job and not _publication_sort_value(job.published) and published:
+                return replace(job, published=published, published_inferred=False)
+            return job
         except (requests.RequestException, ValueError, TypeError):
             return None
 
