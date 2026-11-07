@@ -1743,3 +1743,8 @@ body { overflow:hidden; }
 .network-directory button.network-primary { background:#317763; border-color:#79c7aa; color:#f6fffb; }
 .network-import-view { max-width:1000px; margin:auto; }.network-import-view .network-assisted { margin-top:16px; }
 @media(max-width:800px) { .network-workspace-body.directory-open { overflow:auto; }.network-directory-view { height:auto; }.network-results-layout { display:flex; flex-direction:column; }.network-contact-list { max-height:280px; flex:none; }.network-contact-detail { overflow:visible; }.network-agent-grid { grid-template-columns:1fr; }.network-directory-controls { flex-wrap:wrap; }.network-directory-scope { width:100%; }.network-directory-scope button { flex:1; } }
+
+.network-collection-report,.network-targeted-search { margin-top:18px; padding-top:14px; border-top:1px solid #52766c; overflow-wrap:anywhere; }
+.network-targeted-search form { display:flex; flex-wrap:wrap; align-items:end; gap:12px; }
+.network-targeted-search label { display:flex; flex:1 1 260px; flex-direction:column; gap:8px; }
+.network-targeted-search input { box-sizing:border-box; width:100%; }

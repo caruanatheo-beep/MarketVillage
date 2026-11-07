@@ -567,7 +567,9 @@ def save_leads(username: str, leads: list[dict], limit: int = 10, *, sales_first
             pasted = (allow_pasted and lead.get('origin') == 'lina_assisted_paste' and
                       all(lead.get(field) and normalized(str(lead[field])) in normalized(str(lead.get('source_excerpt') or ''))
                           for field in ('name','role','company')))
-            if (not url and not evidence_url and not pasted) or (url and url in urls) or identity in identities:
+            if not url and not evidence_url and not pasted:
+                continue
+            if (url and url in urls) or identity in identities:
                 duplicates += 1
                 continue
             focus = contact_focus(lead)

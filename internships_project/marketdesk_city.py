@@ -495,7 +495,8 @@ class CityStore:
         summary = str(result.get('text') or result.get('summary') or '').splitlines()
         return {"id": task['id'], "status": task['status'], "created_at": task['created_at'],
                 "finished_at": task['finished_at'], "error": task['error'],
-                "summary": summary[0][:300] if summary else ''}
+                "summary": summary[0][:300] if summary else '',
+                "report": {k: result[k] for k in ('count', 'duplicates', 'rejected', 'target', 'source', 'text', 'warnings') if k in result}}
 
     def enqueue_network_daily(self, username: str | None = None, *, manual: bool = False) -> int:
         if manual:

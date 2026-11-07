@@ -6,8 +6,8 @@ const SEARCHES=['(Sales OR Vendeur OR Vente) AND (Rates OR Credit OR FX OR Taux)
   '("Portfolio Manager" OR Gérant OR Quant OR "Market Risk") AND Paris'];
 type BulkResult={contacts:{name:string;role:string;company:string;location:string;contact_segment:string}[];excluded:{name:string;reason:string}[];imported:number;duplicates:number;text:string};
 
-export function LinkedInAssisted({onImported,expanded=false}:{onImported:()=>Promise<void>;expanded?:boolean}){
-  const [query,setQuery]=useState(SEARCHES[0]);
+export function LinkedInAssisted({onImported,expanded=false,initialQuery}:{onImported:()=>Promise<void>;expanded?:boolean;initialQuery?:string}){
+  const [query,setQuery]=useState(initialQuery||SEARCHES[0]);
   const [contact,setContact]=useState(EMPTY),[busy,setBusy]=useState(false);
   const [status,setStatus]=useState(""),[error,setError]=useState("");
   const [pageText,setPageText]=useState(""),[preview,setPreview]=useState<BulkResult|null>(null);
