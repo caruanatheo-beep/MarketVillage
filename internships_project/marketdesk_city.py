@@ -2079,7 +2079,8 @@ class CityWorker:
             # Public logs and the UI receive only the exception type for unknown errors.
             from .llm_usage import GenerationLimitError
             safe = str(exc) if isinstance(exc, (CityError, GenerationLimitError)) else f"Erreur de mission ({type(exc).__name__})."
-            if (parameters.get('operation') in ('develop', 'repository_audit') and isinstance(exc, CityError)
+            if (parameters.get('operation') in ('develop', 'repository_audit', 'codex_review', 'code_change', 'prepare_branch')
+                    and isinstance(exc, CityError)
                     and safe.startswith(('Quota Codex indisponible', 'Développement reporté', 'Connecte Codex'))):
                 self.store.defer_coding(task['id'], safe,
                                         until_next_day=safe.startswith('Développement reporté'))
