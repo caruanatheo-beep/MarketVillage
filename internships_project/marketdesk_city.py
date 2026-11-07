@@ -345,7 +345,7 @@ class CityStore:
                               f'Développement autonome {slot}/{CODING_SLOTS_PER_DAY} · {AGENT_BY_ID[agent_id]["name"]}')
                              for index, agent_id in enumerate(CODING_AGENTS)
                              for slot in range(1, CODING_SLOTS_PER_DAY + 1)
-                             if minutes >= 6 * 60 + (slot - 1) * 150 + index * 20)
+                             if minutes >= (slot - 1) * 240 + index * 10)
         count = 0
         with self.db() as db:
             db.execute("BEGIN IMMEDIATE")
