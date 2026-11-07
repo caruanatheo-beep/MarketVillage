@@ -64,8 +64,11 @@ def test_scheduler_once_per_day_and_week_and_disabled_accounts(store):
     assert store.enqueue_specialist_schedules(thursday) == 0
     with store.db() as db:
         development = db.execute("SELECT agent_id,COUNT(*) FROM city_tasks WHERE json_extract(parameters_json,'$.operation')='develop' GROUP BY agent_id").fetchall()
+        sacha = db.execute("SELECT description,parameters_json FROM city_tasks WHERE agent_id='internships_engineer' AND json_extract(parameters_json,'$.operation')='develop'").fetchall()
     assert {agent: count for agent, count in development} == {
         'job_hunter': 3, 'city_ui_engineer': 3, 'internships_engineer': 3, 'quality_engineer': 3}
+    assert sum('Nouvelle source Internships' in row[0] for row in sacha) == 1
+    assert sum('petite banque française' in json.loads(row[1]).get('request', '') for row in sacha) == 1
     evening = datetime(2026, 11, 5, 20, tzinfo=timezone.utc)
     assert store.enqueue_specialist_schedules(evening) == 12
     assert store.enqueue_specialist_schedules(evening) == 0

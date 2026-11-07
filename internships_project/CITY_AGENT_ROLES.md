@@ -16,10 +16,10 @@ sont accessibles dans Réglages. Le chat du Manager et les contacts conservent l
 
 | Agent | Opérations serveur | Récurrence (Europe/Paris) | Livrable |
 |---|---|---|---|
-| Jules | `repository_audit`, `codex_review`, `develop`, préparation de branche historique | Audit quotidien et deux missions de développement autonomes par jour pendant un mois | Correction City, commit local et vérifications dans un worktree isolé |
-| Camille | `develop` | Deux missions autonomes par jour pendant un mois | Amélioration des interfaces City ou Internships, build et commit local |
-| Sacha | `develop` | Deux missions autonomes par jour pendant un mois | Amélioration des sources, dates ou doublons Internships, test et commit local |
-| Maël | `develop` | Deux missions autonomes par jour pendant un mois | Correction de régression ou fiabilisation, test et commit local |
+| Jules | `repository_audit`, `codex_review`, `develop`, préparation de branche historique | Audit quotidien et six missions de développement autonomes par jour pendant un mois | Correction City, commit local et vérifications dans un worktree isolé |
+| Camille | `develop` | Six missions autonomes par jour pendant un mois | Amélioration des interfaces City ou Internships, build et commit local |
+| Sacha | `develop` | Six créneaux par jour pendant un mois, dont le premier dédié à une nouvelle source | Une source carrière vérifiée par jour visée, priorité aux petites banques et sociétés de gestion françaises ; autres créneaux consacrés notamment à la vitesse et à la fiabilité de collecte |
+| Maël | `develop` | Six missions autonomes par jour pendant un mois | Correction de régression ou fiabilisation, test et commit local |
 | Noé | `quant_report` | Sur demande uniquement | Courbe de capital, rendement net, Sharpe à taux sans risque nul, volatilité, drawdown, hypothèses et limites |
 | Axel | `daily_questions`, `mock_interview`, `evaluate_answer` | Sur demande uniquement | Questions Sales/S&T/Global Markets, HireVue, grille de couverture indicative et historique des réponses |
 | Nova | `innovation_review` | Deux fois par semaine : lundi et jeudi | Deux projets publics GitHub non déjà proposés par revue, licence, spécification de prototype isolé, complexité et coûts à mesurer |
@@ -39,6 +39,10 @@ n'est utilisé pour ce développement. Le réglage « Missions simultanées » d
 compte s'applique aussi. City mesure la progression du quota hebdomadaire pendant
 les appels des programmeurs, de Jules et de Clara, puis la compare à un budget
 commun de 1/7 du quota par jour (14,3 points), remis à zéro à minuit heure de Paris.
+Sacha peut consulter en lecture seule les sites carrières publics pour vérifier une
+nouvelle source. L'objectif d'une source fonctionnelle par jour dépend des offres
+publiquement accessibles : une source inaccessible ou vide est signalée, jamais comptée
+comme ajout réussi.
 L'usage personnel de Codex entre deux appels City n'entre pas dans ce calcul.
 Si Codex ne renvoie pas sa mesure, City autorise au plus six appels partagés par jour.
 Quand le budget est atteint, le développement reprend le lendemain.

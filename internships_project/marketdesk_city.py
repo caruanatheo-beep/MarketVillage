@@ -49,7 +49,7 @@ AGENTS = (
     {"id": "city_ui_engineer", "name": "Camille", "role": "UI Engineer", "area": "Engineering",
      "description": "Améliore les parcours sur ordinateur : suivi des missions, actions, contacts et offres dans City et Internships.", "available": True},
     {"id": "internships_engineer", "name": "Sacha", "role": "Sources Engineer", "area": "Engineering",
-     "description": "Améliore la couverture bancaire et la fiabilité des dates, doublons et offres de stage ou VIE dans Internships.", "available": True},
+     "description": "Ajoute chaque jour une source carrière vérifiée, en priorité petite banque ou société de gestion française, et accélère la collecte Internships.", "available": True},
     {"id": "quality_engineer", "name": "Maël", "role": "Quality Engineer", "area": "Engineering",
      "description": "Élimine les causes des échecs récurrents des missions, collectes et intégrations, avec leurs vérifications.", "available": True},
 )
@@ -119,6 +119,14 @@ MODEL_DEFAULTS = {agent["id"]: _default_city_model(agent["id"]) for agent in AGE
 DEFAULT_SETTINGS = {"provider": "openai", "models": MODEL_DEFAULTS, "daily_limit_usd": 1.0,
                     "monthly_limit_usd": 15.0, "max_concurrent_tasks": 2, "auto_tasks": True}
 CODING_SLOTS_PER_DAY = 6
+SACHA_DAILY_SOURCE_REQUEST = (
+    "Ajoute une nouvelle source publique d'offres de stages ou VIE en finance de marché à Internships, "
+    "en priorité une petite banque française ou une société de gestion française absente des connecteurs. "
+    "Vérifie que son site carrière répond réellement et que la collecte retourne des offres exploitables "
+    "avec liens, dates et dédoublonnage corrects ; ajoute un test ciblé et mesure le temps de collecte. "
+    "Si la source est inaccessible ou ne fournit aucune offre vérifiable, n'annonce pas une source fonctionnelle : "
+    "explique le blocage et améliore plutôt la vitesse ou la fiabilité d'une source existante."
+)
 
 
 def _utc() -> str:
@@ -400,6 +408,9 @@ class CityStore:
                     payload = dict(operation='develop' if operation.startswith('develop:') else operation,
                                    period=period, role_version=VERSION)
                     task_title = title
+                    if operation == 'develop:internships_engineer:1':
+                        payload['request'] = SACHA_DAILY_SOURCE_REQUEST
+                        task_title = 'Nouvelle source Internships · Sacha'
                     if len(due) > 1:
                         payload['catch_up'] = {'from':due[0][1].isoformat(), 'to':day, 'periods':len(due)}
                         task_title = f"Rattrapage · {title} ({due[0][1].isoformat()} → {day})"

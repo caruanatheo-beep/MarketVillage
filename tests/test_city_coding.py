@@ -119,8 +119,10 @@ def test_autonomous_engineer_integrates_validated_code_without_approval(repo, mo
         assert '--model' in command and command[command.index('--model') + 1] == 'gpt-6.1-sol'
         assert 'Sacha' in prompt
         assert 'choisis celui qui gêne le plus l’utilisateur' in prompt
-        assert 'dates de première détection' in prompt
-        assert 'ne prétends pas avoir validé un site externe' in prompt
+        assert 'accélérer la collecte' in prompt
+        assert 'Ne prétends pas avoir validé un site externe' in prompt
+        assert 'pages et flux publics des sites carrières' in prompt
+        assert 'sandbox_workspace_write.network_access=true' in command
         assert 'scripts/city_test.py' in prompt
         assert env['MARKETDESK_TEST_SITE_PACKAGES'] == str(packages)
         target = directory/'internships_project/city_sample.py'
