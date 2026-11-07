@@ -1923,6 +1923,8 @@ class CityWorker:
             try:
                 import time
                 if time.monotonic() >= next_network_check:
+                    # A recent interruption may not be stale yet when start() runs.
+                    self.store.recover_stale()
                     self.store.enqueue_network_daily()
                     self.store.enqueue_specialist_schedules()
                     self.store.enqueue_daily_digest()
