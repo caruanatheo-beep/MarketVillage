@@ -6,7 +6,7 @@ import { worldY } from './worldGeometry';
 // The six stance areas face the backstop. Reservations are local
 // ambient animation only: never create tasks, tool events or backend statuses.
 // The office gate stands on the shared east gallery, outside every desk.
-export const OFFICE_PORTAL = {col:48,row:worldY(19)};
+export const OFFICE_PORTAL = {col:47,row:worldY(19)};
 export const GOLF_PORTAL = {col:65,row:worldY(28)};
 export const GOLF_BOUNDS = {left:50,right:66,top:worldY(8),bottom:worldY(31)};
 export const GOLF_BAYS = [12,20,25].flatMap((matRow)=>[51,59].map(matCol=>({
@@ -52,7 +52,7 @@ export class GolfPractice {
       const image=new Image();image.onload=()=>{this.assets[name]=image;resolve();};
       image.onerror=()=>reject(new Error(`Impossible de charger le décor du practice : ${name}`));
       image.src=name==='md_golf_backstop'?'/city/pixel-assets/tower/md_golf_backstop.svg':
-        name==='md_golf_portal'?'/city/pixel-assets/tower/md_golf_portal.svg':
+        name==='md_golf_portal'?'/city/pixel-assets/tower/md_golf_portal.svg?v=oblique-1':
         name==='md_golf_deck'?'/city/pixel-assets/tower/turf.png':`/city/pixel-assets/furniture/MARKETDESK_GOLF/${name}.png`;
     })));
   }
@@ -154,7 +154,7 @@ export class GolfPractice {
     const gate=this.assets.md_golf_portal;
     if(gate)for(const [portal,label] of [[OFFICE_PORTAL,'GOLF'],[GOLF_PORTAL,'DESKS']] as const){
       const px=ox+(portal.col+.5)*cell,foot=oy+(portal.row+1)*cell;
-      ctx.drawImage(gate,px-32*zoom,foot-78*zoom,64*zoom,78*zoom);
+      ctx.drawImage(gate,px-24*zoom,foot-78*zoom,64*zoom,78*zoom);
       ctx.fillStyle='#dcfff7';ctx.font=`700 ${7*zoom}px "Segoe UI",sans-serif`;
       ctx.textAlign='center';ctx.fillText(label,px,foot-65*zoom);
     }
@@ -167,7 +167,12 @@ export class GolfPractice {
       const px=ox+(portal.col+.5)*cell,foot=oy+(portal.row+1)*cell;
       ctx.strokeStyle=`rgba(115,255,223,${.22+.13*Math.sin(this.time*2.4)})`;
       ctx.lineWidth=Math.max(1,zoom);
-      ctx.strokeRect(px-25*zoom,foot-68*zoom,50*zoom,59*zoom);
+      ctx.beginPath();
+      ctx.moveTo(px-13*zoom,foot-53*zoom);
+      ctx.lineTo(px+13*zoom,foot-60*zoom);
+      ctx.lineTo(px+13*zoom,foot-14*zoom);
+      ctx.lineTo(px-13*zoom,foot-8*zoom);
+      ctx.closePath();ctx.stroke();
     }
     // Local additive light pools brighten wood, characters and the green.
     ctx.beginPath();ctx.rect(ox+50*cell,oy+GOLF_BOUNDS.top*cell,17*cell,(GOLF_BOUNDS.bottom-GOLF_BOUNDS.top+1)*cell);ctx.clip();

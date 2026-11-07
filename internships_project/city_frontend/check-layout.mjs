@@ -113,7 +113,7 @@ export async function checkLayout() {
   const officeCells=floorCells.filter(({x})=>x<GOLF_BOUNDS.left);
   assert.equal(connected.size,officeCells.length,'Every desk remains on the connected office floor');
   assert.ok(connected.has(`${OFFICE_PORTAL.col},${OFFICE_PORTAL.row}`),'Office portal must be reachable');
-  assert.deepEqual(OFFICE_PORTAL,{col:48,row:worldY(19)},'Office portal belongs on the shared east gallery');
+  assert.deepEqual(OFFICE_PORTAL,{col:47,row:worldY(19)},'Office portal belongs on the shared east gallery');
   assert.equal(office.tileMap[OFFICE_PORTAL.row][47],TileType.FLOOR_1,'Gallery bridge reaches the portal');
   assert.ok(!connected.has(`${GOLF_PORTAL.col},${GOLF_PORTAL.row}`),'Golf requires the portal crossing');
   const golfCells=floorCells.filter(({x})=>x>=GOLF_BOUNDS.left);
