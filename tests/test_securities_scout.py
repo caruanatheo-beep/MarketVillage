@@ -74,7 +74,7 @@ def test_clara_runs_on_request_and_deduplicates_bp2s_in_shared_contacts(tmp_path
         return []
 
     monkeypatch.setattr(network, 'search_public', search)
-    monkeypatch.setattr(network, '_search_service_contacts_with_codex', lambda target: [])
+    monkeypatch.setattr(network, '_search_service_contacts_with_codex', lambda target, **_kwargs: [])
     task = store.create_task('alice', 'securities_scout', 'Chercher des contacts en services titres',
                              {'operation': 'discover_service_contacts'}, auto_run=True)
     assert CityWorker(store).run_once()
@@ -148,23 +148,28 @@ def test_clara_uses_one_codex_search_when_public_engines_fail(tmp_path, monkeypa
     monkeypatch.setattr(city_coding, 'codex_usage_percent', lambda *_args: 20)
     calls = []
     url = 'https://example.org/caceis-speakers'
+    network.save_leads('alice', [{'name': 'Eva Laurent', 'role': 'Collateral Manager',
+                                  'company': 'CACEIS', 'source_url': url,
+                                  'origin': 'securities_public_search'}])
     def execute(command, directory, prompt, env, *, timeout_seconds):
         calls.append((command, prompt, env, timeout_seconds))
         Path(command[command.index('--output-last-message')+1]).write_text(json.dumps({'contacts': [
             {'name': 'Luc Bernard', 'role': 'Securities Lending Sales', 'company': 'CACEIS', 'source_url': url},
+            {'name': 'Eva Laurent', 'role': 'Collateral Manager', 'company': 'CACEIS', 'source_url': url},
             {'name': 'Invented Person', 'role': 'Collateral Manager', 'company': 'CACEIS', 'source_url': url},
         ]}))
         return [{'type': 'item.completed', 'item': {'type': 'web_search', 'results': [
             {'url': url, 'title': 'CACEIS speakers',
-             'snippet': 'Luc Bernard, Securities Lending Sales at CACEIS.'}]}}]
+             'snippet': 'Luc Bernard, Securities Lending Sales at CACEIS. Eva Laurent, Collateral Manager at CACEIS.'}]}}]
     monkeypatch.setattr(city_coding, '_execute', execute)
 
     report = network.discover_service_contacts('alice')
 
     assert report['count'] == 1 and len(calls) == 1
     assert '--search' in calls[0][0] and calls[0][3] == 180
+    assert 'Eva Laurent' in calls[0][1]
     assert 'OPENAI_API_KEY' not in calls[0][2]
-    assert network.list_contacts('alice')[0]['origin'] == 'securities_public_search'
+    assert len(network.list_contacts('alice')) == 2
     assert network.list_contacts('bob') == []
 
 
@@ -172,14 +177,16 @@ def test_clara_uses_codex_when_public_engines_return_no_people(tmp_path, monkeyp
     monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
     monkeypatch.setattr(network, 'search_public', lambda *_args, **_kwargs: [])
     calls = []
-    def fallback(target):
-        calls.append(target)
+    def fallback(target, **kwargs):
+        calls.append((target, kwargs))
         return [{'name': 'Luc Bernard', 'role': 'Securities Lending Sales',
                  'company': 'CACEIS', 'source_url': 'https://example.org/speakers',
                  'source_excerpt': 'Luc Bernard, Securities Lending Sales at CACEIS.'}]
     monkeypatch.setattr(network, '_search_service_contacts_with_codex', fallback)
     report = network.discover_service_contacts('alice')
-    assert report['count'] == 1 and calls == [10]
+    assert report['count'] == 1 and calls[0][0] == 10
+    assert calls[0][1]['existing'] == []
+    assert 'CACEIS' in calls[0][1]['priority_entities']
     assert network.list_contacts('alice')[0]['source_url'] == 'https://example.org/speakers'
 
 

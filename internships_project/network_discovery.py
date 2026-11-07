@@ -675,7 +675,8 @@ def import_assisted_page(username: str, payload: dict) -> dict:
                    f'{len(leads)} contacts de marché repérés ; {len(excluded)} profils écartés.'}
 
 
-def _search_service_contacts_with_codex(target: int = 10) -> list[dict]:
+def _search_service_contacts_with_codex(target: int = 10, *, existing: list[dict] | None = None,
+                                        priority_entities: list[str] | None = None) -> list[dict]:
     """One subscription-backed search when both free public engines are unavailable."""
     from .marketdesk_city import CityError
     from .city_coding import (_execute, codex_binary, codex_environment,
@@ -700,6 +701,8 @@ def _search_service_contacts_with_codex(target: int = 10) -> list[dict]:
                    '--model', 'gpt-6.1-sol', '-c', 'model_reasoning_effort="low"',
                    '--json', '--output-schema', str(schema), '--output-last-message', str(report), '-']
         entities = [{'entity': name, 'activities': activities} for name, _, activities in SECURITIES_ENTITIES]
+        already_known = [{'name': c.get('name', ''), 'company': c.get('company', '')}
+                         for c in (existing or [])[-200:]]
         prompt = ('Tu es Clara. Fais une recherche Web publique et limitée sur ces services titres. '
                   f'Trouve au plus {target} personnes nommées avec poste professionnel et établissement dans '
                   'collateral, securities financing/lending, repo, FX, settlement ou treasury. '
@@ -708,13 +711,16 @@ def _search_service_contacts_with_codex(target: int = 10) -> list[dict]:
                   'euroclear.com et clearstream.com ; explore aussi les intervenants ICMA, ISLA, AFME, '
                   'AMAFI et Paris Europlace, puis les interviews et nominations de la presse de marché. '
                   'Les annuaires d’entreprises servent à repérer des employeurs, pas à prouver un poste. '
+                  'Exclus les personnes déjà enregistrées, même si une autre page les mentionne. '
+                  'Commence par les établissements les moins représentés dans le carnet. '
                   'Pour chaque personne, source_url doit être une URL '
                   'présente dans les résultats de recherche, dont le titre ou l’extrait contient '
                   'explicitement le nom complet, le poste exact et l’entité. Copie le poste depuis '
                   'l’extrait ; ne déduis pas un emploi actuel. Si ces preuves manquent, omets la personne. '
-                  'Pas de connexion LinkedIn, de shell, de fichiers, de données privées ni d’autre outil. '
-                  'Réponds uniquement selon le schéma JSON. Entités : '
-                  + json.dumps(entities, ensure_ascii=False))
+                  'Pas de connexion LinkedIn, de shell, de fichiers ou d’autres données privées. '
+                  'Réponds uniquement selon le schéma JSON. Contexte : '
+                  + json.dumps({'entities': entities, 'priority_entities': priority_entities or [],
+                                'already_in_directory': already_known}, ensure_ascii=False))
         try:
             events = _execute(command, directory, prompt, env, timeout_seconds=180)
         finally:
@@ -738,6 +744,8 @@ def _search_service_contacts_with_codex(target: int = 10) -> list[dict]:
     if not sources:
         raise CityError('Recherche Codex de Clara sans source Web vérifiable.')
     leads = []
+    excluded = {(normalized(c.get('name', '')), normalized(c.get('company', '')))
+                for c in (existing or [])}
     for candidate in candidates[:target]:
         if not isinstance(candidate, dict) or any(not isinstance(candidate.get(field), str) for field in fields):
             continue
@@ -751,6 +759,7 @@ def _search_service_contacts_with_codex(target: int = 10) -> list[dict]:
                        if any(alias in normalized(company) for alias in aliases)
                        and any(alias in evidence for alias in aliases)), None)
         if (not entity or normalized(name) not in evidence or normalized(role) not in evidence
+                or (normalized(name), normalized(entity)) in excluded
                 or not (MARKETS.search(normalized(role)) or SERVICE_MARKETS.search(normalized(role)))
                 or EXCLUDED.search(normalized(role))):
             continue
@@ -837,7 +846,13 @@ def discover_service_contacts(username: str) -> dict:
     used_codex = False
     if len(added) < 10:
         try:
-            extra = _search_service_contacts_with_codex(10 - len(added))
+            existing = list_contacts(username)
+            counts = {entity: sum(c.get('company') == entity for c in existing)
+                      for entity, _, _ in SECURITIES_ENTITIES}
+            priorities = sorted(counts, key=lambda entity: (counts[entity],
+                                (list(counts).index(entity) - rotation) % len(counts)))[:5]
+            extra = _search_service_contacts_with_codex(10 - len(added), existing=existing,
+                                                        priority_entities=priorities)
             more, repeated = save_leads(username, [{**lead, 'origin': 'securities_public_search'}
                                                 for lead in extra], limit=10 - len(added))
             added.extend(more)
