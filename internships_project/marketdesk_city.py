@@ -1304,7 +1304,7 @@ class CityStore:
                                              "AND json_extract(parameters_json,'$.operation')='develop'").fetchone()[0]
                     same_agent = db.execute("SELECT 1 FROM city_tasks WHERE username=? AND agent_id=? AND status='running' LIMIT 1",
                                             (row['username'], row['agent_id'])).fetchone()
-                    if active_code >= 4 or same_agent:
+                    if active_code >= 2 or same_agent:
                         continue
                 task = dict(row)
                 break

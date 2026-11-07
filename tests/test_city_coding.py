@@ -268,6 +268,35 @@ def test_autonomous_worktree_resumes_after_main_becomes_clean(repo, monkeypatch)
     assert len(calls) == 1
 
 
+def test_interrupted_autonomous_worktree_continues_existing_change(repo, store, monkeypatch):
+    root, git = repo
+    monkeypatch.setattr(coding, '_integration_checks', lambda *_args, **_kwargs: 'focused tests')
+    calls = []
+
+    def execute(command, directory, prompt, env):
+        calls.append(prompt)
+        target = directory/'internships_project/city_sample.py'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if len(calls) == 1:
+            target.write_text('value = 2\n')
+            raise CityError('Codex interrupted')
+        assert target.read_text() == 'value = 2\n'
+        assert 'reprend' in prompt
+        target.write_text('value = 3\n')
+        Path(command[command.index('--output-last-message') + 1]).write_text(json.dumps(
+            {'summary': 'Valeur corrigée.', 'tests': 'Test ciblé réussi.', 'limitations': 'Aucune.'}))
+        return [{'type': 'turn.completed'}]
+
+    monkeypatch.setattr(coding, '_execute', execute)
+    task_id = 'c'*32
+    with pytest.raises(CityError, match='Codex interrupted'):
+        coding.implement_change(task_id, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
+    result = coding.implement_change(task_id, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
+    assert result['integrated'] and len(calls) == 2
+    assert (root/'internships_project/city_sample.py').read_text() == 'value = 3\n'
+    assert git('status', '--porcelain', '--untracked-files=no') == ''
+
+
 def test_autonomous_worktree_resumes_after_branch_commit(repo, monkeypatch):
     root, git = repo
     monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 12)
@@ -439,9 +468,8 @@ def test_parallel_coding_claims_are_bounded_per_agent_and_globally(store):
                        (format(index + 1, '032x'), user, agent, 'agent:'+agent,
                         'Développement autonome', f'2026-11-04T00:00:0{index}+00:00',
                         json.dumps({'operation': 'develop', 'role_version': VERSION})))
-    claimed = [store.claim_next() for _ in range(4)]
-    assert [job['agent_id'] for job in claimed] == [
-        'job_hunter', 'city_ui_engineer', 'quality_engineer', 'internships_engineer']
+    claimed = [store.claim_next() for _ in range(2)]
+    assert [job['agent_id'] for job in claimed] == ['job_hunter', 'city_ui_engineer']
     assert store.claim_next() is None
     store.finish(claimed[0]['id'], result={'title': 'Done', 'text': 'Done'})
     assert store.claim_next()['id'] == format(3, '032x')

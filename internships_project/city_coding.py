@@ -258,7 +258,7 @@ def review_repository() -> dict:
 
 
 def _execute(command: list[str], directory: Path, prompt: str, env: dict,
-             *, timeout_seconds: int = 900) -> list[dict]:
+             *, timeout_seconds: int = 1500) -> list[dict]:
     """Bound execution time and kill descendants on timeout, including on Windows."""
     try:
         process = subprocess.Popen(command, cwd=directory, env=env, stdin=subprocess.PIPE,
@@ -333,9 +333,13 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
                    'n’est démontrable, explique-le sans modifier de fichier.')
     directory = root/'.city-worktrees'/task_id
     branch = 'marketdesk/'+('jules' if agent_id == 'job_hunter' else agent_id.replace('_', '-'))+'-'+task_id[:12]
-    if auto_integrate and directory.exists():
+    resume_incomplete = auto_integrate and directory.exists()
+    if resume_incomplete and (directory/'.jules-complete.json').is_file():
         return _resume_autonomous_change(root, directory, branch, agent_id, on_progress)
-    revision = git(root, 'rev-parse', 'HEAD') if auto_integrate else approved_base(root, proposal)
+    if resume_incomplete and git(directory, 'branch', '--show-current') != branch:
+        raise CityError('Branche de travail inattendue : reprise suspendue.')
+    revision = (git(directory, 'rev-parse', 'HEAD') if resume_incomplete else
+                git(root, 'rev-parse', 'HEAD') if auto_integrate else approved_base(root, proposal))
     if auto_integrate and git(root, 'status', '--porcelain', '--untracked-files=no'):
         raise CityError('Développement suspendu : le dépôt courant contient des modifications locales suivies.')
     binary, env = codex_binary(), codex_environment()
@@ -348,12 +352,13 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
         env['MARKETDESK_TEST_SITE_PACKAGES'] = str(site_packages)
     usage_before = require_daily_codex_budget(binary, env)
     try:
-        if directory.exists():
-            raise CityError('Un espace existe déjà pour cette mission. Consulte-le ou soumets une nouvelle demande.')
-        directory.parent.mkdir(exist_ok=True)
-        git(root,'worktree','add','-b',branch,directory.relative_to(root).as_posix(),revision)
+        if not resume_incomplete:
+            directory.parent.mkdir(exist_ok=True)
+            git(root,'worktree','add','-b',branch,directory.relative_to(root).as_posix(),revision)
         report = directory/'.jules-result.json'
         schema = directory/'.jules-schema.json'
+        if resume_incomplete:
+            report.unlink(missing_ok=True)  # Ignore a partial report from the interrupted run.
         schema.write_text(json.dumps({'type':'object','additionalProperties':False,
             'properties':{name:{'type':'string'} for name in ('summary','tests','limitations')},
             'required':['summary','tests','limitations']}),encoding='utf-8')
@@ -409,7 +414,10 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
               + (AUTONOMOUS_FOCUS.get(agent_id, '') + ' ' if self_chosen else '')
               + f'Python disponible : {sys.executable}. Utilise ce chemin absolu pour lancer les tests '
               '(python peut être un alias Windows sans interpréteur). '
-              'Réponds en français avec le schéma JSON demandé.\n\nDemande utilisateur :\n'+request)
+              'Réponds en français avec le schéma JSON demandé.\n\nDemande utilisateur :\n'+request+
+              ('\n\nCette mission reprend après une interruption. Inspecte les modifications déjà présentes '
+               'dans cette branche et termine ce même travail sans choisir une nouvelle amélioration.'
+               if resume_incomplete else ''))
     if on_progress:
         on_progress('Codex examine le projet et prépare une modification.')
     try:
@@ -629,15 +637,27 @@ def _integration_checks(root: Path, directory: Path, files: list[str], agent_id:
         raise CityError('Tests serveur en échec : '+detail+'. Intégration suspendue ; consulte la branche de travail.')
     if any(name.startswith('internships_project/city_frontend/src/') for name in files):
         frontend = directory/'internships_project/city_frontend'
-        npm = shutil.which('npm.cmd' if os.name == 'nt' else 'npm')
-        if not npm:
+        dependencies = root/'internships_project/city_frontend/node_modules'
+        node = next(iter(sorted((root/'.codex-tools/node24').glob('node-v*-win-x64/node.exe'), reverse=True)), None)
+        node = str(node) if node else shutil.which('node')
+        if not node or not dependencies.is_dir():
             raise CityError('Build frontend indisponible : intégration suspendue.')
         if not (frontend/'node_modules').exists():
-            install = subprocess.run([npm, 'ci', '--offline', '--no-audit'], cwd=frontend,
-                                     capture_output=True, timeout=180)
-            if install.returncode:
+            link = frontend/'node_modules'
+            if os.name == 'nt':
+                linked = subprocess.run(['cmd', '/c', 'mklink', '/J', str(link), str(dependencies)],
+                                        capture_output=True, timeout=30)
+                ready = linked.returncode == 0 and link.is_junction()
+            else:
+                link.symlink_to(dependencies, target_is_directory=True)
+                ready = link.is_symlink()
+            if not ready:
                 raise CityError('Dépendances frontend indisponibles hors ligne : intégration suspendue.')
-        build = subprocess.run([npm, 'run', 'build'], cwd=frontend, capture_output=True, timeout=180)
-        if build.returncode:
-            raise CityError('Build frontend en échec : intégration suspendue.')
+        environment = {**os.environ, 'PATH': str(Path(node).parent)+os.pathsep+os.environ.get('PATH', '')}
+        commands = ([node, str(dependencies/'typescript/bin/tsc'), '--noEmit', '-p', str(frontend/'tsconfig.json')],
+                    [node, str(frontend/'build.mjs')])
+        for command in commands:
+            build = subprocess.run(command, cwd=frontend, env=environment, capture_output=True, timeout=180)
+            if build.returncode:
+                raise CityError('Build frontend en échec : intégration suspendue.')
     return test_file
