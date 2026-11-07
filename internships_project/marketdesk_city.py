@@ -1679,7 +1679,7 @@ class CityStore:
                 marks = ','.join('?' for _ in ids)
                 events = [dict(row) for row in db.execute(
                     f"SELECT id,agent_id,task_id,status,message,created_at FROM city_events "
-                    f"WHERE username=? AND task_id IN ({marks}) ORDER BY id DESC LIMIT 1800", (username, *ids))]
+                    f"WHERE task_id IN ({marks}) ORDER BY id DESC LIMIT 1800", ids)]
         tasks = []
         for row in rows:
             result = json.loads(row['result_json'] or '{}')

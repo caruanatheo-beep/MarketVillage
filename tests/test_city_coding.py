@@ -365,6 +365,7 @@ def test_automatic_coding_history_is_shared_but_manual_work_stays_private(store)
     automatic = store.create_task('alice', 'job_hunter', 'Améliorer City',
                                   {'operation': 'develop', 'period': '2026-11-07'})
     store.claim_next()
+    store.progress(automatic['id'], 'Tests ciblés en cours.')
     store.finish(automatic['id'], result={'plain_summary': 'City améliorée.', 'integrated': True})
     manual = store.create_task('alice', 'job_hunter', 'Demande privée',
                                {'operation': 'code_change', 'request': 'Corriger un bouton dans City.'})
@@ -373,6 +374,8 @@ def test_automatic_coding_history_is_shared_but_manual_work_stays_private(store)
                    ('alice', 'develop:job_hunter:1', '2026-11-07', automatic['id']))
     history = store.coding_history('bob')
     assert [task['id'] for task in history['tasks']] == [automatic['id']]
+    assert any(event['task_id'] == automatic['id'] and event['message'] == 'Tests ciblés en cours.'
+               for event in history['events'])
     assert store.task_detail('bob', automatic['id'])['description'] == 'Améliorer City'
     assert store.task_detail('bob', manual['id']) is None
 
