@@ -27,6 +27,10 @@ CODEX_DAILY_USAGE_PERCENT = 100 / 7
 CODEX_DAILY_FALLBACK_CALLS = 6
 
 
+class CodexTemporaryQuotaError(CityError):
+    """An exhausted short window must not be treated as an unknown quota."""
+
+
 def codex_binary() -> str:
     configured = os.getenv('MARKETDESK_CODEX_BIN', '').strip()
     binary = configured or shutil.which('codex')
@@ -95,7 +99,21 @@ def codex_usage_percent(binary: str, env: dict) -> float:
             raise ValueError('Invalid Codex quota result')
         limits = result.get('rateLimitsByLimitId') or {
             'codex': result.get('rateLimits') or {}}
+        if isinstance(limits, dict):
+            for bucket in limits.values():
+                if not isinstance(bucket, dict):
+                    continue
+                for window in (bucket.get('primary'), bucket.get('secondary')):
+                    if not isinstance(window, dict):
+                        continue
+                    duration, used = window.get('windowDurationMins'), window.get('usedPercent')
+                    if (isinstance(duration, (int, float)) and 0 < duration < 10080
+                            and isinstance(used, (int, float)) and used >= 100):
+                        raise CodexTemporaryQuotaError(
+                            'Quota Codex indisponible : limite de courte durée atteinte.')
         return _weekly_usage_percent(limits)
+    except CodexTemporaryQuotaError:
+        raise
     except (OSError, Empty, ValueError, TypeError, BrokenPipeError) as exc:
         raise CityError('Quota Codex indisponible : missions de développement suspendues.') from exc
     finally:
@@ -124,6 +142,8 @@ def require_daily_codex_budget(binary: str, env: dict, *, activity: str = 'Déve
     """Reserve one agent call without charging unrelated Codex activity to City."""
     try:
         used = codex_usage_percent(binary, env)
+    except CodexTemporaryQuotaError:
+        raise
     except CityError:
         used = None
     if used is not None and used >= 100:

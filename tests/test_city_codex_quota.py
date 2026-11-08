@@ -92,3 +92,24 @@ def test_quota_response_after_notifications(cli, limits):
     sent = [json.loads(line) for line in cli.stdin.getvalue().splitlines()]
     assert [message['method'] for message in sent] == [
         'initialize', 'initialized', 'account/rateLimits/read']
+
+
+@pytest.mark.parametrize('shape', ['rateLimits', 'rateLimitsByLimitId'])
+@pytest.mark.parametrize('short_window', ['primary', 'secondary'])
+def test_exhausted_short_window_does_not_reserve_fallback_calls(
+        cli, monkeypatch, tmp_path, shape, short_window):
+    path = tmp_path / 'usage.sqlite3'
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', path)
+    weekly_window = 'secondary' if short_window == 'primary' else 'primary'
+    bucket = {
+        short_window: {'windowDurationMins': 300, 'usedPercent': 100},
+        weekly_window: {'windowDurationMins': 10080, 'usedPercent': 23},
+    }
+    limits = {shape: bucket if shape == 'rateLimits' else {'codex': bucket}}
+    cli.replies({'id': 1, 'result': {}}, {'id': 2, 'result': limits})
+
+    with pytest.raises(coding.CodexTemporaryQuotaError, match='courte durée atteinte'):
+        coding.require_daily_codex_budget('fixture-codex', {})
+
+    assert cli.stopped and cli.waited
+    assert not path.exists(), 'A known exhausted quota must not consume a fallback slot'

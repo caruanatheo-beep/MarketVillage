@@ -107,6 +107,48 @@ def test_codex_review_permanent_error_still_fails(store, monkeypatch):
     assert store.task_detail('alice', task['id'])['status'] == 'failed'
 
 
+def test_short_codex_quota_defers_approved_mission_until_available(store, monkeypatch):
+    task = create_mission(store, 'prepare_branch')
+    worker = CityWorker(store)
+    available = [False]
+    executions = []
+
+    def quota(*_):
+        if not available[0]:
+            raise city_coding.CodexTemporaryQuotaError(
+                'Quota Codex indisponible : limite de courte durée atteinte.')
+        return 23
+
+    def implement(*args, **kwargs):
+        city_coding.require_daily_codex_budget('fixture-codex', {})
+        executions.append(True)
+        return {'text': 'Mission terminée après renouvellement du quota.'}
+
+    monkeypatch.setattr(city_coding, 'codex_usage_percent', quota)
+    monkeypatch.setattr(city_coding, 'implement_change', implement)
+    with store.db() as db:
+        approvals = [tuple(row) for row in db.execute('SELECT * FROM city_proposal_reviews')]
+
+    assert worker.run_once()
+    detail = store.task_detail('alice', task['id'])
+    assert detail['status'] == 'queued'
+    scheduled = datetime.fromisoformat(detail['scheduled_at'])
+    assert 3500 < (scheduled - datetime.now(scheduled.tzinfo)).total_seconds() <= 3600
+    assert executions == []
+    assert not worker.run_once()
+    assert 'limite de courte durée atteinte' in store.snapshot('alice')['events'][0]['message']
+
+    available[0] = True
+    with store.db() as db:
+        db.execute('UPDATE city_tasks SET scheduled_at=NULL WHERE id=?', (task['id'],))
+    assert worker.run_once()
+    assert executions == [True]
+    assert store.task_detail('alice', task['id'])['status'] == 'completed'
+    with store.db() as db:
+        assert [tuple(row) for row in db.execute('SELECT * FROM city_proposal_reviews')] == approvals
+        assert db.execute('SELECT COUNT(*) FROM city_tasks').fetchone()[0] == 2
+
+
 def test_branch_without_approval_is_not_deferred_or_executed(store, monkeypatch):
     task = store.create_task('alice', 'job_hunter', 'Préparer une branche',
                              {'operation': 'prepare_branch', 'source_task_id': 'missing'})
