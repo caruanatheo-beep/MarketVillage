@@ -1664,6 +1664,16 @@ class CityStore:
             rows = db.execute("SELECT * FROM city_tasks WHERE status='running' AND heartbeat_at<?",
                               (cutoff,)).fetchall()
             for row in rows:
+                # Cancellation also wins over recovery of completed Codex work.
+                # The live attempt may drain, but an interrupted attempt must
+                # never be queued again for a project the user cancelled.
+                workflow = db.execute("SELECT status FROM city_workflows WHERE id=?",
+                                      (row['workflow_id'],)).fetchone() if row['workflow_id'] else None
+                if workflow and workflow['status'] == 'cancelled':
+                    db.execute("UPDATE city_tasks SET status='cancelled',finished_at=?,heartbeat_at=NULL,"
+                               "scheduled_at=NULL WHERE id=?", (_utc(), row['id']))
+                    self._event(db, row, 'cancelled', 'Projet annulé : aucune nouvelle tentative ne sera lancée.')
+                    continue
                 parameters = json.loads(row['parameters_json'] or '{}')
                 if parameters.get('operation') == 'develop' and re.fullmatch(r'[a-f0-9]{32}', row['id']):
                     from .city_specialists import repo_root

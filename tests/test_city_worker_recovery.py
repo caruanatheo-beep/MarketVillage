@@ -14,6 +14,67 @@ from internships_project.city_routes import add_city_routes
 from internships_project.marketdesk_city import CityStore, CityWorker
 
 
+@pytest.mark.parametrize("operation,completed_work", [
+    ("develop", True), ("develop", False), ("daily_questions", False),
+])
+def test_interrupted_cancelled_project_never_resumes(
+        tmp_path, monkeypatch, operation, completed_work):
+    from internships_project import city_specialists
+
+    path = tmp_path / "cancelled-recovery.sqlite3"
+    monkeypatch.setattr(state_store, "USER_DB_PATH", path)
+    store = CityStore(path)
+    agent = "job_hunter" if operation == "develop" else "developer"
+    project = store.create_custom_workflow("alice", "Review", "Review City", [
+        {"id": "work", "agent_id": agent, "operation": operation,
+         "description": "Review City", "depends_on": []},
+        {"id": "next", "agent_id": "market_analyst",
+         "description": "Review markets", "depends_on": ["work"]},
+    ])
+    task = store.claim_next()
+    assert task["id"] == project["task_ids"][0]
+    assert store.cancel_workflow("alice", project["id"])
+
+    # Simulate a completed worktree without reading or writing runner artifacts.
+    class Worktree:
+        def __truediv__(self, name):
+            return self
+
+        def is_file(self):
+            return completed_work
+
+    monkeypatch.setattr(city_specialists, "repo_root", Worktree)
+    assert store.recover_stale() == 0  # A still-live attempt may finish normally.
+    with store.db() as db:
+        db.execute("UPDATE city_tasks SET heartbeat_at='2020-01-01T00:00:00+00:00' WHERE id=?",
+                   (task["id"],))
+    assert store.recover_stale() == 1
+    assert store.recover_stale() == 0
+    detail = store.task_detail("alice", task["id"])
+    assert detail["status"] == "cancelled"
+    assert detail["finished_at"]
+    assert detail["retry_count"] == 0
+    assert store.workflow_details("alice", project["id"])["status"] == "cancelled"
+    assert store.task_detail("alice", project["task_ids"][1])["status"] == "cancelled"
+    event = next(item for item in store.snapshot("alice")["events"] if item["task_id"] == task["id"])
+    assert event["status"] == "cancelled"
+    assert "annul" in event["message"].lower()
+
+    worker = CityWorker(store)
+    monkeypatch.setattr(worker, "start", lambda: None)
+    app = FastAPI()
+    add_city_routes(app, lambda request: "alice", store, worker)
+    with TestClient(app) as client:
+        response = client.post(f'/city/api/tasks/{task["id"]}/retry',
+                               headers={"X-MarketDesk-City": "1"})
+    assert response.status_code == 409
+    assert not worker.run_once()
+
+    # Recovery releases the agent for the user's next mission.
+    replacement = store.create_task("alice", agent, "Review City", {"operation": operation})
+    assert store.claim_next()["id"] == replacement["id"]
+
+
 def test_api_retry_starts_worker_after_temporary_startup_storage_failure(
         tmp_path, monkeypatch, caplog):
     path = tmp_path / "startup.sqlite3"
