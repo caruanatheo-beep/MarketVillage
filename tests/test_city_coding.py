@@ -382,6 +382,22 @@ def test_failed_development_can_retry_with_other_missions_queued(store):
     assert store.retry_task('alice', failed['id']) == {'id': failed['id'], 'status': 'queued'}
 
 
+def test_conflicted_development_retries_from_fresh_task_and_preserves_branch(store):
+    failed = store.create_task('alice', 'city_ui_engineer', 'Améliorer Contacts', {'operation': 'develop'})
+    with store.db() as db:
+        db.execute("UPDATE city_tasks SET status='failed',error=? WHERE id=?",
+                   ('Intégration suspendue : conflit avec une autre mission. La branche reste disponible.',
+                    failed['id']))
+    retried = store.retry_task('alice', failed['id'])
+    assert retried['id'] != failed['id']
+    assert retried['status'] == 'queued'
+    with store.db() as db:
+        original = db.execute('SELECT status,error FROM city_tasks WHERE id=?', (failed['id'],)).fetchone()
+        fresh = db.execute('SELECT parameters_json FROM city_tasks WHERE id=?', (retried['id'],)).fetchone()
+    assert original[0] == 'failed' and 'conflit' in original[1]
+    assert json.loads(fresh[0])['retry_of'] == failed['id']
+
+
 def test_coding_history_is_private_compact_and_keeps_full_detail(store):
     task = store.create_task('alice', 'job_hunter', 'Corriger une date', {'operation': 'develop'})
     store.claim_next()

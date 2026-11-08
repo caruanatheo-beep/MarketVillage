@@ -1563,6 +1563,13 @@ class CityStore:
         if row is None:
             raise CityError("This mission is not available for retry.")
         parameters = json.loads(row['parameters_json'] or '{}')
+        if (parameters.get('operation') == 'develop' and row['workflow_id'] is None
+                and 'conflit avec une autre mission' in (row['error'] or '')):
+            # A completed worktree cannot be retried on the same commit: rebase
+            # will hit the same conflict. Keep that branch for inspection and
+            # start a fresh mission from the current repository revision.
+            parameters['retry_of'] = task_id
+            return self.create_task(username, row['agent_id'], row['description'], parameters, None)
         if parameters.get('operation') == 'develop' and row['workflow_id'] is None:
             with self.db() as db:
                 db.execute('BEGIN IMMEDIATE')
