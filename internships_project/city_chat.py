@@ -17,6 +17,9 @@ from .llm_usage import GenerationLimitError, _connect, generation_slot, llm_user
 from .marketdesk_city import AGENT_BY_ID, CITY_MODELS, CityError, CityStore
 
 
+_CHAT_HEARTBEAT_SECONDS = 10
+
+
 def _budget_guard(username: str, settings: dict, reserve_usd: float = 0) -> None:
     today = datetime.now(timezone.utc).date().isoformat()
     with _connect() as db:
@@ -148,7 +151,14 @@ async def stream_chat(store: CityStore, username: str, agent_id: str, message: s
     try:
         yield json.dumps({"type": "status", "text": f"{AGENT_BY_ID[agent_id]['name']} réfléchit…"}, ensure_ascii=False)
         while True:
-            item = await queue.get()
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=_CHAT_HEARTBEAT_SECONDS)
+            except TimeoutError:
+                # Tools may be silent for longer than a proxy's idle timeout.
+                # This transport-only event must not enter chat history or reset
+                # the producer's overall deadline.
+                yield json.dumps({"type": "heartbeat"})
+                continue
             if item["type"] == "end":
                 break
             yield json.dumps(item, ensure_ascii=False)

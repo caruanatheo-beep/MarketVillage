@@ -122,8 +122,11 @@ def chat(monkeypatch):
 
 
 @pytest.mark.parametrize("after_delta", [False, True])
-def test_closing_chat_waits_for_producer_cleanup(chat, monkeypatch, after_delta):
+@pytest.mark.parametrize("after_heartbeat", [False, True])
+def test_closing_chat_waits_for_producer_cleanup(chat, monkeypatch, after_delta, after_heartbeat):
     store, messages = chat
+    if after_heartbeat:
+        monkeypatch.setattr(city_chat, "_CHAT_HEARTBEAT_SECONDS", 0.001)
 
     async def scenario():
         started = asyncio.Event()
@@ -149,6 +152,12 @@ def test_closing_chat_waits_for_producer_cleanup(chat, monkeypatch, after_delta)
         await asyncio.wait_for(started.wait(), 1)
         if after_delta:
             assert json.loads(await anext(events))["type"] == "delta"
+        if after_heartbeat:
+            event = json.loads(await asyncio.wait_for(anext(events), 1))
+            # The producer may already have delivered its first text chunk.
+            if event["type"] == "delta":
+                event = json.loads(await asyncio.wait_for(anext(events), 1))
+            assert event["type"] == "heartbeat"
         try:
             await events.aclose()
             assert stopped.is_set(), "Closing the chat left its producer running"
@@ -165,9 +174,11 @@ def test_closing_chat_waits_for_producer_cleanup(chat, monkeypatch, after_delta)
 
 
 @pytest.mark.parametrize("after_delta", [False, True])
-def test_chat_deadline_cancels_stalled_agent_and_reports_error(chat, monkeypatch, after_delta):
+@pytest.mark.parametrize("heartbeat_seconds", [10, 0.001])
+def test_chat_deadline_cancels_stalled_agent_and_reports_error(chat, monkeypatch, after_delta, heartbeat_seconds):
     store, messages = chat
     monkeypatch.setenv("MARKETDESK_CITY_CHAT_TIMEOUT", "15")
+    monkeypatch.setattr(city_chat, "_CHAT_HEARTBEAT_SECONDS", heartbeat_seconds)
     real_timeout = asyncio.timeout
 
     def short_timeout(delay):
@@ -202,7 +213,9 @@ def test_chat_deadline_cancels_stalled_agent_and_reports_error(chat, monkeypatch
                     city_chat.stream_chat(store, "test-user", "desk_manager", "Hello")]
 
         events = await asyncio.wait_for(collect(), 1)
-        assert [event["type"] for event in events] == (
+        if heartbeat_seconds < 1:
+            assert any(event["type"] == "heartbeat" for event in events)
+        assert [event["type"] for event in events if event["type"] != "heartbeat"] == (
             ["status", "delta", "error"] if after_delta else ["status", "error"])
         assert "15 secondes" in events[-1]["text"]
         assert stopped.is_set()
@@ -278,6 +291,82 @@ def test_chat_waits_for_stream_finalization_before_saving_success(chat, monkeypa
                     assert "synthetic stream" not in remaining[0]["text"]
         finally:
             await events.aclose()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("silence_before_stream", [False, True])
+def test_http_chat_heartbeat_keeps_silent_tool_alive_then_streams_answer(chat, monkeypatch, silence_before_stream):
+    store, messages = chat
+    saved_turns = []
+    store.save_chat_turn = lambda *args: saved_turns.append(args)
+    monkeypatch.setattr(city_chat, "_CHAT_HEARTBEAT_SECONDS", 0.001)
+    monkeypatch.setattr(city_chat, "record_response", lambda *args: None)
+    monkeypatch.setattr(city_chat, "_budget_guard", lambda *args: None)
+
+    async def scenario():
+        release_tool = asyncio.Event()
+        stopped = asyncio.Event()
+
+        async def stream_text(**kwargs):
+            await release_tool.wait()
+            yield "Réponse complète"
+
+        @asynccontextmanager
+        async def run_stream(*args, **kwargs):
+            try:
+                if silence_before_stream:
+                    await release_tool.wait()
+                await kwargs["deps"].events.put({
+                    "type": "tool", "name": "test_lookup", "status": "running",
+                })
+                yield SimpleNamespace(
+                    stream_text=stream_text,
+                    usage=SimpleNamespace(input_tokens=12, output_tokens=3, cache_read_tokens=0),
+                    new_messages_json=lambda: b"[]",
+                )
+            finally:
+                stopped.set()
+
+        monkeypatch.setattr(city_chat, "build_agent", lambda *args: SimpleNamespace(run_stream=run_stream))
+        app = FastAPI()
+        city_routes.add_city_routes(app, lambda _: "test-user", store, SimpleNamespace())
+        endpoint = next(route.endpoint for route in app.routes
+                        if route.path == "/city/api/chat/{agent_id}" and "POST" in route.methods)
+
+        async def receive():
+            return {"type": "http.request", "body": b'{"message":"Hello"}', "more_body": False}
+
+        request = Request({"type": "http", "method": "POST", "path": "/city/api/chat/desk_manager",
+                           "headers": [(b"x-marketdesk-city", b"1")], "scheme": "http",
+                           "server": ("testserver", 80), "query_string": b""}, receive)
+        response = await endpoint("desk_manager", request)
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert response.headers["x-accel-buffering"] == "no"
+        async with city_routes.aclosing(response.body_iterator) as events:
+            assert json.loads((await anext(events))[6:])["type"] == "status"
+            if not silence_before_stream:
+                async def next_content_event():
+                    async for event in events:
+                        payload = json.loads(event[6:])
+                        if payload["type"] != "heartbeat":
+                            return payload
+
+                assert (await asyncio.wait_for(next_content_event(), 1))["type"] == "tool"
+            for _ in range(2):
+                heartbeat = await asyncio.wait_for(anext(events), 1)
+                assert heartbeat == 'data: {"type": "heartbeat"}\n\n'
+                assert not stopped.is_set()
+                assert [row[2] for row in messages] == ["user"]
+                assert saved_turns == []
+            release_tool.set()
+            remaining = [json.loads(event[6:]) async for event in events]
+        assert [event["type"] for event in remaining if event["type"] != "heartbeat"] == (
+            ["tool", "delta", "done"] if silence_before_stream else ["delta", "done"])
+        assert stopped.is_set()
+        assert [row[2] for row in messages] == ["user", "assistant"]
+        assert messages[-1][3] == "Réponse complète"
+        assert len(saved_turns) == 1
 
     asyncio.run(scenario())
 
