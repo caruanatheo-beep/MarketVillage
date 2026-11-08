@@ -1447,6 +1447,9 @@ body { overflow:hidden; }
 
 /* The city fills the viewport; agent controls open only when selected. */
 .game-app .city-dashboard.command-center.city-full-width {
+  /* The fixed app already fills the viewport. Avoid a nested fixed stacking
+     context that would trap the command bar below sibling workspace windows. */
+  position:absolute;
   grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); overflow:hidden;
 }
 .game-app .city-full-width .command-search { left:50%; transform:translateX(-50%); width:min(26vw,380px); }
@@ -1470,7 +1473,9 @@ body { overflow:hidden; }
 
 /* Desktop command bar: one layout context for brand, search and navigation. */
 .game-app .command-topbar {
-  position:fixed; z-index:40; top:0; left:0; right:0; height:76px;
+  /* Search results share this stacking context: keep them above workspaces
+     (43–50), while settings (200) and native modal dialogs stay above it. */
+  position:fixed; z-index:55; top:0; left:0; right:0; height:76px;
   box-sizing:border-box; display:grid; grid-template-columns:250px minmax(220px,1fr) auto;
   align-items:center; gap:24px; padding:10px 24px;
   background:linear-gradient(100deg,#245b56 0%,#183c42 56%,#123139 100%);
