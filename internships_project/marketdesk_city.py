@@ -2158,9 +2158,10 @@ class CityWorker:
                     and safe in ('Développement suspendu : le dépôt courant contient des modifications locales suivies.',
                                  'Intégration suspendue : le dépôt courant contient des modifications locales suivies.',
                                  'Le dépôt a changé pendant les vérifications : intégration suspendue. La branche reste disponible.',
+                                 'Git est en lecture seule pour City. Relance le serveur avec accès en écriture au dépôt.',
                                  'Git indisponible pour cette opération. Vérifie le clone local du dépôt.',
                                  'Dépôt Git inaccessible ou délai dépassé.')):
-                self.store.defer_coding(task['id'], safe, delay_minutes=5)
+                self.store.defer_coding(task['id'], safe, delay_minutes=60 if safe.startswith('Git est en lecture seule') else 5)
             elif task['agent_id'] == 'market_analyst' and isinstance(exc, CityError) and safe.startswith("Markets n'a retourné aucune observation"):
                 self.store.defer_coding(task['id'], safe)
             else:

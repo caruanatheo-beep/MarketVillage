@@ -71,6 +71,16 @@ def test_codex_environment_restores_windows_home_without_exposing_api_keys(monke
     assert 'OPENAI_API_KEY' not in env
 
 
+def test_read_only_git_blocks_coding_before_codex_or_worktree(repo, monkeypatch):
+    root, _ = repo
+    def denied(**kwargs):
+        raise PermissionError('read-only Git directory')
+    monkeypatch.setattr(coding.tempfile, 'TemporaryFile', denied)
+    with pytest.raises(CityError, match='Git est en lecture seule'):
+        coding.implement_change('f'*32, {}, agent_id='city_ui_engineer', auto_integrate=True)
+    assert not (root/'.city-worktrees').exists()
+
+
 def test_coding_runs_only_after_human_approval_and_keeps_main_untouched(repo,store,monkeypatch):
     root,git=repo
     monkeypatch.setattr(specialists,'repo_root',lambda:root)
@@ -563,6 +573,24 @@ def test_internships_gate_uses_offline_tests_and_names_a_failure(repo, monkeypat
     basetemp = re.search(r"--basetemp=([^']+)", commands[0])
     assert basetemp and Path(basetemp.group(1)).is_relative_to(tempfile.gettempdir())
     assert not Path(basetemp.group(1)).is_relative_to(root)
+
+
+def test_quality_gate_runs_changed_market_tests(repo, monkeypatch):
+    root, _ = repo
+    (root/'src').mkdir()
+    (root/'src/analytics.py').write_text('value = 1\n')
+    (root/'tests/test_analytics.py').write_text('def test_value():\n    assert True\n')
+    original_run = subprocess.run
+    commands = []
+    def run(command, **kwargs):
+        if command[:2] == [sys.executable, '-c']:
+            commands.append(command[2])
+            return SimpleNamespace(returncode=0, stdout='')
+        return original_run(command, **kwargs)
+    monkeypatch.setattr(coding.subprocess, 'run', run)
+    coding._integration_checks(root, root, ['src/analytics.py', 'tests/test_analytics.py'],
+                               'quality_engineer')
+    assert len(commands) == 1 and 'tests/test_analytics.py' in commands[0]
 
 
 def test_autonomous_engineer_rebases_after_another_mission_integrates(repo, monkeypatch):

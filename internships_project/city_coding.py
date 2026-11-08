@@ -337,6 +337,11 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
     self_chosen = auto_integrate and not request
     if not re.fullmatch(r'[a-f0-9]{32}', task_id) or len(request) > 3000 or (request and len(request) < 10) or (not request and not auto_integrate):
         raise CityError('Demande de développement invalide.')
+    try:
+        with tempfile.TemporaryFile(dir=root/'.git'):
+            pass
+    except OSError as exc:
+        raise CityError('Git est en lecture seule pour City. Relance le serveur avec accès en écriture au dépôt.') from exc
     if self_chosen:
         request = ('Analyse ton périmètre dans le dépôt actuel, choisis toi-même une amélioration utile et complète '
                    'pour le produit ou sa fiabilité. Compare deux ou trois problèmes vérifiables et choisis celui '
@@ -562,7 +567,7 @@ def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
                     files: list[str], agent_id: str, *, committed: bool = False,
                     on_progress: Callable[[str], None] | None = None) -> dict:
     """Validate in the worktree, then integrate one completed branch at a time."""
-    allowed = ('internships_project/', 'tests/', 'scripts/', '.github/workflows/')
+    allowed = ('internships_project/', 'src/', 'tests/', 'scripts/', '.github/workflows/')
     for name in files:
         path = directory / name
         if (not name.startswith(allowed) or '/vendor/' in name or name.endswith(('.env', '.db', '.sqlite3'))
@@ -628,9 +633,8 @@ def _integration_checks(root: Path, directory: Path, files: list[str], agent_id:
                  'tests/test_internships_display_times.py'],
              'quality_engineer': ['tests/test_city_specialists.py']}
     test_files = [name for name in tests[agent_id] if (directory / name).is_file()]
-    if agent_id == 'internships_engineer':
-        test_files += [name for name in files if name.startswith('tests/test_') and name.endswith('.py')
-                       and name not in test_files]
+    test_files += [name for name in files if name.startswith('tests/test_') and name.endswith('.py')
+                   and name not in test_files]
     if not test_files:
         raise CityError('Tests serveur indisponibles dans cette branche : intégration suspendue.')
     test_file = ', '.join(test_files)
