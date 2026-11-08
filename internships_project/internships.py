@@ -202,6 +202,7 @@ JOBTEASER_CACHE_SECONDS = 24 * 3600
 SOURCE_CONNECTOR_VERSIONS = {
     "Société Générale Careers": 3, "BNP Paribas": 2, "BNP Paribas CIB": 2,
     "Amundi": 2, "Crédit Agricole CIB": 2, "Crédit Mutuel Arkéa": 2, "Covéa Finance": 2,
+    "DNCA": 2,
 }
 JOBTEASER_INDEX = "https://assets-cf.jobteaser.com/sitemaps/sitemap.xml"
 JOBTEASER_EMPLOYERS = {
@@ -1616,6 +1617,15 @@ def _career_page_jobs(company: str, config: tuple[str, str, str]) -> list[Opport
     return jobs
 
 
+class _PartialSourceError(ValueError):
+    """Keep verified results and identify the still-listed offers that failed."""
+
+    def __init__(self, jobs: list[Opportunity], failed_urls: list[str]):
+        super().__init__(f"collecte incomplète : {len(failed_urls)} fiche(s) indisponible(s)")
+        self.jobs = jobs
+        self.failed_urls = set(failed_urls)
+
+
 def _dnca_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
     """Collect DNCA's public HTML offers, excluding the surrounding career listing."""
     listing = CAREER_PORTALS["DNCA"]
@@ -1631,6 +1641,7 @@ def _dnca_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
         and is_trusted_offer_url(urljoin(listing, href))
     )
     errors: list[Exception] = []
+    failed_urls: list[str] = []
 
     def load(url: str) -> Opportunity | None:
         try:
@@ -1662,12 +1673,15 @@ def _dnca_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
             return replace(job, source="Site carrière · DNCA", description=description[:12_000]) if job else None
         except (requests.RequestException, ValueError) as exc:
             errors.append(exc)
+            failed_urls.append(url)
             return None
 
     with ThreadPoolExecutor(max_workers=5) as pool:
         jobs = [job for job in pool.map(load, links) if job]
     if not jobs and errors:
         raise errors[0]
+    if errors:
+        raise _PartialSourceError(jobs, failed_urls)
     return jobs
 
 
@@ -2465,6 +2479,17 @@ def _collect_source(name: str, loader: object, args: tuple, force: bool) -> tupl
             _source_job_cache[name] = {"updated": checked_at, "jobs": list(found), "check": check,
                                        "connector_version": connector_version}
         return list(found), check, ""
+    except _PartialSourceError as exc:
+        # Only restore offers that the current public listing still advertises.
+        # Removed offers and successfully parsed but irrelevant roles stay removed.
+        found = exc.jobs + [job for job in cached_jobs if job.url in exc.failed_urls]
+        checked_at = datetime.now(timezone.utc).isoformat()
+        reason = str(exc)
+        check = {"status": "stale", "count": len(found), "checked_at": checked_at,
+                 "last_success": str((cached or {}).get("updated") or ""), "error": reason,
+                 "duration_ms": round((time.perf_counter() - started) * 1000), "cache_status": "partial"}
+        # Do not replace a successful source snapshot with an incomplete collection.
+        return found, check, f"{name}: {reason}"
     except Exception as exc:
         elapsed = round((time.perf_counter() - started) * 1000)
         if isinstance(exc, requests.HTTPError) and exc.response is not None:
@@ -3063,6 +3088,9 @@ def render_opportunities(jobs: list[Opportunity], errors: list[str], updated: da
         count_label = str(count) if state in {"ok", "empty"} and isinstance(count, int) else "—"
         if state == "stale":
             label = "Offres en cache, dernière collecte en erreur"
+        if check.get("cache_status") == "partial":
+            label = "Collecte incomplète, certaines fiches indisponibles"
+            count_label = str(count) if isinstance(count, int) else "—"
         duration = check.get("duration_ms")
         duration_label = f"{duration} ms" if isinstance(duration, (int, float)) else "-"
         if check.get("cache_status") == "fresh":

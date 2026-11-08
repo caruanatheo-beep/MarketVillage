@@ -2,7 +2,9 @@
 
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from datetime import datetime, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -71,8 +73,79 @@ def test_unreadable_details_report_failure(monkeypatch):
 
 def test_one_failed_detail_preserves_other_offer(monkeypatch):
     setup_responses(monkeypatch, {"ABC1": "Page introuvable", "DEF2": article(TITLES[1])})
-    jobs = internships._dnca_jobs()
-    assert [job.url for job in jobs] == [BASE + "/DEF2"]
+    with pytest.raises(internships._PartialSourceError) as caught:
+        internships._dnca_jobs()
+    assert [job.url for job in caught.value.jobs] == [BASE + "/DEF2"]
+    assert caught.value.failed_urls == {BASE + "/ABC1"}
+
+
+@pytest.mark.parametrize("with_cache", [False, True])
+@pytest.mark.parametrize("failure", ["markup", "timeout"])
+def test_partial_collection_keeps_only_still_listed_failed_offers(tmp_path, monkeypatch, with_cache, failure):
+    monkeypatch.setattr(internships, "CACHE_PATH", tmp_path / "synthetic.json")
+    monkeypatch.setattr(internships, "_source_job_cache_path", None)
+    monkeypatch.setattr(internships, "_source_job_cache", {})
+    internships._load_source_job_cache()
+    previous = internships._opportunity(TITLES[0], "DNCA", "Paris", "Stage", BASE + "/ABC1", "2026-10-20")
+    removed = replace(previous, url=BASE + "/REMOVED")
+    irrelevant = replace(previous, url=BASE + "/CDI3")
+    old_snapshot = {
+        "updated": datetime.now(timezone.utc).isoformat(),
+        "jobs": [previous, removed, irrelevant], "check": {"status": "ok"},
+        "connector_version": 1,
+    }
+    if with_cache:
+        internships._source_job_cache["DNCA"] = old_snapshot
+    get = setup_responses(monkeypatch, {"ABC1": "Page introuvable", "DEF2": article(TITLES[1]),
+                                       "CDI3": article(title="Analyste Risques de Marché", contract="CDI")})
+    if failure == "timeout":
+        original = get.side_effect
+        def response(url, **kwargs):
+            if url == BASE + "/ABC1":
+                raise internships.requests.ReadTimeout("synthetic unavailable detail")
+            return original(url, **kwargs)
+        get.side_effect = response
+
+    jobs, check, error = internships._collect_source("DNCA", internships._dnca_jobs, (), False)
+
+    assert [job.url for job in jobs] == [BASE + "/DEF2"] + ([previous.url] if with_cache else [])
+    assert check["status"] == "stale" and check["cache_status"] == "partial"
+    assert check["count"] == len(jobs)
+    assert "collecte incomplète" in error and check["error"] in error
+    assert check["last_success"] == (old_snapshot["updated"] if with_cache else "")
+    if with_cache:
+        assert internships._source_job_cache["DNCA"] is old_snapshot
+    else:
+        assert "DNCA" not in internships._source_job_cache
+    monkeypatch.setattr(internships, "source_checks", lambda: {"DNCA": check})
+    board = internships.render_opportunities(jobs, [error], datetime.now(timezone.utc))
+    assert "Collecte incomplète, certaines fiches indisponibles" in board
+    assert "Offres en cache, dernière collecte en erreur" not in board
+    assert "DNCA: collecte incomplète" in board
+
+
+def test_detail_parallelism_reduces_loading_time_without_losing_offers(monkeypatch):
+    get = setup_responses(monkeypatch, {key: article() for key in ("ABC1", "D2", "D3", "D4", "D5", "D6")})
+    original = get.side_effect
+
+    def delayed(url, **kwargs):
+        if url != BASE:
+            time.sleep(0.1)
+        return original(url, **kwargs)
+
+    get.side_effect = delayed
+    with monkeypatch.context() as serial:
+        serial.setattr(internships, "ThreadPoolExecutor", lambda **kwargs: ThreadPoolExecutor(max_workers=1))
+        started = time.perf_counter()
+        sequential = internships._dnca_jobs()
+        sequential_seconds = time.perf_counter() - started
+    started = time.perf_counter()
+    concurrent = internships._dnca_jobs()
+    concurrent_seconds = time.perf_counter() - started
+    print(f"DNCA controlled latency: serial={sequential_seconds:.3f}s; parallel={concurrent_seconds:.3f}s")
+    assert [job.url for job in concurrent] == [job.url for job in sequential]
+    assert len(concurrent) == 6
+    assert concurrent_seconds < sequential_seconds * 0.8
 
 
 def test_vie_contract_and_local_publication(monkeypatch):
@@ -91,9 +164,24 @@ def test_unusable_offers_are_excluded(monkeypatch, changes):
 
 
 @pytest.mark.skipif(os.environ.get("LIVE_SOURCE_TESTS") != "1", reason="Explicit public-source check only")
-def test_dnca_public_collection_live():
+def test_dnca_public_collection_live(monkeypatch):
+    get = internships.requests.get
+    timings = []
+
+    def timed_get(url, **kwargs):
+        started = time.perf_counter()
+        try:
+            response = get(url, **kwargs)
+        finally:
+            timings.append((url, time.perf_counter() - started))
+        return response
+
+    monkeypatch.setattr(internships.requests, "get", timed_get)
     started = time.perf_counter()
-    jobs = internships._dnca_jobs()
+    try:
+        jobs = internships._dnca_jobs()
+    finally:
+        print("DNCA public request timings:", timings)
     elapsed = time.perf_counter() - started
     print(f"DNCA public collection: {elapsed:.3f}s; {len(jobs)} offers")
     assert jobs, "No verified offers: do not report this source as functional"
