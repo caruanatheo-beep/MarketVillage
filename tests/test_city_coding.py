@@ -28,6 +28,7 @@ def store(tmp_path,monkeypatch):
 @pytest.fixture
 def repo(tmp_path,monkeypatch):
     root=tmp_path/'repo';root.mkdir()
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
     def git(*args):
         return subprocess.run(['git','-c','core.hooksPath=NUL' if os.name=='nt' else 'core.hooksPath=/dev/null',*args],cwd=root,check=True,capture_output=True,text=True).stdout.strip()
     git('init');git('config','user.name','test');git('config','user.email','test@example.invalid')
