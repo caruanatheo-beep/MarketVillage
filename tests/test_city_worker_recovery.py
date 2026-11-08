@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import sqlite3
 import threading
 import time
+from zoneinfo import ZoneInfoNotFoundError
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -75,8 +76,9 @@ def test_interrupted_cancelled_project_never_resumes(
     assert store.claim_next()["id"] == replacement["id"]
 
 
-def test_api_retry_starts_worker_after_temporary_startup_storage_failure(
-        tmp_path, monkeypatch, caplog):
+@pytest.mark.parametrize("failure_type", [sqlite3.OperationalError, ModuleNotFoundError, ValueError])
+def test_api_retry_starts_worker_after_temporary_startup_failure(
+        tmp_path, monkeypatch, caplog, failure_type):
     path = tmp_path / "startup.sqlite3"
     monkeypatch.setattr(state_store, "USER_DB_PATH", path)
     store = CityStore(path)
@@ -92,7 +94,7 @@ def test_api_retry_starts_worker_after_temporary_startup_storage_failure(
     def intermittent_recovery():
         attempts.append(True)
         if len(attempts) == 1:
-            raise sqlite3.OperationalError("database is locked: private startup detail")
+            raise failure_type("private startup detail")
         result = recover()
         recovered.set()
         return result
@@ -122,7 +124,7 @@ def test_api_retry_starts_worker_after_temporary_startup_storage_failure(
             detail = client.get(f'/city/api/tasks/{retried_id}').json()
         assert detail["status"] == "completed"
         assert detail["result"]["text"] == "Questions ready"
-        assert "OperationalError" in caplog.text
+        assert failure_type.__name__ in caplog.text
         assert "private startup detail" not in caplog.text
     finally:
         worker.stop()
@@ -131,8 +133,11 @@ def test_api_retry_starts_worker_after_temporary_startup_storage_failure(
 @pytest.mark.parametrize("failed_step", [
     "recover_stale", "enqueue_network_daily", "enqueue_specialist_schedules", "enqueue_daily_digest",
 ])
-def test_scheduler_storage_failure_does_not_block_ready_missions(
-        tmp_path, monkeypatch, caplog, failed_step):
+@pytest.mark.parametrize("failure_type", [
+    sqlite3.OperationalError, ModuleNotFoundError, ZoneInfoNotFoundError, ValueError,
+])
+def test_scheduler_failure_does_not_block_ready_missions(
+        tmp_path, monkeypatch, caplog, failed_step, failure_type):
     path = tmp_path / "scheduling.sqlite3"
     monkeypatch.setattr(state_store, "USER_DB_PATH", path)
     store = CityStore(path)
@@ -150,7 +155,7 @@ def test_scheduler_storage_failure_does_not_block_ready_missions(
     def schedule(name):
         calls[name] += 1
         if name == failed_step and calls[name] <= 2:
-            raise sqlite3.OperationalError("private scheduling storage detail")
+            raise failure_type("private scheduling storage detail")
 
     for name in calls:
         monkeypatch.setattr(store, name, lambda name=name: schedule(name))
@@ -171,7 +176,7 @@ def test_scheduler_storage_failure_does_not_block_ready_missions(
     assert store.workflow_details("alice", project["id"])["status"] == "completed"
     assert all(count == 2 for count in calls.values())
     assert failed_step in caplog.text
-    assert "OperationalError" in caplog.text
+    assert failure_type.__name__ in caplog.text
     assert "private scheduling storage detail" not in caplog.text
 
     # The next scheduled pass retries the failed step and the worker stays usable.

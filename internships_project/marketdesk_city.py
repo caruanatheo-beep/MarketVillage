@@ -1943,10 +1943,10 @@ class CityWorker:
             self._stop.clear()
             try:
                 self.store.recover_stale()
-            except sqlite3.Error as exc:
+            except Exception as exc:
                 # The worker loop retries recovery independently of queued work.
-                # A temporary storage failure must not prevent that loop from
-                # starting or fail an API request after its task was saved.
+                # Recovery may also fail on an unavailable dependency or invalid
+                # stored payload. Keep unrelated missions and API requests usable.
                 logging.warning("MarketDesk City startup recovery temporarily unavailable (%s)",
                                 type(exc).__name__)
             self._threads = [threading.Thread(target=self._loop, daemon=True,
@@ -1971,7 +1971,9 @@ class CityWorker:
                                         "enqueue_specialist_schedules", "enqueue_daily_digest"):
                         try:
                             getattr(self.store, maintenance)()
-                        except sqlite3.Error as exc:
+                        except Exception as exc:
+                            # Missing schedule dependencies (including timezone
+                            # data) must not terminate every worker on each pass.
                             logging.warning("MarketDesk City maintenance %s temporarily unavailable (%s)",
                                             maintenance, type(exc).__name__)
                     next_network_check = time.monotonic() + 60
