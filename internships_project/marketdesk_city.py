@@ -11,6 +11,7 @@ import os
 import re
 import sqlite3
 import threading
+import time
 import unicodedata
 import uuid
 from collections import Counter
@@ -1980,6 +1981,20 @@ class CityWorker:
                 # failure; otherwise recovery can discard its eventual result.
                 logging.warning("MarketDesk City heartbeat temporarily unavailable (%s)", type(exc).__name__)
 
+    def _finish(self, task_id: str, **outcome) -> None:
+        """Retry only storage contention, keeping the result and heartbeat alive."""
+        for attempt in range(3):
+            try:
+                self.store.finish(task_id, **outcome)
+                return
+            except sqlite3.OperationalError as exc:
+                code = getattr(exc, 'sqlite_errorcode', 0)
+                if (code & 0xff) not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED) or attempt == 2:
+                    raise
+                logging.warning("MarketDesk City result storage temporarily unavailable (%s)",
+                                type(exc).__name__)
+                time.sleep(0.25 * (attempt + 1))
+
     def run_once(self) -> bool:
         task = self.store.claim_next()
         if task is None:
@@ -1990,6 +2005,7 @@ class CityWorker:
         heartbeat.start()
         usage = None
         parameters = {}
+        finishing = False
         try:
             parameters = json.loads(task.get("parameters_json") or "{}")
             if task['agent_id'] == 'innovation_lab':
@@ -2005,14 +2021,16 @@ class CityWorker:
                     source = db.execute("SELECT result_json FROM city_tasks WHERE id=? AND username=? AND status='completed'",
                                         (parameters.get('source_task_id'), task['username'])).fetchone()
                 result = prepare_branch(task['id'], json.loads(source[0]) if source else {}, bool(approval and approval[0]))
-                self.store.finish(task['id'], result=result)
+                finishing = True
+                self._finish(task['id'], result=result)
                 return True
             if parameters.get('operation') == 'develop':
                 from .city_coding import implement_change
                 result = implement_change(task['id'], {'coding_request': parameters.get('request', '')},
                                           agent_id=task['agent_id'], auto_integrate=True,
                                           on_progress=lambda message: self.store.progress(task['id'], message))
-                self.store.finish(task['id'], result=result)
+                finishing = True
+                self._finish(task['id'], result=result)
                 if result.get('integrated') and os.getenv('MARKETDESK_CITY_SUPERVISED') == '1':
                     self._stop.set()  # Drain other running missions before the launcher activates this commit.
                 return True
@@ -2109,8 +2127,13 @@ class CityWorker:
                 if prior:
                     result['approved_innovation'] = json.loads(prior[0]).get('ideas', [])
                     result['text'] += '\n\nCahier des charges Nova validé joint à cette revue. Aucune innovation installée automatiquement.'
-            self.store.finish(task["id"], result=result, usage=usage)
+            finishing = True
+            self._finish(task["id"], result=result, usage=usage)
         except Exception as exc:
+            if finishing and isinstance(exc, sqlite3.Error):
+                # A persistence failure is not an agent failure. Leave the task
+                # to stale recovery if storage remains unavailable.
+                raise
             # Public logs and the UI receive only the exception type for unknown errors.
             from .llm_usage import GenerationLimitError
             safe = str(exc) if isinstance(exc, (CityError, GenerationLimitError)) else f"Erreur de mission ({type(exc).__name__})."
@@ -2131,7 +2154,7 @@ class CityWorker:
             elif task['agent_id'] == 'market_analyst' and isinstance(exc, CityError) and safe.startswith("Markets n'a retourné aucune observation"):
                 self.store.defer_coding(task['id'], safe)
             else:
-                self.store.finish(task["id"], error=safe)
+                self._finish(task["id"], error=safe)
         finally:
             beating.set()
         return True
