@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import math
 from dataclasses import asdict
 
 import pandas as pd
@@ -67,12 +68,16 @@ def format_value(point: MarketPoint) -> str:
 
 
 def format_change(point: MarketPoint) -> str:
-    if point.change is None:
+    if point.change is None or not math.isfinite(point.change):
         return "N/A"
     if point.category in {"Rates", "Policy", "Credit"} and point.unit == "%":
-        return f"{point.change * 100:+.1f} bp"
+        basis_points = point.change * 100
+        return f"{basis_points:+.1f} bp" if math.isfinite(basis_points) else "N/A"
     if point.previous not in (None, 0) and point.category in {"FX", "Risk", "Commodities"}:
-        return f"{point.change / point.previous * 100:+.2f}%"
+        if not math.isfinite(point.previous):
+            return "N/A"
+        percent = point.change / point.previous * 100
+        return f"{percent:+.2f}%" if math.isfinite(percent) else "N/A"
     return f"{point.change:+,.2f}"
 
 

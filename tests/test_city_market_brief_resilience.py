@@ -196,3 +196,39 @@ def test_mira_omits_overflowing_curve_without_losing_quotes(monkeypatch, sources
     assert "courbe américaine" not in result["text"]
     assert "écart non fini" in result["warnings"][0]
     assert result["warnings"][0] in result["text"][:3500]
+
+
+@pytest.mark.parametrize("series,category,unit", [
+    ("SP500", "Risk", "index"),
+    ("VIXCLS", "Risk", "index"),
+    ("DEXUSEU", "FX", "USD"),
+    ("BAMLH0A0HYM2", "Credit", "%"),
+])
+def test_overflowing_variation_preserves_quotes_without_infinite_display(
+        monkeypatch, sources, series, category, unit):
+    points, status = data.load_snapshot()
+    point = replace(points[0], series_id=series, category=category, unit=unit,
+                    value=1e308, previous=0.1, change=1e308)
+    observed = [point]
+    if series in {"SP500", "VIXCLS"}:
+        # Mira describes equities and volatility together in the report.
+        companion = next(item for item in points if item.series_id != series)
+        observed.append(replace(companion, previous=None, change=None))
+    monkeypatch.setattr(data, "load_snapshot", lambda: (observed, status))
+
+    # Both the quote panel and Mira's persisted report share the formatter.
+    city_services._market_snapshot_cached.cache_clear()
+    try:
+        snapshot = city_services.market_snapshot()
+    finally:
+        city_services._market_snapshot_cached.cache_clear()
+    result = city_services.run_agent("market_analyst", "fixture", {"operation": "collect_markets"})
+
+    assert result["market_points"] == len(observed)
+    assert result["market_data"] == snapshot["points"]
+    assert snapshot["points"][0]["value"] == 1e308
+    assert snapshot["points"][0]["change_display"] == "N/A"
+    assert "N/A" in result["text"]
+    assert "inf" not in result["text"].lower()
+    assert "inf" not in result["summary"].lower()
+    assert result["sentiment"]["signals"] == []
