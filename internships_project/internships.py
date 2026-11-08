@@ -11,6 +11,7 @@ import threading
 import time
 import unicodedata
 from difflib import SequenceMatcher
+from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, replace
@@ -198,7 +199,10 @@ JOBTEASER_CACHE_PATH = CACHE_PATH.with_name("jobteaser_sitemap_cache.json")
 CACHE_SECONDS = CACHE_REFRESH_SECONDS
 PUBLIC_UPDATE_DELAY_SECONDS = 3 * 3600
 JOBTEASER_CACHE_SECONDS = 24 * 3600
-SOURCE_CONNECTOR_VERSIONS = {"Société Générale Careers": 3, "BNP Paribas": 2, "BNP Paribas CIB": 2}
+SOURCE_CONNECTOR_VERSIONS = {
+    "Société Générale Careers": 3, "BNP Paribas": 2, "BNP Paribas CIB": 2,
+    "Amundi": 2, "Crédit Agricole CIB": 2, "Crédit Mutuel Arkéa": 2, "Covéa Finance": 2,
+}
 JOBTEASER_INDEX = "https://assets-cf.jobteaser.com/sitemaps/sitemap.xml"
 JOBTEASER_EMPLOYERS = {
     "bpifrance": "Bpifrance",
@@ -1830,7 +1834,7 @@ def _bnp_tal_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
 
 def _career_rss_jobs(company: str, host: str, contracts: tuple[int, ...]) -> list[Opportunity]:
     """Read the employer's public stage and VIE RSS feeds."""
-    links: dict[str, str] = {}
+    links: dict[str, tuple[str, str]] = {}
     last_error: Exception | None = None
     successful_feeds = 0
 
@@ -1841,8 +1845,11 @@ def _career_rss_jobs(company: str, host: str, contracts: tuple[int, ...]) -> lis
                 params={"LCID": 1036, "Rss_Contract": contract}, timeout=(4, 15),
             )
             response.raise_for_status()
-            return ElementTree.fromstring(response.content), None
-        except (requests.RequestException, ElementTree.ParseError) as exc:
+            root = ElementTree.fromstring(response.content)
+            if root.tag != "rss" or root.find("channel") is None:
+                raise ValueError(f"{host}: réponse sans flux RSS valide")
+            return root, None
+        except (requests.RequestException, ValueError, ElementTree.ParseError) as exc:
             return None, exc
 
     with ThreadPoolExecutor(max_workers=min(4, max(1, len(contracts))),
@@ -1858,13 +1865,28 @@ def _career_rss_jobs(company: str, host: str, contracts: tuple[int, ...]) -> lis
             url = (item.findtext("link") or "").strip()
             if not _market_relevant(title) or urlparse(url).hostname not in {host, f"www.{host}"}:
                 continue
-            links[url] = title
+            published = ""
+            try:
+                stamp = parsedate_to_datetime(item.findtext("pubDate") or "")
+                stamp = stamp.replace(tzinfo=stamp.tzinfo or timezone.utc).astimezone(timezone.utc)
+                if stamp.date() <= datetime.now(timezone.utc).date():
+                    published = stamp.date().isoformat()
+            except (TypeError, ValueError, OverflowError):
+                pass
+            # The same offer can occur in both contract feeds. Fetch its detail
+            # once, keeping a valid RSS date if another occurrence has none.
+            links[url] = (title, links.get(url, ("", ""))[1] or published)
     if not successful_feeds and last_error:
         raise last_error
     detail_errors: list[Exception] = []
-    def load(pair: tuple[str, str]) -> Opportunity | None:
+
+    def load(pair: tuple[str, tuple[str, str]]) -> Opportunity | None:
+        url, (title, published) = pair
         try:
-            return _career_detail(pair[0], company, pair[1])
+            job = _career_detail(url, company, title)
+            # Only the offer's pubDate is a publication fallback; channel dates
+            # and collection timestamps must not make an old vacancy look new.
+            return replace(job, published=published) if job and published and not job.published else job
         except (requests.RequestException, ValueError, TypeError) as exc:
             detail_errors.append(exc)
             return None
