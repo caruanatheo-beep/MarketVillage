@@ -49,3 +49,6 @@ internships_project/data/*.sqlite3-wal
 internships_project/data/candidate_profile.txt
 
 .city-worktrees/
+.city-asset-check/
+.city-startup-check/
+.pytest_city_tmp/
