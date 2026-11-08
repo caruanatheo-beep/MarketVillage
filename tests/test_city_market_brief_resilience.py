@@ -227,8 +227,8 @@ def test_overflowing_variation_preserves_quotes_without_infinite_display(
     assert result["market_points"] == len(observed)
     assert result["market_data"] == snapshot["points"]
     assert snapshot["points"][0]["value"] == 1e308
-    assert snapshot["points"][0]["change_display"] == "N/A"
-    assert "N/A" in result["text"]
+    assert snapshot["points"][0]["change_display"] == "Variation indisponible (calcul hors limites)"
+    assert "Variation indisponible" in result["text"]
     assert "inf" not in result["text"].lower()
     assert "inf" not in result["summary"].lower()
     assert result["sentiment"]["signals"] == []
