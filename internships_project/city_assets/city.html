@@ -18,6 +18,15 @@
     </div>
   </noscript>
   <div id="root"><div class="boot-screen">Ouverture de MarketDesk City…</div></div>
-  <script defer src="/city/city.js"></script>
+  <template id="city-load-error">
+    <div class="boot-screen">
+      <section class="boot-message" role="alert" aria-labelledby="city-load-error-title">
+        <h1 id="city-load-error-title">City n’a pas pu charger son interface</h1>
+        <p>Vérifie ta connexion, puis réessaie.</p>
+        <button type="button" onclick="window.location.reload()">Recharger City</button>
+      </section>
+    </div>
+  </template>
+  <script defer src="/city/city.js" onerror="document.getElementById('root').replaceChildren(document.getElementById('city-load-error').content.cloneNode(true))"></script>
 </body>
 </html>
