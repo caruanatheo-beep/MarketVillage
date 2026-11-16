@@ -23,7 +23,8 @@ def snapshot_recent(now: datetime, updated: str) -> bool:
 
 
 def main(now: datetime) -> None:
-    scheduled = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+    scheduled = (os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+                 or os.environ.get('INTERNSHIPS_RECOVERY') == 'true')
     active = not scheduled or collection_window_open(now)
     reason = "Collection window: open" if active else "Collection window: closed"
     if scheduled and active:

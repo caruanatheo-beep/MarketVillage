@@ -67,12 +67,14 @@ def test_workflow_gates_build_and_configures_hourly_checks():
     if not path.is_file():
         path = root / 'deploy/github-pages/pages.yml'
     workflow = path.read_text(encoding='utf-8')
-    assert "cron: '7,27,47 0-3,6-23 * * *'" in workflow
+    assert "cron: '13,33,53 * * * *'" in workflow
     assert 'timezone: Etc/UTC' in workflow
     assert 'needs: window' in workflow and "if: needs.window.outputs.active == 'true'" in workflow
     assert 'python3 scripts/internships_refresh_window.py' in workflow
     assert "INTERNSHIPS_SOURCE_CACHE_SECONDS: '3300'" in workflow
     assert 'PUBLIC_OFFERS_URL: https://caruanatheo-beep.github.io/Internships-Offres/offers.json' in workflow
+    assert 'INTERNSHIPS_RECOVERY: ${{ inputs.recovery }}' in workflow
+    assert "github.event_name != 'workflow_dispatch' || inputs.recovery" in workflow
 
 
 @pytest.mark.parametrize('age_minutes,expected', [(0,True),(54,True),(55,False),(180,False),(-1,False)])
@@ -92,7 +94,8 @@ def test_us_afternoon_is_inside_collection_window():
 
 
 @pytest.mark.parametrize('fresh,fetch_failed',[(True,False),(False,False),(False,True)])
-def test_scheduled_entrypoint_checks_public_snapshot_and_fails_open(tmp_path,monkeypatch,fresh,fetch_failed):
+@pytest.mark.parametrize('event,recovery',[('schedule',''),('workflow_dispatch','true')])
+def test_scheduled_entrypoint_checks_public_snapshot_and_fails_open(tmp_path,monkeypatch,fresh,fetch_failed,event,recovery):
     import io
     from scripts import internships_refresh_window as window
     now=datetime(2026,11,12,21,30,tzinfo=timezone.utc)
@@ -103,7 +106,8 @@ def test_scheduled_entrypoint_checks_public_snapshot_and_fails_open(tmp_path,mon
         return io.BytesIO(('{"updated":"'+updated+'"}').encode())
     monkeypatch.setattr(window,'urlopen',open_snapshot)
     output=tmp_path/'output'
-    monkeypatch.setenv('GITHUB_EVENT_NAME','schedule')
+    monkeypatch.setenv('GITHUB_EVENT_NAME',event)
+    monkeypatch.setenv('INTERNSHIPS_RECOVERY',recovery)
     monkeypatch.setenv('GITHUB_OUTPUT',str(output))
     monkeypatch.setenv('PUBLIC_OFFERS_URL','https://example.invalid/offers.json')
     window.main(now)

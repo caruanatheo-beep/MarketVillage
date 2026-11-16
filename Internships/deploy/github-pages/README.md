@@ -18,7 +18,7 @@ minimum et les métiers Middle Office, KYC et finance corporate restent exclus.
 GitHub Pages sert uniquement les fichiers HTML/CSS/JS, logos PNG et offres publiques.
 La collecte Python vise une actualisation horaire, de 8 h à Paris jusqu'à
 22 h à New York inclus, tous les jours et indépendamment du PC. Trois créneaux
-à h 07, h 27 et h 47 permettent de rattraper un déclenchement manqué. La collecte
+à h 13, h 33 et h 53 permettent de rattraper un déclenchement manqué. La collecte
 est ignorée si les données publiées ont moins de 55 minutes ; les lancements
 manuels restent disponibles. Une erreur de lecture de la date autorise la reprise.
 La plage se ferme à 5 h le lendemain à Paris, ou à 4 h pendant les semaines
@@ -28,6 +28,10 @@ sources expirent après 55 minutes pour permettre une nouvelle vérification à
 chaque cycle ; les délais de reprise des sources en erreur restent respectés.
 GitHub peut retarder ou omettre des déclenchements : ces créneaux réduisent le
 risque sans garantir une cadence horaire stricte.
+Le dépôt principal MarketVillage fournit aussi un secours Windows : toutes les
+15 minutes, il peut relancer ce workflow si le catalogue a plus d'une heure et
+qu'aucune exécution n'est active. Ce secours exige un PC allumé et une session
+ouverte ; son mode `recovery` revérifie les horaires et la fraîcheur côté GitHub.
 
 ## Sécurité
 

@@ -9,10 +9,14 @@ on:
         description: Envoyer un mail de test à mon adresse (optionnel)
         type: boolean
         default: false
+      recovery:
+        description: Rattrapage automatique si le catalogue est ancien
+        type: boolean
+        default: false
   schedule:
     # Retry slots compensate for missed/delayed schedule delivery. The window
     # job skips collection when the published snapshot is under 55 minutes old.
-    - cron: '7,27,47 0-3,6-23 * * *'
+    - cron: '13,33,53 * * * *'
       timezone: Etc/UTC
 
 permissions:
@@ -36,6 +40,7 @@ jobs:
         id: window
         env:
           PUBLIC_OFFERS_URL: https://caruanatheo-beep.github.io/Internships-Offres/offers.json
+          INTERNSHIPS_RECOVERY: ${{ inputs.recovery }}
         run: python3 scripts/internships_refresh_window.py
 
   build:
@@ -68,10 +73,10 @@ jobs:
       - name: Check filter menus in Chromium
         run: python -m pytest -q tests/test_pages_filters.py tests/test_pages_sources.py tests/test_source_catalog.py
       - name: Collect public employer offers and build static site
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name != 'workflow_dispatch' || inputs.recovery
         run: xvfb-run --auto-servernum python scripts/build_internships_pages.py --collect --output _site
       - name: Manually refresh all public sources and build static site
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && !inputs.recovery
         run: xvfb-run --auto-servernum python scripts/build_internships_pages.py --collect --force --output _site
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
