@@ -54,6 +54,7 @@ LEVER = {
 }
 ASHBY = {}
 WORKDAY = {
+    "Murex": ("murex.wd3.myworkdayjobs.com", "murex", "MurexCareerPage1"),
     "PIMCO": ("pimco.wd1.myworkdayjobs.com", "pimco", "pimco-careers"),
     "FactSet": ("factset.wd108.myworkdayjobs.com", "factset", "FactSetCareers"),
     "Capital Group": ("capgroup.wd1.myworkdayjobs.com", "capgroup", "capitalgroupcareers"),
@@ -328,6 +329,7 @@ JOBTEASER_CITIES = {
 # Brand icons are requested from the employer's own site. If an icon is absent,
 # the card keeps its initials; no third-party logo service receives the visit.
 COMPANY_ICON_HOSTS = {
+    "murex": "www.murex.com",
     "pimco": "www.pimco.com",
     "jumptrading": "www.jumptrading.com",
     "fiverings": "fiverings.com",
@@ -1118,6 +1120,21 @@ def _pimco_relevant(title: str, context: str = "", *, candidate: bool = False) -
     return _market_relevant_with_context(title, context)
 
 
+def _murex_relevant(title: str, context: str = "", *, candidate: bool = False) -> bool:
+    """Select client-facing markets solutions, not software or operations roles."""
+    if (not re.search(r"\b(?:trading|fixed income|rates|fx|client solutions)\b", title, re.I)
+            or re.search(r"\b(?:senior|sr|lead|head|manager|director|engineer|developer|"
+                         r"operations|back office|retail|corporate)\b", title, re.I)):
+        return False
+    if not context:
+        return candidate  # A listing is only a candidate until its live detail is read.
+    return bool(not _experienced_junior(context)
+        and re.search(r"\b(?:client support|client-facing|client solutions|client requirements|"
+                      r"client.s requirements)\b", context, re.I)
+        and re.search(r"\b(?:financial instruments|foreign exchange|fixed income|"
+                      r"derivatives|swaps|bonds)\b", context, re.I))
+
+
 def _opportunity(title: str, company: str, location: str, employment: str,
                  url: str, published: str, start_period: str = "",
                  role_context: str = "", *, defer_junior_context: bool = False) -> Opportunity | None:
@@ -1127,7 +1144,9 @@ def _opportunity(title: str, company: str, location: str, employment: str,
             _factset_kind(title, employment, role_context) if company == "FactSet" else
             _morgan_stanley_kind(title, employment, role_context)
             if company == "Morgan Stanley" else _kind(title, employment))
-    market = (_pimco_relevant(title, role_context, candidate=defer_junior_context)
+    market = (_murex_relevant(title, role_context, candidate=defer_junior_context)
+              if company == "Murex" else
+              _pimco_relevant(title, role_context, candidate=defer_junior_context)
               if company == "PIMCO" else _market_relevant_with_context(title, role_context))
     if company == "FactSet" and _factset_client_solutions(title):
         market = True
@@ -1148,7 +1167,7 @@ def _opportunity(title: str, company: str, location: str, employment: str,
     family = _family(title, role_context)
     if company == "PIMCO" and _pimco_client_role(title):
         family = "Asset Management" if re.search(r"\bproduct\b", title, re.I) else "Client Service / Financial Solutions"
-    elif company == "FactSet" and _factset_client_solutions(title):
+    elif company == "Murex" or company == "FactSet" and _factset_client_solutions(title):
         family = "Client Service / Financial Solutions"
     return Opportunity(title, company, location, kind, url, published[:10], score, start_period,
                        family, "", datetime.now(timezone.utc).date().isoformat(), employment=employment)
@@ -3809,7 +3828,7 @@ def _pictet_jobs() -> list[Opportunity]:
 
 
 def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) -> list[Opportunity]:
-    verified_feed = company in {"TP ICAP", "Capital Group", "FactSet", "PIMCO"}
+    verified_feed = company in {"TP ICAP", "Capital Group", "FactSet", "PIMCO", "Murex"}
     if company == "BBVA" and _client is None:
         # Reuse one connection: repeated parallel TLS connections to BBVA time out.
         with requests.Session() as session:
@@ -3960,7 +3979,7 @@ def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) ->
                 if (info.get("canApply") is not True or not info.get("title")
                         or not description or not info.get("location")):
                     raise ValueError("Fiche Workday incomplète")
-                if company == "PIMCO":
+                if company in {"PIMCO", "Murex"}:
                     locations = [location] + [place for place in (info.get("additionalLocations") or [])
                                               if isinstance(place, str) and place.strip()]
                     location = "; ".join(dict.fromkeys(locations))
@@ -4037,7 +4056,7 @@ def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) ->
             return job
 
     selected = dict(sorted(candidates.items(), key=lambda pair: -pair[1].score)[:50])
-    if company in {"Capital Group", "FactSet", "PIMCO"}:
+    if company in {"Capital Group", "FactSet", "PIMCO", "Murex"}:
         selected = dict(candidates)  # Every offer needs a verified live detail.
     selected.update((path, job) for path, job in candidates.items() if _junior_analyst(job.title))
     selected = list(selected.items())
@@ -4561,7 +4580,8 @@ def _eligible_offer(job: Opportunity) -> bool:
         return False
     return (not _excluded_employer(job.company)
             and not (job.kind == "Graduate" and _junior_analyst(job.title) and _experienced_junior(job.description))
-            and (_pimco_relevant(job.title, job.description) if job.company == "PIMCO" else
+            and (_murex_relevant(job.title, job.description) if job.company == "Murex" else
+                 _pimco_relevant(job.title, job.description) if job.company == "PIMCO" else
                  _market_relevant_with_context(job.title, job.description)
                  or job.company == "FactSet" and _factset_client_solutions(job.title))
             and (job.source == "JobTeaser · sitemap" or _plausible_location(job.location)))
@@ -4580,6 +4600,8 @@ def _deduplicate_opportunities(jobs: list[Opportunity]) -> list[Opportunity]:
         # A repeated requisition may collapse; different employer IDs must survive.
         requisition = (re.search(r"_(R\d+)(?:-\d+)?$", urlparse(job.url).path)
                        if _canonical_company(job.company) == "factset" else None)
+        if _canonical_company(job.company) == "murex":
+            requisition = re.search(r"_(JR\d+)(?:-\d+)?$", urlparse(job.url).path)
         greenhouse_board = {"drw": "drweng", "fiverings": "fiveringsllc",
                             "jumptrading": "jumptrading"}.get(_canonical_company(job.company))
         if greenhouse_board:
