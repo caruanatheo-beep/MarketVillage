@@ -58,5 +58,15 @@ internships_project/data/candidate_profile.txt
 # Local agent configuration and disposable test workspaces
 .agents/
 .codex/
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .test-*/
+
+# Shared private storage must never be duplicated into an application folder
+Markets/data/
+City/internships_project/data/
+Internships/internships_project/data/
+.agent-test-*/
+.pytest-tmp-*/
+.marketdesk_pytest_tmp/
+.pytest_city_final2/

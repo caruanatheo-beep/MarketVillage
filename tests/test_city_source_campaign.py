@@ -154,14 +154,16 @@ def test_completed_predecessor_does_not_delay_verification_of_following_publicat
     assert calls==['1'*40,'2'*40]
     assert all(record['publication_status']=='published' for record in state['results'])
 
-def test_publication_never_pushes_if_candidate_tests_fail(tmp_path,monkeypatch):
+@pytest.mark.parametrize('prefix',['','Internships/'])
+def test_publication_never_pushes_if_candidate_tests_fail(tmp_path,monkeypatch,prefix):
     from internships_project import city_source_campaign as module
+    from internships_project import city_source_merge
     monkeypatch.setattr(module,'repo_root',lambda:tmp_path)
     calls=[]
     def execute(args,cwd,**kwargs):
         calls.append(args)
         if args[0]==module.sys.executable:raise RuntimeError('Tests failed')
-        if args[1]=='diff-tree':return b'internships_project/internships.py\n'
+        if args[1]=='diff-tree':return (prefix+'internships_project/internships.py\n').encode()
         if args[1]=='remote' and args[2]=='get-url':return module.REPOSITORY.encode()
         if args[1]=='rev-parse':return b'a'*40
         if args[1]=='diff':return b'public patch'
@@ -170,6 +172,11 @@ def test_publication_never_pushes_if_candidate_tests_fail(tmp_path,monkeypatch):
             (target/'internships_project/internships.py').write_text('value=1\n')
         return b''
     monkeypatch.setattr(module,'command',execute)
+    def mapped_delta(root,base,head,target,names,*,target_names):
+        assert names == ['Internships/internships_project/internships.py']
+        assert target_names == {names[0]:'internships_project/internships.py'}
+        assert (target/'internships_project/internships.py').is_file()
+    monkeypatch.setattr(city_source_merge,'apply_source_delta',mapped_delta)
     with pytest.raises(RuntimeError,match='Tests failed'):module.publish('a'*40,tmp_path/'release')
     assert not any(len(args)>1 and args[1]=='push' for args in calls)
 

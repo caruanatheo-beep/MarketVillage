@@ -28,7 +28,7 @@ except ModuleNotFoundError:
     # Environment variables can configure City without the optional local .env helper.
     pass
 else:
-    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 from .accounts import account_exists, authenticate
 from .city_routes import add_city_routes
@@ -193,7 +193,7 @@ def startup():
     if len(secret) < 32:
         raise RuntimeError("Définis MARKETDESK_CITY_SESSION_KEY avec une valeur aléatoire d'au moins 32 caractères pour un hébergement public.")
     _key = secret.encode()
-    repository = Path(__file__).resolve().parents[1]
+    repository = Path(__file__).resolve().parents[2]
     try:
         revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=repository, capture_output=True,
                                   text=True, timeout=5, check=True,

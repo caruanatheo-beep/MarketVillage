@@ -68,7 +68,8 @@ def test_one_active_source_category_date_and_official_png():
 
 
 @pytest.mark.skipif(not all(
-    (Path(__file__).resolve().parents[1] / 'deploy/github-pages/site' / asset).is_file()
+    (Path(__file__).resolve().parents[1] / 'Internships/deploy/github-pages/site' / asset).is_file()
+    or (Path(__file__).resolve().parents[1] / 'deploy/github-pages/site' / asset).is_file()
     for asset in ('index.html', 'site.css', 'app.js', 'sources.js', 'marketdesk-icon.svg')),
     reason='Static Pages assets are absent from this isolated checkout')
 def test_source_and_offer_export_share_the_bundled_official_logo(feed, tmp_path, monkeypatch):

@@ -320,7 +320,7 @@ if __name__ == "__main__":
 
     from dotenv import load_dotenv
 
-    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+    load_dotenv((Path(__file__).resolve().parents[2] if Path(__file__).resolve().parents[1].name == "Internships" else Path(__file__).resolve().parents[1]) / ".env")
 
     parser = argparse.ArgumentParser(description="Tester les alertes offres")
     action = parser.add_mutually_exclusive_group(required=True)

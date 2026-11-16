@@ -16,13 +16,14 @@ from .city_coding import codex_environment
 from .city_specialists import repo_root
 from .marketdesk_city import CityStore, SACHA_DAILY_SOURCE_REQUEST
 from .public_safety import assert_public, public_job_url, company_logo_path
+from project_layout import legacy_path
 
 REPOSITORY = 'https://github.com/caruanatheo-beep/Internships-Offres.git'
 SUGGESTIONS_URL='https://marketdesk-source-suggestions.source-suggestions.workers.dev/suggestions'
 REQUEST = SACHA_DAILY_SOURCE_REQUEST + (
-    '\nPérimètre publiable : internships_project/internships.py, internships_project/source_catalog.py, internships_project/source_coverage.py '
-    'tests/test_internships_*.py et assets/company_logos/*.png sous internships_project. Préserve auth, workflows, UI, secrets et dépendances. '
-    'Bilan : candidats étudiés (dont propositions), motif de sélection, URLs vérifiées et tests.')
+    '\nCode local sous Internships/internships_project/ : internships.py, source_catalog.py, source_coverage.py, SOURCES.md, assets/company_logos/*.png ; '
+    'tests/test_internships_*.py. Préserve auth, workflows, UI, secrets et dépendances. '
+    'Bilan : candidats (dont propositions), sélection, URLs vérifiées, tests.')
 
 
 def _source_helper_environment() -> dict:
@@ -166,6 +167,9 @@ def archive_integrated_suggestions() -> dict:
 
 
 def allowed(name: str) -> bool:
+    if name.startswith(('City/', 'Markets/')):
+        return False
+    name = legacy_path(name)
     return (name in {'internships_project/internships.py', 'internships_project/source_catalog.py', 'internships_project/SOURCES.md',
                     'internships_project/source_coverage.py','tests/test_source_catalog.py'}
             or company_logo_path(name)
@@ -222,14 +226,18 @@ def publish(commit: str, release: Path) -> str:
     if not re.fullmatch('[a-f0-9]{40}', commit):
         raise ValueError('Invalid integration revision')
     root = repo_root()
-    names = command(['git','diff-tree','--no-commit-id','--name-only','-r',commit],root).decode().splitlines()
+    source_names = command(['git','diff-tree','--no-commit-id','--name-only','-r',commit],root).decode().splitlines()
+    names = [legacy_path(name) for name in source_names]
+    source_by_public = dict(zip(names, source_names))
+    if len(source_by_public) != len(source_names):
+        raise ValueError('Ambiguous publication paths')
     if (not names or not any(name.startswith('internships_project/') for name in names)
-            or any(not allowed(name) for name in names)):
+            or any(not allowed(name) for name in source_names)):
         raise ValueError('Mission contains files outside the authorized publication scope')
     remote = command(['git','remote','get-url','origin'],release).decode().strip()
     if remote != REPOSITORY:
         raise ValueError('Unexpected public repository')
-    patch = command(['git','diff','--binary',commit+'^',commit,'--',*names],root)
+    patch = command(['git','diff','--binary',commit+'^',commit,'--',*source_names],root)
     assert_public(patch, 'Sacha source patch')
     command(['git','fetch','origin','main'], release)
     base = command(['git','rev-parse','origin/main'], release).decode().strip()
@@ -243,21 +251,27 @@ def publish(commit: str, release: Path) -> str:
             if coverage not in names or (target/coverage).exists():continue
             # The public exporter predates this public-only metadata module.
             # Bootstrap its exact reviewed revision, never the current workspace.
-            content=command(['git','show',commit+':'+coverage],root)
+            content=command(['git','show',commit+':'+source_by_public[coverage]],root)
             assert_public(content,coverage)
             (target/coverage).write_bytes(content)
             bootstrapped.append(coverage)
         if bootstrapped:
-            patch_names=[name for name in names if name not in bootstrapped]
+            patch_names=[source_by_public[name] for name in names if name not in bootstrapped]
             patch=command(['git','diff','--binary',commit+'^',commit,'--',*patch_names],root)
             assert_public(patch,'Sacha source patch')
-        try:
-            command(['git','apply','--check','-'], target, data=patch)
-        except PublicationCommandError:
+        if source_names != names:
             from .city_source_merge import apply_source_delta
-            apply_source_delta(root,commit+'^',commit,target,[name for name in names if name not in bootstrapped])
+            selected=[source_by_public[name] for name in names if name not in bootstrapped]
+            apply_source_delta(root,commit+'^',commit,target,selected,
+                               target_names={name:legacy_path(name) for name in selected})
         else:
-            command(['git','apply','-'], target, data=patch)
+            try:
+                command(['git','apply','--check','-'], target, data=patch)
+            except PublicationCommandError:
+                from .city_source_merge import apply_source_delta
+                apply_source_delta(root,commit+'^',commit,target,[name for name in names if name not in bootstrapped])
+            else:
+                command(['git','apply','-'], target, data=patch)
         for name in names:
             path = target/name
             if not path.is_file() or path.is_symlink():
@@ -384,7 +398,7 @@ def _tick_lane(state: dict, store: CityStore, now: datetime, *, publisher=publis
             result=json.loads(row['result_json'] or '{}')
             files=result.get('files') or []
             if (row['id'] not in known and result.get('integrated')
-                    and {'internships_project/internships.py','internships_project/source_catalog.py'} <= set(files)
+                    and {'internships_project/internships.py','internships_project/source_catalog.py'} <= {legacy_path(name) for name in files}
                     and all(allowed(name) for name in files)):
                 publish_task(state,store,{'id':row['id'],'status':'completed','result':result},publisher)
                 return state

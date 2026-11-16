@@ -166,9 +166,9 @@ def test_manual_refresh_also_rechecks_jobteaser_sitemap(tmp_path, monkeypatch, o
 
 
 def test_frontend_has_no_external_services_or_unsafe_html():
-    source = Path("deploy/github-pages/site/app.js").read_text(encoding="utf-8")
+    source = (builder.SITE_ROOT / "app.js").read_text(encoding="utf-8")
     assert "innerHTML" not in source and "eval(" not in source and "document.write" not in source
     assert "textContent" in source
-    html = Path("deploy/github-pages/site/index.html").read_text(encoding="utf-8")
+    html = (builder.SITE_ROOT / "index.html").read_text(encoding="utf-8")
     assert "Content-Security-Policy" in html and "default-src 'none'" in html
     assert "unsafe-inline" not in html and "unsafe-eval" not in html

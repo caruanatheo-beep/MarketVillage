@@ -1,6 +1,8 @@
 """Isolated code snapshots and tested patches; never stage the user's workspace."""
 from __future__ import annotations
 
+from project_layout import legacy_path, source_path
+
 import hashlib
 import json
 import os
@@ -14,11 +16,12 @@ from .public_safety import company_logo_path
 
 
 def code_path(name: str) -> bool:
+    name = legacy_path(name)
     path = Path(name)
     excluded = {'node_modules', 'vendor', '__pycache__', 'data', 'user_data', 'exports', 'cache', 'cvs'}
     if any(part.lower() in excluded or part.startswith('.') for part in path.parts):
         return False
-    if name in {'AGENTS.md', 'app.py', 'app_internships.py', 'requirements.txt', 'pyproject.toml', 'pytest.ini',
+    if name in {'project_layout.py', 'AGENTS.md', 'app.py', 'app_internships.py', 'requirements.txt', 'pyproject.toml', 'pytest.ini',
                 'internships_project/SOURCES.md'}:
         return True
     if not name.startswith(('internships_project/', 'src/', 'tests/', 'scripts/')):
@@ -114,11 +117,11 @@ def integrate_patch(root: Path, directory: Path, revision: str, files: list[str]
         try:
             base, stamp = snapshot(root, target)
             patch = parent/'mission.patch'
-            frontend_changed = any(name.startswith('internships_project/city_frontend/src/') for name in files)
+            frontend_changed = any(legacy_path(name).startswith('internships_project/city_frontend/src/') for name in files)
             # Rebuild the shared bundle from the combined sources; an older generated bundle
             # must neither overwrite another agent's UI change nor create a false conflict.
             patch_files = [name for name in files if not (
-                frontend_changed and name == 'internships_project/city_assets/city.js')]
+                frontend_changed and legacy_path(name) == 'internships_project/city_assets/city.js')]
             patch.write_bytes(_patch(directory, revision, 'HEAD', '--', *patch_files))
             already_applied = False
             try:
@@ -137,7 +140,7 @@ def integrate_patch(root: Path, directory: Path, revision: str, files: list[str]
                 on_progress('Vérification du résultat avec les modifications locales actuelles, dans une copie isolée.')
             test_file = checks(root, target, files, agent_id)
             if frontend_changed:
-                bundle = 'internships_project/city_assets/city.js'
+                bundle = source_path('internships_project/city_assets/city.js', target).relative_to(target).as_posix()
                 if bundle not in files:
                     files.append(bundle)
             git(target, 'add', '-A', '--', *files)
@@ -163,7 +166,7 @@ def integrate_patch(root: Path, directory: Path, revision: str, files: list[str]
                     'frontend build' if any(name.endswith('.tsx') for name in files) else 'Python syntax']}
         finally:
             # Only the disposable worktree created above is removed; its source branch remains.
-            dependencies = target/'internships_project/city_frontend/node_modules'
+            dependencies = source_path('internships_project/city_frontend', target)/'node_modules'
             if dependencies.is_junction():
                 os.rmdir(dependencies)
             elif dependencies.is_symlink():

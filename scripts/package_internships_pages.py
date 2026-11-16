@@ -8,10 +8,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from project_layout import source_path
 from internships_project.public_safety import assert_public, validate_snapshot
 
 FILES = {
-    "internships_project/__init__.py": "internships_project/__init__.py",
+    "Internships/internships_project/__init__.py": "internships_project/__init__.py",
     "internships_project/internships.py": "internships_project/internships.py",
     "internships_project/public_safety.py": "internships_project/public_safety.py",
     "internships_project/source_catalog.py": "internships_project/source_catalog.py",
@@ -47,10 +48,10 @@ FILES = {
 def package_repository(output: Path, seed: Path) -> int:
     if output.exists() and any(output.iterdir()):
         raise ValueError("Repository staging directory must be empty")
-    files = {target: ROOT / source for source, target in FILES.items()}
+    files = {target: source_path(source, ROOT) for source, target in FILES.items()}
     files["public_seed.json"] = seed
     validate_snapshot(json.loads(seed.read_bytes()))
-    for path in (ROOT / "internships_project/assets/company_logos").glob("*.png"):
+    for path in source_path("internships_project/assets/company_logos", ROOT).glob("*.png"):
         files[f"internships_project/assets/company_logos/{path.name}"] = path
     for name, path in files.items():
         if not path.is_file() or path.is_symlink():

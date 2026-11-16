@@ -256,7 +256,7 @@ CACHE_REFRESH_SECONDS = 3600
 # Career feeds are independent and I/O-bound. Twelve outer workers reduce
 # queueing while keeping source-level concurrency explicitly bounded.
 SOURCE_COLLECTION_WORKERS = 12
-CACHE_PATH = Path(os.getenv("INTERNSHIPS_DATA_DIR", str(Path(__file__).resolve().parent / "data"))) / "internships_cache.json"
+CACHE_PATH = Path(os.getenv("INTERNSHIPS_DATA_DIR", str((Path(__file__).resolve().parents[2] / "internships_project" / "data" if Path(__file__).resolve().parents[1].name == "Internships" else Path(__file__).resolve().parent / "data")))) / "internships_cache.json"
 JOBTEASER_CACHE_PATH = CACHE_PATH.with_name("jobteaser_sitemap_cache.json")
 CACHE_SECONDS = CACHE_REFRESH_SECONDS
 PUBLIC_UPDATE_DELAY_SECONDS = 3 * 3600

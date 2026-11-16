@@ -57,7 +57,7 @@ REPORT_LIMITS: dict[str, tuple[int, ...]] = {
     "Event Preview": (3, 4, 4, 4, 5, 5),
 }
 
-RAG_ROOT = Path(__file__).resolve().parents[1] / "rag_documents"
+RAG_ROOT = Path(__file__).resolve().parents[2] / "rag_documents"
 RAG_CACHE = RAG_ROOT / "rag_index.json"
 RAG_MANIFEST = RAG_ROOT / "rag_manifest.json"
 RAG_DOCUMENTS = {

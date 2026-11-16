@@ -8,7 +8,7 @@ import pytest
 from playwright.sync_api import sync_playwright
 
 
-CSS = (Path(__file__).resolve().parents[1] / "internships_project" /
+CSS = (Path(__file__).resolve().parents[1] / "City" / "internships_project" /
        "city_assets" / "city.css").read_text(encoding="utf-8")
 
 

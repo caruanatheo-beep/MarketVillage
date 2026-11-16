@@ -1,6 +1,8 @@
 """Jules uses the local ChatGPT-authenticated Codex CLI in a separate worktree."""
 from __future__ import annotations
 
+from project_layout import legacy_path, source_path
+
 import difflib
 import json
 import os
@@ -212,10 +214,10 @@ def review_repository() -> dict:
     binary, env = codex_binary(), codex_environment()
     require_chatgpt(binary, env)
     revision = git(root,'rev-parse','HEAD')
-    candidates = git(root,'ls-files','--','internships_project/city_*.py',
-                     'internships_project/marketdesk_city.py',
+    candidates = git(root,'ls-files','--','City/internships_project/city_*.py', 'internships_project/city_*.py',
+                     'City/internships_project/marketdesk_city.py', 'internships_project/marketdesk_city.py',
                      'internships_project/city_frontend/src/NotificationCenter.tsx',
-                     'internships_project/city_frontend/src/main.tsx').splitlines()
+                     'internships_project/city_frontend/src/main.tsx', 'City/internships_project/city_frontend/src/NotificationCenter.tsx', 'City/internships_project/city_frontend/src/main.tsx').splitlines()
     excerpts = []
     remaining = 60000
     for name in candidates:
@@ -649,7 +651,7 @@ def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
                     files: list[str], agent_id: str, *, committed: bool = False,
                     on_progress: Callable[[str], None] | None = None) -> dict:
     """Validate the current integration candidate, then apply one completed branch at a time."""
-    allowed = ('internships_project/', 'src/', 'tests/', 'scripts/', '.github/workflows/')
+    allowed = ('City/', 'Internships/', 'Markets/', 'internships_project/', 'src/', 'tests/', 'scripts/', '.github/workflows/')
     for name in files:
         path = directory / name
         deleted_tracked_file = False
@@ -698,7 +700,7 @@ def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
         git(root, 'merge', '--ff-only', branch)
     return {'integrated': True, 'commit': commit, 'rebased': current != revision,
             'server_checks': [test_file, 'frontend build' if any(
-            name.startswith('internships_project/city_frontend/src/') for name in files) else 'Python syntax']}
+            legacy_path(name).startswith('internships_project/city_frontend/src/') for name in files) else 'Python syntax']}
 
 
 def _integration_checks(root: Path, directory: Path, files: list[str], agent_id: str,
@@ -753,9 +755,9 @@ def _integration_checks(root: Path, directory: Path, files: list[str], agent_id:
         missing = re.search(r'^ERROR: file or directory not found: (tests[\\/][^\s]+)', output, re.MULTILINE)
         detail = (failed or missing).group(1) if (failed or missing) else 'résultat non disponible'
         raise CityError('Tests serveur en échec : '+detail+'. Intégration suspendue ; consulte la branche de travail.')
-    if any(name.startswith('internships_project/city_frontend/src/') for name in files):
-        frontend = directory/'internships_project/city_frontend'
-        dependencies = root/'internships_project/city_frontend/node_modules'
+    if any(legacy_path(name).startswith('internships_project/city_frontend/src/') for name in files):
+        frontend = source_path('internships_project/city_frontend', directory)
+        dependencies = source_path('internships_project/city_frontend', root)/'node_modules'
         node = next(iter(sorted((root/'.codex-tools/node24').glob('node-v*-win-x64/node.exe'), reverse=True)), None)
         if node is None and (root/'.codex-tools/node22-city-build/node.exe').is_file():
             node = root/'.codex-tools/node22-city-build/node.exe'
@@ -781,7 +783,7 @@ def _integration_checks(root: Path, directory: Path, files: list[str], agent_id:
                                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
             if build.returncode:
                 raise CityError('Build frontend en échec : intégration suspendue.')
-        bundle = 'internships_project/city_assets/city.js'
+        bundle = source_path('internships_project/city_assets/city.js', directory).relative_to(directory).as_posix()
         if bundle not in files:
             files.append(bundle)
     return test_file

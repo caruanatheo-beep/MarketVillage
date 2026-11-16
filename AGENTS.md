@@ -2,11 +2,14 @@
 
 This repository contains three separate applications: Markets (`app.py`), Internships (`app_internships.py`), and MarketDesk City (`python -m internships_project.city_app`). Keep their interfaces and route registration separate; MarketDesk City must not be embedded in the Internships app. Shared server-side services may be reused where needed.
 
+Canonical source locations: `Markets/src/`, `Internships/internships_project/`, and `City/internships_project/`. Launchers live in each project's `app.py`. Root entry points and the `src` / `internships_project` namespaces provide compatibility only. Keep private shared storage in the existing root `internships_project/data/`; do not create replacement databases under the application folders. City frontend/assets live under `City/internships_project/`; public-site deployment sources live under `Internships/deploy/`. Source publications must translate local `Internships/` paths to the existing Internships-Offres layout.
+
 - Start with a narrow `rg --files` or `rg -n` search and read only the files needed for the task. Do not dump entire directories, generated assets, caches, or logs.
 - For cross-file questions, query the local Graphify index first: `.codex-tools/python312/python.exe scripts/graphify.py query "<question>" --budget 1200`. Use source files to verify the answer. Run `update .` only after relevant code changes or when the index is stale.
 - In isolated `.city-worktrees/` checkouts, ignored `.codex-tools/` and `graphify-out/` are unavailable. Use `rg` and the checked-out source files there; do not retry Graphify or install it in the worktree.
 - Reuse existing components, services, and tests. Make the smallest complete change, including necessary callers and validation; avoid duplicate implementations and speculative scaffolding.
 - Keep `.env`, user data, CVs, exports, and authentication material out of search output, Graphify, and commits. Graphify exclusions live in `.graphifyignore`.
 - Run the focused test or build for the touched area. Expand testing only to resolve a concrete risk.
+- Use `scripts/city_test.py` for local pytest runs; it allocates temporary fixtures outside the workspace and cleans them afterward. Do not create `.test-*`, `.agent-test-*` or random temporary directories at the repository root. Keep durable diagnostics under ignored `artifacts/`.
 - Publish substantial validated changes to this repository's GitHub origin. Check the staged files for private data, commit the complete implementation and push the current branch without force. Report the commit link and distinguish source publication from deployment; publish the separate Internships Pages repository when that live site is affected.
 - Preserve existing auth, APIs, and user data. Do not enable third-party hooks, model gateways, or new paid APIs without explicit approval.

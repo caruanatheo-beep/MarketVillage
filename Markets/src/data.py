@@ -441,7 +441,7 @@ class FredCollector:
 
     def _fetch_all_windows_guarded(self) -> list[MarketPoint]:
         """Enforce a real wall-clock deadline around Windows network calls."""
-        root = Path(__file__).resolve().parents[1]
+        root = Path(__file__).resolve().parents[2]
         env = os.environ.copy()
         env["FRED_ISOLATED_WORKER"] = "1"
         try:

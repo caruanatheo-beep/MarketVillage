@@ -1,3 +1,4 @@
-"""AI Sales Desk Assistant package."""
+"""Compatibility namespace for Markets services used by City."""
+from pathlib import Path
 
-__version__ = "1.0.0"
+__path__ = [str(Path(__file__).resolve().parents[1] / 'Markets' / 'src')]

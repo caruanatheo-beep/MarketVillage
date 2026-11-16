@@ -11,7 +11,7 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import build_opener, ProxyHandler
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 APPS = {"markets": "app.py", "internships": "app_internships.py"}
 _lock = threading.Lock()
 _children: dict[str, tuple[subprocess.Popen, int]] = {}

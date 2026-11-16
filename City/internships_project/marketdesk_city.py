@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from project_layout import legacy_path
+
 import json
 import hashlib
 import heapq
@@ -2009,8 +2011,8 @@ class CityStore:
             if result.get('integrated'):
                 # City cannot certify activation in the separate Markets/Internships servers.
                 source_files = [name for name in result.get('files', []) if not name.startswith('tests/')]
-                city_only = bool(source_files) and all(name.startswith('internships_project/city_') or
-                    name in {'internships_project/marketdesk_city.py', 'scripts/city_start.py'}
+                city_only = bool(source_files) and all(legacy_path(name).startswith('internships_project/city_') or
+                    legacy_path(name) in {'internships_project/marketdesk_city.py', 'scripts/city_start.py'}
                     for name in source_files)
                 task['result']['live'] = (result.get('commit') in self.active_commits
                                           if self.active_revision and city_only else None)
@@ -2374,7 +2376,7 @@ class CityWorker:
             try:
                 self.store.heartbeat(task_id)
                 from .city_source_strategy import sync_source_controls
-                sync_source_controls(Path(__file__).resolve().parents[1],task_id)
+                sync_source_controls(Path(__file__).resolve().parents[2],task_id)
             except (sqlite3.Error,OSError) as exc:
                 # Keep tracking the active mission after a temporary storage
                 # failure; otherwise recovery can discard its eventual result.

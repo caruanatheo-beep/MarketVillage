@@ -23,7 +23,7 @@ from .internships import _is_paris, start_month
 from .state_store import local_state_enabled
 
 
-PROFILE_PATH = Path(__file__).resolve().parent / "data" / "candidate_profile.txt"
+PROFILE_PATH = (Path(__file__).resolve().parents[2] / "internships_project" / "data" if Path(__file__).resolve().parents[1].name == "Internships" else Path(__file__).resolve().parent / "data") / "candidate_profile.txt"
 _evidence_cache: dict[tuple[str, str], tuple[float, tuple[str, str]]] = {}
 _evidence_lock = threading.Lock()
 

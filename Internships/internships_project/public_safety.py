@@ -48,6 +48,8 @@ def public_job_url(value: str) -> str:
 
 
 def company_logo_path(name: str) -> bool:
+    if name.startswith("Internships/"):
+        name = name[len("Internships/"):]
     return bool(re.fullmatch(r'internships_project/assets/company_logos/[a-z0-9]+(?:[.-][a-z0-9]+)*\.png',name))
 
 

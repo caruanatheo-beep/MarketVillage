@@ -53,11 +53,12 @@ def merge_source_bytes(base: bytes, mission: bytes, current: bytes) -> bytes:
     return merged.encode('utf-8')
 
 
-def apply_source_delta(repository: Path, base: str, head: str, target: Path, names: list[str]) -> None:
+def apply_source_delta(repository: Path, base: str, head: str, target: Path, names: list[str],
+                       *, target_names: dict[str, str] | None = None) -> None:
     """Prepare every file first, then write the isolated candidate only."""
     changes=[]
     for name in names:
-        path=target/name
+        path=target/(target_names.get(name,name) if target_names else name)
         if not path.resolve().is_relative_to(target.resolve()) or path.is_symlink():
             raise CityError('Chemin de source invalide.')
         old=git(repository,'ls-tree','--name-only',base,'--',name)

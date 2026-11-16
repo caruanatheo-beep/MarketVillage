@@ -9,6 +9,8 @@ from playwright.sync_api import sync_playwright
 
 
 ROOT = Path(__file__).resolve().parents[1] / 'deploy/github-pages/site'
+if (ROOT.parents[2] / 'Internships' / 'deploy/github-pages/site').is_dir():
+    ROOT = ROOT.parents[2] / 'Internships' / 'deploy/github-pages/site'
 BASE = 'https://marketdesk.test/'
 
 

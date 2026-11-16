@@ -63,6 +63,8 @@ def test_workflow_gates_build_and_configures_hourly_checks():
     root = Path(__file__).resolve().parents[1]
     path = root / '.github/workflows/pages.yml'
     if not path.is_file():
+        path = root / 'Internships/deploy/github-pages/pages.yml'
+    if not path.is_file():
         path = root / 'deploy/github-pages/pages.yml'
     workflow = path.read_text(encoding='utf-8')
     assert "cron: '7,27,47 0-3,6-23 * * *'" in workflow

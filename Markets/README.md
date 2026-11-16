@@ -1,3 +1,9 @@
+# Dossier Markets
+
+Code : `Markets/src/`. Depuis la racine : `python Markets/app.py`.
+L?ancien lancement `python app.py` et les imports `src.*` restent compatibles.
+La configuration `.env` et les donn?es restent ? la racine du d?p?t.
+
 ---
 title: AI Sales Desk Assistant
 colorFrom: gray

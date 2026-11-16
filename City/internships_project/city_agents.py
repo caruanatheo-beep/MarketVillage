@@ -176,7 +176,7 @@ def _authorized_log(name: str) -> dict:
     allowed = {"city", "internships"}
     if name not in allowed:
         raise CityError("Journal non autorisé. Choisis city ou internships.")
-    base = Path(__file__).resolve().parent
+    base = Path(__file__).resolve().parents[2] / "internships_project"
     path = base / ("city_stderr.log" if name == "city" else "internships_stderr.log")
     if not path.is_file():
         raise CityError("Ce journal n'est pas disponible sur ce serveur.")

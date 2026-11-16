@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import sys
+import tempfile
 
 
 def main() -> int:
@@ -15,7 +16,12 @@ def main() -> int:
     except ModuleNotFoundError:
         print("Tests indisponibles : dépendances Python du projet introuvables.", file=sys.stderr)
         return 2
-    return pytest.main(["-p", "no:cacheprovider", *sys.argv[1:]])
+    args = sys.argv[1:]
+    if any(arg == '--basetemp' or arg.startswith('--basetemp=') for arg in args):
+        return pytest.main(["-p", "no:cacheprovider", *args])
+    # Keep nested Git fixtures off the workspace and avoid stale pytest ACLs.
+    with tempfile.TemporaryDirectory(prefix='marketdesk-tests-', ignore_cleanup_errors=True) as temporary:
+        return pytest.main(["-p", "no:cacheprovider", '--basetemp='+temporary, *args])
 
 
 if __name__ == "__main__":

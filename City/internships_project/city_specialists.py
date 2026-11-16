@@ -5,6 +5,8 @@ Other specialist operations expose bounded services, not arbitrary shell command
 """
 from __future__ import annotations
 
+from project_layout import source_path
+
 import ast
 import hashlib
 import json
@@ -90,7 +92,7 @@ def validate_mission(agent_id: str, parameters: dict, description: str = "") -> 
 
 
 def repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 class CityGitError(CityError):
@@ -141,7 +143,7 @@ def repository_audit() -> dict:
     root = repo_root()
     findings, checked = [], 0
     # No .env, private data, caches, vendor files, or imported documents.
-    for path in sorted([*(root / "internships_project").glob("city_*.py"), root / 'internships_project/marketdesk_city.py']):
+    for path in sorted([*source_path("internships_project/city_assets", root).parent.glob("city_*.py"), source_path("internships_project/marketdesk_city.py", root)]):
         if not path.is_file():
             continue
         text = path.read_text(encoding="utf-8-sig")
@@ -271,10 +273,10 @@ def prepare_branch(task_id: str, audit: dict, approval: bool) -> dict:
         raise CityError("Ce test existe déjà : aucun fichier existant ne sera écrasé.")
     target.write_text('"""Compile-only regression coverage; no application import or external API."""\n'
                       'import ast\nfrom pathlib import Path\n\ndef test_city_modules_compile():\n'
-                      '    root = Path(__file__).resolve().parents[1] / "internships_project"\n'
+                      '    root = Path(__file__).resolve().parents[2] / "internships_project"\n'
                       '    for path in sorted(root.glob("city_*.py")):\n'
                       '        ast.parse(path.read_text(encoding="utf-8-sig"), filename=path.name)\n', encoding="utf-8")
-    tested = list((directory / "internships_project").glob("city_*.py"))
+    tested = list(source_path("internships_project/city_assets", directory).parent.glob("city_*.py"))
     for source in [target, *tested]:
         ast.parse(source.read_text(encoding="utf-8-sig"), filename=source.name)
     context = branch_context(root,revision)

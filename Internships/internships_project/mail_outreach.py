@@ -55,7 +55,7 @@ DEFAULT_TEMPLATES = {
            "documented": bool(source)}
     for name, aliases, domain, pattern, source in _TEMPLATES
 }
-SEED_CONTACTS_PATH = Path(__file__).resolve().parent / "data" / "contacts_50_paris.csv"
+SEED_CONTACTS_PATH = (Path(__file__).resolve().parents[2] / "internships_project" / "data" if Path(__file__).resolve().parents[1].name == "Internships" else Path(__file__).resolve().parent / "data") / "contacts_50_paris.csv"
 SEED_DATASET_ID = "contacts_50_paris"
 _LOCK = threading.RLock()
 _WORKERS: dict[str, threading.Thread] = {}

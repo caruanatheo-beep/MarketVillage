@@ -13,6 +13,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
+SITE_ROOT = (ROOT / 'Internships/deploy/github-pages/site'
+             if (ROOT / 'Internships/deploy').is_dir() else ROOT / 'deploy/github-pages/site')
 sys.path.insert(0, str(ROOT))
 from internships_project import internships as jobs
 from internships_project.public_safety import assert_public, public_job_url, validate_snapshot
@@ -94,7 +96,7 @@ def build_site(output: Path, *, collect: bool = False, force: bool = False) -> i
     validate_source_catalog(catalog)
     sources_payload = json.dumps(catalog, ensure_ascii=False, separators=(",", ":")).encode()
     assert_public(sources_payload, "sources.json")
-    assets = {name: ROOT / "deploy/github-pages/site" / name for name in ("index.html", "site.css", "app.js", "sources.js", "marketdesk-icon.svg")}
+    assets = {name: SITE_ROOT / name for name in ("index.html", "site.css", "app.js", "sources.js", "marketdesk-icon.svg")}
     assets.update(logos)
     # Validate every byte before creating the publish directory.
     for name, path in assets.items():

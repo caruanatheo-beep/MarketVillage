@@ -121,7 +121,7 @@ def test_desktop_contacts_empty_report_targeted_retry_and_visible_evidence():
     from playwright.sync_api import sync_playwright, expect
 
     root = Path(__file__).resolve().parents[1]
-    bundle = (root / 'internships_project/city_assets/city.js').read_text(encoding='utf-8')
+    bundle = (root / 'City/internships_project/city_assets/city.js').read_text(encoding='utf-8')
     # Mount the shipped Contacts component alone, with synthetic API responses.
     mount = re.search(r'\.render\((\(0,\w+\.jsx\))\(\w+,\{\}\)\)', bundle)
     component = re.search(r'\(0,(\w+)\.jsx\)\((\w+),\{[^{}]*\}\),\(0,\1\.jsxs\)\("footer",\{className:"network-window-footer"', bundle)
@@ -153,7 +153,7 @@ def test_desktop_contacts_empty_report_targeted_retry_and_visible_evidence():
         page.route('**/*', respond)
         page.goto('http://city.test/')
         page.evaluate('window.__marketdeskNativePanels = true')
-        page.add_style_tag(content=(root / 'internships_project/city_assets/city.css').read_text(encoding='utf-8'))
+        page.add_style_tag(content=(root / 'City/internships_project/city_assets/city.css').read_text(encoding='utf-8'))
         page.add_script_tag(content=bundle)
         page.get_by_text('Ton répertoire est vide.', exact=False).wait_for()
         page.get_by_role('button', name='Voir les bilans et cibler une recherche').click()
@@ -210,7 +210,7 @@ def test_desktop_contacts_empty_report_targeted_retry_and_visible_evidence():
         state['contacts'][0].update(source_url='', source_title='', origin='lina_assisted_paste')
         page.reload()
         page.evaluate('window.__marketdeskNativePanels = true')
-        page.add_style_tag(content=(root / 'internships_project/city_assets/city.css').read_text(encoding='utf-8'))
+        page.add_style_tag(content=(root / 'City/internships_project/city_assets/city.css').read_text(encoding='utf-8'))
         page.add_script_tag(content=bundle)
         page.get_by_text('Sources et vérification', exact=True).click()
         page.get_by_text('Aucun lien public vérifiable enregistré', exact=False).wait_for(state='visible')

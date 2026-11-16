@@ -4,7 +4,7 @@ import json
 import random
 from PIL import Image, ImageDraw
 
-DEST = Path(__file__).resolve().parents[1] / 'internships_project/city_assets/pixel-agents/assets/furniture/MARKETDESK_GOLF'
+DEST = Path(__file__).resolve().parents[1] / 'City/internships_project/city_assets/pixel-agents/assets/furniture/MARKETDESK_GOLF'
 DEST.mkdir(parents=True, exist_ok=True)
 assets = []
 

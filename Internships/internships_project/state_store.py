@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 from .internships import import_tracking
 
 
-STATE_PATH = Path(__file__).resolve().parent / "data" / "user_state.json"
+STATE_PATH = (Path(__file__).resolve().parents[2] / "internships_project" / "data" if Path(__file__).resolve().parents[1].name == "Internships" else Path(__file__).resolve().parent / "data") / "user_state.json"
 BACKUP_PATH = STATE_PATH.with_name("user_state.backup.json")
 _state_lock = threading.RLock()
 _VERDICTS = {"pertinent", "hors_cible"}

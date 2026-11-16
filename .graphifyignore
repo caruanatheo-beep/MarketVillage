@@ -18,3 +18,13 @@ artifacts/
 graphify-out/
 
 .city-worktrees/
+City/internships_project/city_assets/city.js
+City/internships_project/city_assets/*.map
+City/internships_project/city_frontend/node_modules/
+City/internships_project/data/
+Internships/internships_project/data/
+.test-*/
+t8e55a/
+tb6571/
+tc2e0c/
+tcama/

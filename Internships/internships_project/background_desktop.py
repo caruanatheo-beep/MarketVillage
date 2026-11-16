@@ -52,7 +52,7 @@ def collect_bnp(company: str, listing_url: str) -> list[dict]:
                 [sys.executable, str(Path(__file__).resolve()), str(exchange)]))
             # subprocess.STARTUPINFO does not expose lpDesktop; set it explicitly at process creation.
             if not kernel32.CreateProcessW(sys.executable, command, None, None, False,
-                    0x08000000, None, str(Path(__file__).resolve().parents[1]),
+                    0x08000000, None, str(Path(__file__).resolve().parents[2]),
                     ctypes.byref(startup), ctypes.byref(process)):
                 raise ValueError('Navigateur de collecte invisible indisponible ; aucune fenêtre ouverte.')
             if kernel32.WaitForSingleObject(process.hProcess, 300_000) != 0:

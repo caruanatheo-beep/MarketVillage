@@ -7,7 +7,7 @@ from pathlib import Path
 import random
 from PIL import Image, ImageDraw, ImageFont
 
-OUT = Path(__file__).resolve().parents[1] / 'internships_project/city_assets/pixel-agents/assets/tower'
+OUT = Path(__file__).resolve().parents[1] / 'City/internships_project/city_assets/pixel-agents/assets/tower'
 OUT.mkdir(parents=True, exist_ok=True)
 rng = random.Random(241101)
 

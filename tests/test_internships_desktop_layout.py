@@ -6,7 +6,7 @@ import pytest
 from playwright.sync_api import sync_playwright
 
 
-STYLES = Path(__file__).resolve().parents[1] / "internships_project" / "ui_styles.css"
+STYLES = Path(__file__).resolve().parents[1] / "Internships" / "internships_project" / "ui_styles.css"
 
 
 @pytest.mark.parametrize("width,expected_columns", [
