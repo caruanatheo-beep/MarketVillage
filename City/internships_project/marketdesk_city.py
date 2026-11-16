@@ -2551,10 +2551,12 @@ class CityWorker:
                                            'ConnectError', 'ReadError', 'WriteError',
                                            'NetworkError', 'RemoteProtocolError'}
                     and type(exc).__module__.startswith(('requests.', 'urllib3.', 'httpx.'))):
-                # Network-backed agents often surface transient transport failures
-                # directly. Treat them like collection contention so one blip does
-                # not permanently lose a user's mission.
-                self.store.defer_coding(task['id'], safe, delay_minutes=5)
+                # Bound transient retries so a permanently unavailable source does
+                # not leave the mission queued forever without an actionable result.
+                if task.get('retry_count', 0) < 3:
+                    self.store.defer_coding(task['id'], safe, delay_minutes=5, retry=True)
+                else:
+                    self._finish(task['id'], error=safe)
             elif (parameters.get('operation') == 'develop' and isinstance(exc, CityError)
                     and safe.startswith('Connexion Codex interrompue') and task.get('retry_count', 0) < 1):
                 self.store.defer_coding(task['id'], safe, delay_minutes=2, retry=True)

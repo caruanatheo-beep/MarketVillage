@@ -56,6 +56,30 @@ def test_transient_agent_network_failure_is_rescheduled(tmp_path, monkeypatch, f
     assert detail['scheduled_at']
 
 
+def test_persistent_agent_network_failure_eventually_finishes(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path / 'accounts.sqlite3')
+    store = CityStore(state_store.USER_DB_PATH)
+    task = store.create_task('alice', 'market_analyst', 'Analyse publique',
+                             {'discover_public': True})
+    from internships_project import city_services
+    monkeypatch.setattr(city_services, 'run_agent', lambda *_args, **_kwargs:
+                        (_ for _ in ()).throw(ConnectionError('temporary disconnect')))
+    worker = CityWorker(store)
+
+    for retry_count in range(4):
+        assert worker.run_once()
+        detail = store.task_detail('alice', task['id'])
+        if retry_count < 3:
+            assert detail['status'] == 'queued'
+            assert detail['retry_count'] == retry_count + 1
+            with store.db() as db:
+                db.execute('UPDATE city_tasks SET scheduled_at=NULL WHERE id=?', (task['id'],))
+        else:
+            assert detail['status'] == 'failed'
+            assert detail['retry_count'] == 3
+            assert detail['error'] == 'Erreur de mission (ConnectionError).'
+
+
 @pytest.mark.parametrize('failure_name', ['ConnectError', 'ReadTimeout'])
 def test_httpx_transport_failure_is_rescheduled(tmp_path, monkeypatch, failure_name):
     monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path / 'accounts.sqlite3')
