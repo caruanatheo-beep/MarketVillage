@@ -1,5 +1,12 @@
 # Sources d'offres : état au 26 octobre 2026
 
+## RBC Capital Markets — collecte vérifiée le 16 novembre 2026
+
+L'extension Workday collecte deux stages à New York : Global Markets Sales &
+Trading et origination de dette, avec dates employeur, fermeture effective et
+logo officiel. La fiche Sources est prête pour publication par le contrôleur.
+Voir [l'audit, les comparaisons et les limites](SOURCES_RBC.md).
+
 ## Five Rings — ajout vérifié le 16 novembre 2026
 
 Le connecteur Greenhouse existant collecte deux stages et quatre postes campus

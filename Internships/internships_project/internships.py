@@ -54,6 +54,7 @@ LEVER = {
 }
 ASHBY = {}
 WORKDAY = {
+    "RBC Capital Markets": ("rbc.wd3.myworkdayjobs.com", "rbc", "RBCEARLYTALENT1"),
     "Murex": ("murex.wd3.myworkdayjobs.com", "murex", "MurexCareerPage1"),
     "PIMCO": ("pimco.wd1.myworkdayjobs.com", "pimco", "pimco-careers"),
     "FactSet": ("factset.wd108.myworkdayjobs.com", "factset", "FactSetCareers"),
@@ -329,6 +330,7 @@ JOBTEASER_CITIES = {
 # Brand icons are requested from the employer's own site. If an icon is absent,
 # the card keeps its initials; no third-party logo service receives the visit.
 COMPANY_ICON_HOSTS = {
+    "rbccapitalmarkets": "jobs.rbc.com",
     "murex": "www.murex.com",
     "pimco": "www.pimco.com",
     "jumptrading": "www.jumptrading.com",
@@ -1135,6 +1137,26 @@ def _murex_relevant(title: str, context: str = "", *, candidate: bool = False) -
                       r"derivatives|swaps|bonds)\b", context, re.I))
 
 
+def _rbc_relevant(title: str, context: str = "", *, candidate: bool = False) -> bool:
+    """RBC campus markets desks, with live evidence for debt origination."""
+    if (_NON_MARKET_ROLE.search(title) or re.search(
+            r"\b(?:senior|sr|director|head|lead|vice president|retail|corporate|wealth|"
+            r"operations|reporting|control|securitization|software|developer|quant|research)\b",
+            title, re.I) or not re.search(
+            r"\b(?:sales|trading|broker|rates|credit|fx|repo|dcm|debt capital markets|"
+            r"origination|treasury solutions)\b", title, re.I)):
+        return False
+    if not context:
+        return candidate
+    if _experienced_junior(context):
+        return False
+    if re.search(r"\borigination\b", title, re.I):
+        return bool(re.search(r"\b(?:fixed income origination|debt capital markets|"
+                              r"debt transactions|bond syndication)\b", context, re.I))
+    return bool(re.search(r"\b(?:fixed income|equities|equity products|foreign exchange|"
+                          r"derivatives|currencies|institutional clients|repo)\b", context, re.I))
+
+
 def _opportunity(title: str, company: str, location: str, employment: str,
                  url: str, published: str, start_period: str = "",
                  role_context: str = "", *, defer_junior_context: bool = False) -> Opportunity | None:
@@ -1144,7 +1166,9 @@ def _opportunity(title: str, company: str, location: str, employment: str,
             _factset_kind(title, employment, role_context) if company == "FactSet" else
             _morgan_stanley_kind(title, employment, role_context)
             if company == "Morgan Stanley" else _kind(title, employment))
-    market = (_murex_relevant(title, role_context, candidate=defer_junior_context)
+    market = (_rbc_relevant(title, role_context, candidate=defer_junior_context)
+              if company == "RBC Capital Markets" else
+              _murex_relevant(title, role_context, candidate=defer_junior_context)
               if company == "Murex" else
               _pimco_relevant(title, role_context, candidate=defer_junior_context)
               if company == "PIMCO" else _market_relevant_with_context(title, role_context))
@@ -1169,6 +1193,8 @@ def _opportunity(title: str, company: str, location: str, employment: str,
         family = "Asset Management" if re.search(r"\bproduct\b", title, re.I) else "Client Service / Financial Solutions"
     elif company == "Murex" or company == "FactSet" and _factset_client_solutions(title):
         family = "Client Service / Financial Solutions"
+    elif company == "RBC Capital Markets" and re.search(r"\borigination\b", title, re.I):
+        family = "Capital Markets"
     return Opportunity(title, company, location, kind, url, published[:10], score, start_period,
                        family, "", datetime.now(timezone.utc).date().isoformat(), employment=employment)
 
@@ -3827,8 +3853,25 @@ def _pictet_jobs() -> list[Opportunity]:
     return jobs
 
 
+def _rbc_posting_dates(info: dict, description: str) -> tuple[str, str]:
+    # The employer's explicit Posted Date can predate a Workday repost.
+    posted = re.search(r"\bPosted Date:\s*(\d{4}-\d{2}-\d{2})\b", description, re.I)
+    published = _workday_publication_date(posted[1] if posted else info.get("startDate"),
+                                          info.get("postedOn"))
+    closing = re.search(r"\bApplication Deadline:\s*(\d{4}-\d{2}-\d{2})\b", description, re.I)
+    raw = str(closing[1] if closing else info.get("endDate") or info.get("validThrough") or "")[:10]
+    try:
+        deadline = date.fromisoformat(raw)
+        if re.search(r"applications will be accepted until 11:59\s*PM on the day prior "
+                     r"to the application deadline date above", description, re.I):
+            deadline -= timedelta(days=1)
+        return published, deadline.isoformat()
+    except ValueError:
+        return published, ""
+
+
 def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) -> list[Opportunity]:
-    verified_feed = company in {"TP ICAP", "Capital Group", "FactSet", "PIMCO", "Murex"}
+    verified_feed = company in {"TP ICAP", "Capital Group", "FactSet", "PIMCO", "Murex", "RBC Capital Markets"}
     if company == "BBVA" and _client is None:
         # Reuse one connection: repeated parallel TLS connections to BBVA time out.
         with requests.Session() as session:
@@ -3979,7 +4022,7 @@ def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) ->
                 if (info.get("canApply") is not True or not info.get("title")
                         or not description or not info.get("location")):
                     raise ValueError("Fiche Workday incomplète")
-                if company in {"PIMCO", "Murex"}:
+                if company in {"PIMCO", "Murex", "RBC Capital Markets"}:
                     locations = [location] + [place for place in (info.get("additionalLocations") or [])
                                               if isinstance(place, str) and place.strip()]
                     location = "; ".join(dict.fromkeys(locations))
@@ -3997,6 +4040,12 @@ def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) ->
                 # Workday startDate is the publication date; the programme dates
                 # below are explicit employer text, never inferred from graduation.
                 start = revised.start_period
+                if company == "RBC Capital Markets":
+                    published, deadline = _rbc_posting_dates(info, _plain_text(description))
+                    revised = replace(revised, published=published)
+                    cohort = re.search(r"\b(20\d{2})\b.*\bsummer\b", revised.title, re.I)
+                    if not start and cohort:
+                        start = f"Summer {cohort[1]}"
                 program = re.search(r"Program(?:me)? dates?:\s*(?:\w+,\s*)?"
                     r"([A-Z][a-z]+)\s+(\d{1,2})\s*[-–—]\s*(?:\w+,\s*)?"
                     r"[A-Z][a-z]+\s+\d{1,2},?\s+(20\d{2})", _plain_text(description))
@@ -4056,7 +4105,7 @@ def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) ->
             return job
 
     selected = dict(sorted(candidates.items(), key=lambda pair: -pair[1].score)[:50])
-    if company in {"Capital Group", "FactSet", "PIMCO", "Murex"}:
+    if company in {"Capital Group", "FactSet", "PIMCO", "Murex", "RBC Capital Markets"}:
         selected = dict(candidates)  # Every offer needs a verified live detail.
     selected.update((path, job) for path, job in candidates.items() if _junior_analyst(job.title))
     selected = list(selected.items())
@@ -4580,7 +4629,8 @@ def _eligible_offer(job: Opportunity) -> bool:
         return False
     return (not _excluded_employer(job.company)
             and not (job.kind == "Graduate" and _junior_analyst(job.title) and _experienced_junior(job.description))
-            and (_murex_relevant(job.title, job.description) if job.company == "Murex" else
+            and (_rbc_relevant(job.title, job.description) if job.company == "RBC Capital Markets" else
+                 _murex_relevant(job.title, job.description) if job.company == "Murex" else
                  _pimco_relevant(job.title, job.description) if job.company == "PIMCO" else
                  _market_relevant_with_context(job.title, job.description)
                  or job.company == "FactSet" and _factset_client_solutions(job.title))
@@ -4602,6 +4652,8 @@ def _deduplicate_opportunities(jobs: list[Opportunity]) -> list[Opportunity]:
                        if _canonical_company(job.company) == "factset" else None)
         if _canonical_company(job.company) == "murex":
             requisition = re.search(r"_(JR\d+)(?:-\d+)?$", urlparse(job.url).path)
+        if _canonical_company(job.company) == "rbccapitalmarkets":
+            requisition = re.search(r"_(R-\d+)(?:-\d+)?$", urlparse(job.url).path)
         greenhouse_board = {"drw": "drweng", "fiverings": "fiveringsllc",
                             "jumptrading": "jumptrading"}.get(_canonical_company(job.company))
         if greenhouse_board:
