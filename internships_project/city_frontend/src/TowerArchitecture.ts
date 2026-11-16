@@ -3,23 +3,30 @@ import { worldY } from './worldGeometry';
 
 const images: Record<string, HTMLImageElement> = {};
 export async function loadTowerArchitecture(): Promise<void> {
-  await Promise.all(['penthouse-crown','md_atrium_canopy','manhattan-canyon',
+  await Promise.all(['penthouse-crown','md_atrium_canopy','city-night-cozy-v3',
     'terrace','garden-parapet','md_slab_edge'].map(name =>
     new Promise<void>((resolve,reject) => {
       const image = new Image();
       image.onload = () => { images[name] = image; resolve(); };
       image.onerror = () => reject(new Error(`Architecture introuvable : ${name}`));
-      image.src = `/city/pixel-assets/tower/${name}.png?v=${name === 'manhattan-canyon' ? 'emerald-1' : 'partitions-2'}`;
+      image.src = `/city/pixel-assets/tower/${name}.png?v=${name === 'city-night-cozy-v3' ? 'cozy-3' : 'partitions-2'}`;
     })));
 }
 
-export function renderTowerBackdrop(ctx: CanvasRenderingContext2D, ox:number, oy:number, zoom:number):void {
-  const backdrop=images['manhattan-canyon'];if(!backdrop)return;
-  const c=16*zoom,width=72*c,height=width*backdrop.height/backdrop.width;
-  ctx.save();ctx.imageSmoothingEnabled=false;ctx.globalAlpha=.42;
-  ctx.drawImage(backdrop,ox-12*c,oy-c,width,height);
-  ctx.globalAlpha=1;ctx.globalCompositeOperation='destination-over';
-  ctx.fillStyle='#061021';ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);ctx.restore();
+export function renderTowerBackdrop(ctx: CanvasRenderingContext2D):void {
+  const backdrop=images['city-night-cozy-v3'];
+  const {width:viewportWidth,height:viewportHeight}=ctx.canvas;
+  ctx.save();
+  ctx.fillStyle='#061021';ctx.fillRect(0,0,viewportWidth,viewportHeight);
+  if(backdrop){
+    // The skyline covers the viewport independently of the office camera and zoom.
+    const scale=Math.max(viewportWidth/backdrop.width,viewportHeight/backdrop.height);
+    const width=backdrop.width*scale,height=backdrop.height*scale;
+    // Keep the warm skyline behind the brighter interactive desks and agents.
+    ctx.imageSmoothingEnabled=false;ctx.globalAlpha=.32;
+    ctx.drawImage(backdrop,(viewportWidth-width)/2,(viewportHeight-height)/2,width,height);
+  }
+  ctx.restore();
 }
 
 type Edge = {x:number;y:number;length:number;side:'north'|'south'|'west'|'east'};

@@ -20,9 +20,6 @@ from email.message import EmailMessage
 from html import escape
 from urllib.parse import urlparse
 
-from . import state_store
-
-
 _send_lock = threading.Lock()
 _EMAIL_RE = re.compile(r"[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+\Z")
 
@@ -96,6 +93,8 @@ def _eligible_offers(jobs: list[object]) -> dict[str, object]:
 
 
 def _connect():
+    from . import state_store
+
     connection = state_store._connect()
     connection.execute(
         "CREATE TABLE IF NOT EXISTS email_alert_seen ("

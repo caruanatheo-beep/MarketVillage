@@ -57,3 +57,24 @@ class PublicationSortTests(unittest.TestCase):
         )
         self.assertIn('data-offer-url="https://example.invalid/valid"', board)
         self.assertNotIn('data-offer-url="https://example.invalid/invalid"', board)
+
+    def test_better_targeted_role_can_outweigh_an_earlier_start(self):
+        april = replace(self.offer, score=100, start_period="avril 2027",
+                        url="https://example.invalid/april")
+        june_sales = replace(self.offer, score=115, start_period="juin 2027",
+                             url="https://example.invalid/june-sales")
+        self.assertEqual(matching_opportunities([april, june_sales]), [june_sales, april])
+
+    def test_target_window_and_month_contribute_to_combined_score(self):
+        april = replace(self.offer, score=100, start_period="avril 2027", published="2026-10-01")
+        september = replace(april, start_period="septembre 2027", published="2026-11-10",
+                            url="https://example.invalid/september")
+        outside = replace(april, start_period="mars 2027", published="2026-11-11",
+                          url="https://example.invalid/outside")
+        self.assertEqual(matching_opportunities([outside, september, april]), [april, september, outside])
+
+    def test_publication_only_breaks_equal_combined_scores(self):
+        older = replace(self.offer, score=100, start_period="avril 2027", published="2026-10-01")
+        newer = replace(older, published="2026-11-10", url="https://example.invalid/newer")
+        stronger = replace(older, score=115, url="https://example.invalid/stronger")
+        self.assertEqual(matching_opportunities([older, newer, stronger]), [stronger, newer, older])

@@ -8,11 +8,27 @@ import pytest
 from internships_project.marketdesk_city import CityError, CityStore, CityWorker, refresh_jobs_workflow
 
 
+def test_claim_progress_message_matches_mission_type(tmp_path):
+    store = CityStore(tmp_path / "progress.sqlite3")
+    development = store.create_task("theo", "job_hunter", "Améliorer le code", {"operation": "develop"})
+    store.claim_next()
+    events = store.snapshot("theo")["events"]
+    assert next(event["message"] for event in events if event["task_id"] == development["id"]
+                and event["status"] == "running") == "Développement du code démarré."
+
+    store.finish(development["id"], error="arrêt test")
+    métier = store.create_task("theo", "networker", "Actualiser Internships", {"operation": "refresh_internships"})
+    store.claim_next()
+    events = store.snapshot("theo")["events"]
+    assert next(event["message"] for event in events if event["task_id"] == métier["id"]
+                and event["status"] == "running") == "Collecte des sources démarrée."
+
+
 def test_agent_registry_queue_persistence_and_xp_once(tmp_path):
     path = tmp_path / "accounts.sqlite3"
     store = CityStore(path)
     initial = store.snapshot("theo")
-    assert len(initial["agents"]) == 9
+    assert len(initial["agents"]) == 14
     assert all(agent["xp"] == 0 for agent in initial["agents"])
     created = store.create_task("theo", "networker", "Actualiser Internships", {"operation":"refresh_internships"})
     with pytest.raises(CityError, match="déjà"):
@@ -125,20 +141,24 @@ def test_chat_history_persists_and_is_private_per_user(tmp_path):
     assert store.chat_history("theo", "market_analyst") == []
 
 
-def test_chat_stream_calls_real_tool_and_records_usage(tmp_path, monkeypatch):
+def test_codex_chat_stream_calls_real_tool_without_api_usage(tmp_path, monkeypatch):
     import asyncio
     import json
     from pydantic_ai.models.test import TestModel
+    from pydantic_ai import RunContext, RunUsage
     from internships_project import city_chat, city_agents, state_store
     from internships_project.llm_usage import _connect
 
     monkeypatch.setattr(state_store, "USER_DB_PATH", tmp_path / "chat-stream.sqlite3")
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key-never-sent")
     store = CityStore(state_store.USER_DB_PATH)
-    original = city_agents.build_agent
-    monkeypatch.setattr(city_chat, "build_agent",
-                        lambda agent_id, _model: original(agent_id,
-                            TestModel(call_tools=["inspect_collaboration"], custom_output_text="No project running.")))
+    async def codex_turn(deps, message, queue, timeout):
+        tool = city_agents.build_agent('desk_manager', TestModel())._function_toolset.tools['inspect_collaboration']
+        result = await tool.function_schema.call({'workflow_id': ''}, RunContext(deps=deps, model=None, usage=RunUsage()))
+        assert result['data']['workflows'] == []
+        for text in ('No project ', 'running.'):
+            await queue.put({'type': 'delta', 'text': text})
+        return 'No project running.'
+    monkeypatch.setattr(city_chat, '_run_codex_turn', codex_turn)
 
     async def collect():
         return [json.loads(line) async for line in city_chat.stream_chat(
@@ -146,25 +166,23 @@ def test_chat_stream_calls_real_tool_and_records_usage(tmp_path, monkeypatch):
 
     frames = asyncio.run(collect())
     assert any(row["type"] == "tool" and row["name"] == "Desk Manager · suivi" for row in frames), frames
-    assert any(row["type"] == "delta" and "No project running." in row["text"] for row in frames)
+    assert "No project running." in ''.join(row['text'] for row in frames if row['type'] == 'delta'), frames
     assert store.chat_history("theo", "desk_manager")[-1]["content"] == "No project running.", frames
-    assert store.chat_turns("theo", "desk_manager")
+    assert len(store.chat_history("theo", "desk_manager")) == 2
+    assert any(row['type'] == 'tool' and row['status'] == 'completed' for row in frames)
     with _connect() as db:
-        assert db.execute("SELECT COUNT(*) FROM llm_usage WHERE username='theo'").fetchone()[0] == 1
+        assert db.execute("SELECT COUNT(*) FROM llm_usage WHERE username='theo'").fetchone()[0] == 0
 
 
-def test_eight_agents_and_specialist_tool_contract(tmp_path, monkeypatch):
+def test_registered_agents_and_specialist_tool_contract(tmp_path, monkeypatch):
     import asyncio
     from pydantic_ai.models.test import TestModel
     from internships_project.city_agents import ChatDeps, PROMPTS, build_agent
-    from internships_project.internships import load_opportunities
 
     monkeypatch.setenv("OPENAI_API_KEY", "test-key-never-sent")
     store = CityStore(tmp_path / "city.sqlite3")
-    assert len(PROMPTS) == 9
-    assert len(set(PROMPTS.values())) == 9
-    cached, _, _ = load_opportunities(refresh=False)
-    assert isinstance(cached, list)
+    assert len(PROMPTS) == 14
+    assert len(set(PROMPTS.values())) == 14
 
     async def verify():
         for agent_id in PROMPTS:
@@ -205,41 +223,28 @@ def test_outreach_agent_reports_missing_profile_as_unavailable(tmp_path):
     assert "profil" in deps.calls[0]["text"].casefold()
 
 
-def test_internship_service_reuses_collector_without_sending_email(monkeypatch):
-    from internships_project import internships
-
+def test_internship_service_uses_public_catalogue_without_collecting(monkeypatch):
+    from internships_project import city_offers, internships
     now = datetime.now(timezone.utc)
-    before = internships.Opportunity("Sales Intern", "Bank", "Paris", "Stage",
-                                     "https://example.com/1", "", 90)
-    discovered = internships.Opportunity("Rates Sales Intern", "Bank", "Paris", "Stage",
-                                         "https://example.com/2", "", 98, start_period="mai 2027")
-    monkeypatch.setattr(internships, "opportunities_loading", lambda: False)
-    monkeypatch.setattr(internships, "load_opportunities", lambda **kwargs: ([before], [], now))
-    calls = []
-
-    def fake_refresh(*, force=False, notify_email=True, fail_if_busy=False):
-        calls.append((force, notify_email, fail_if_busy))
-        return [before, discovered], [], now + timedelta(seconds=1)
-
-    monkeypatch.setattr(internships, "refresh_opportunities", fake_refresh)
+    before = internships.Opportunity("Sales Intern", "Bank", "Paris", "Stage", "https://example.com/1", "", 90)
+    discovered = internships.Opportunity("Rates Sales Intern", "Bank", "Paris", "Stage", "https://example.com/2", "", 98, start_period="2027-05")
+    monkeypatch.setattr(city_offers, 'load_catalogue', lambda **kwargs: city_offers.Catalogue(
+        [before, discovered], [], now, 'public', new_urls=frozenset([discovered.url])))
+    monkeypatch.setattr(internships, 'refresh_opportunities', lambda **kwargs: pytest.fail('No local collection'))
     result = refresh_jobs_workflow()
-    assert calls == [(True, False, True)]
-    assert result["new_count"] == 1
-    assert result["new_urls"] == [discovered.url]
-    assert result["priority_count"] == 1
-    assert result["offers"][0]["url"] == discovered.url
+    assert result['new_urls'] == [discovered.url]
+    assert result['priority_count'] == 1
+    assert result['offers'][0]['url'] == discovered.url
+    assert result['catalog_source'] == 'public'
 
 
-def test_internship_service_does_not_claim_another_refresh(monkeypatch):
-    from internships_project import internships
-
-    now = datetime.now(timezone.utc)
-    monkeypatch.setattr(internships, "opportunities_loading", lambda: False)
-    monkeypatch.setattr(internships, "load_opportunities", lambda **kwargs: ([], [], now))
-    monkeypatch.setattr(internships, "refresh_opportunities", lambda **kwargs: (_ for _ in ()).throw(
-        internships.CollectionBusyError("already running")))
-    with pytest.raises(CityError, match="déjà en cours"):
-        refresh_jobs_workflow()
+def test_internship_service_reports_fallback_without_inventing_new_offers(monkeypatch):
+    from internships_project import city_offers
+    monkeypatch.setattr(city_offers, 'load_catalogue', lambda **kwargs: city_offers.Catalogue(
+        [], [], datetime.now(timezone.utc), 'local', 'Offline'))
+    result = refresh_jobs_workflow()
+    assert result['catalog_warning'] == 'Offline'
+    assert result['new_count'] == 0
 
 
 def test_city_http_requires_same_account_and_browser_origin(tmp_path, monkeypatch):

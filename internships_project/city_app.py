@@ -19,11 +19,16 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
 import uvicorn
-from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    # Environment variables can configure City without the optional local .env helper.
+    pass
+else:
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from .accounts import account_exists, authenticate
 from .city_routes import add_city_routes
@@ -100,18 +105,18 @@ def login_page(request: Request):
         return RedirectResponse("/city/", status_code=303)
     html = """<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Connexion · MarketDesk City</title><style>
-:root{font:16px system-ui;color:#f2fcf7;background:#0c2428;--panel:#123d43;--border:#4e8589;--accent:#27d9b3}
+:root{font:16px system-ui;color:#edf6fc;background:#071321;--panel:#10243a;--border:#345673;--accent:#36b9ed}
 *{box-sizing:border-box}
-body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(ellipse at 18% 8%,#19675e 0,transparent 46%),radial-gradient(ellipse at 90% 85%,#144851 0,transparent 48%),#0c2428}
-.card{width:min(460px,calc(100% - 32px));padding:36px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(155deg,#17535a,var(--panel) 48%,#102f35);box-shadow:0 22px 70px #061d2070,inset 0 1px #a4efd626}
-.card:before{content:"";display:block;width:46px;height:4px;margin-bottom:25px;border-radius:4px;background:var(--accent);box-shadow:0 0 16px #27d9b366}
-h1{margin:0 0 8px;font-size:2rem;letter-spacing:-.035em}h1 span{color:#75f0df}
-p{color:#c6ded8;margin:0 0 25px}label{display:block;margin:15px 0 7px;font-size:14px;font-weight:600;color:#e0f2eb}
-input{width:100%;height:50px;padding:0 14px;border:1px solid #62978f;border-radius:9px;background:#102f35;color:#f2fcf7;font:inherit}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(ellipse at 18% 8%,#123d65 0,transparent 46%),radial-gradient(ellipse at 90% 85%,#0b3455 0,transparent 48%),#071321}
+.card{width:min(460px,calc(100% - 32px));padding:36px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(155deg,#173b5b,var(--panel) 48%,#0d1d30);box-shadow:0 22px 70px #030b1470,inset 0 1px #a4dff626}
+.card:before{content:"";display:block;width:46px;height:4px;margin-bottom:25px;border-radius:4px;background:var(--accent);box-shadow:0 0 16px #36b9ed66}
+h1{margin:0 0 8px;font-size:2rem;letter-spacing:-.035em}h1 span{color:#83d7ff}
+p{color:#bfd2e2;margin:0 0 25px}label{display:block;margin:15px 0 7px;font-size:14px;font-weight:600;color:#e3eef8}
+input{width:100%;height:50px;padding:0 14px;border:1px solid #466b89;border-radius:9px;background:#0b1b2d;color:#edf6fc;font:inherit}
 input:focus{outline:2px solid var(--accent);outline-offset:2px;border-color:var(--accent)}
-input:-webkit-autofill,input:-webkit-autofill:focus{-webkit-text-fill-color:#f2fcf7;-webkit-box-shadow:0 0 0 100px #102f35 inset;caret-color:#f2fcf7}
-button{width:100%;height:50px;margin-top:24px;border:1px solid #62ddbc;border-radius:9px;background:linear-gradient(110deg,#087d69,#096453);color:white;font:700 16px system-ui;cursor:pointer;box-shadow:0 4px 16px #27d9b328}
-button:hover{background:linear-gradient(110deg,#0b927c,#087d69)}button:focus-visible{outline:2px solid #75f0df;outline-offset:3px}button:disabled{opacity:.7;cursor:wait}
+input:-webkit-autofill,input:-webkit-autofill:focus{-webkit-text-fill-color:#edf6fc;-webkit-box-shadow:0 0 0 100px #0b1b2d inset;caret-color:#edf6fc}
+button{width:100%;height:50px;margin-top:24px;border:1px solid #70c9ed;border-radius:9px;background:linear-gradient(110deg,#087eb8,#12689d);color:white;font:700 16px system-ui;cursor:pointer;box-shadow:0 4px 16px #36b9ed28}
+button:hover{background:linear-gradient(110deg,#0b91ce,#087eb8)}button:focus-visible{outline:2px solid #83d7ff;outline-offset:3px}button:disabled{opacity:.7;cursor:wait}
 .error{min-height:20px;color:#ffc6c8;font-size:13px;margin-top:12px}
 </style>
 <main class="card"><h1>MarketDesk <span>City</span></h1><p>Connecte-toi à ton espace personnel.</p>
@@ -191,11 +196,15 @@ def startup():
     repository = Path(__file__).resolve().parents[1]
     try:
         revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=repository, capture_output=True,
-                                  text=True, timeout=5, check=True).stdout.strip()
+                                  text=True, timeout=5, check=True,
+                                  creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0).stdout.strip()
         history = subprocess.run(['git', 'rev-list', revision], cwd=repository, capture_output=True,
-                                 text=True, timeout=10, check=True).stdout
+                                 text=True, timeout=10, check=True,
+                                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0).stdout
         store.active_revision = revision
         store.active_commits = set(history.splitlines())
+        from .city_worktree import activation_commits
+        store.active_commits.update(activation_commits(repository))
     except (OSError, subprocess.SubprocessError):
         store.active_revision = ''
         store.active_commits = set()

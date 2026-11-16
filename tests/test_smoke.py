@@ -33,7 +33,7 @@ def test_internships_interface_is_independent():
     assert isinstance(app, gr.Blocks)
     config = app.get_config_file()
     labels = str(config)
-    assert "Internships" in labels
+    assert config["title"] == "Offres · Marchés financiers"
     assert "Aujourd’hui" in labels
     assert "7 derniers jours" in labels
     assert "Mes candidatures" in labels
@@ -62,6 +62,13 @@ def test_internships_interface_is_independent():
     assert "Nouveau profil" not in labels
     assert "Masquer les offres écartées" not in labels
     components = config["components"]
+    tracking_tab = next(component for component in components
+                        if component.get("type") == "tabitem"
+                        and component.get("props", {}).get("label") == "Mes candidatures")
+    assert tracking_tab["props"]["visible"] is False
+    reminder = next(component for component in components
+                    if component.get("props", {}).get("elem_id") == "offer-return-notification")
+    assert reminder["props"]["visible"] is False
     contract = next(component for component in components
                     if component.get("props", {}).get("elem_id") == "internship-contract-types")
     assert contract["type"] == "dropdown"
@@ -87,7 +94,7 @@ def test_internships_interface_is_independent():
     assert "Notes et dates (facultatif)" in labels
     assert "Enregistrer" in labels
     assert "Offre publiée" not in labels
-    assert "--desk-bg: #f7f7fb" in INTERNSHIPS_CSS
+    assert "--desk-bg: #f3f6fa" in INTERNSHIPS_CSS
     assert "Research Agent" not in labels
 
 

@@ -13,7 +13,7 @@ export async function checkLayout() {
         export { worldY } from './src/worldGeometry';
         export { cockpitData, resultSummary } from './src/cockpitData';
         export { notificationRows, isPendingProposal, needsDecision, parisDay } from './src/notifications';
-        export { buildTowerStructure } from './src/TowerArchitecture';
+        export { buildTowerStructure, loadTowerArchitecture, renderTowerBackdrop } from './src/TowerArchitecture';
         export { TileType } from './vendor/pixel-agents/webview-ui/src/office/types';
         export { projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows } from './src/TowerPerspective';
         export { GolfPractice, GOLF_BAYS, GOLF_BOUNDS, OFFICE_PORTAL, GOLF_PORTAL, golfSwingPose, golfBallPosition } from './src/GolfPractice';
@@ -25,9 +25,28 @@ export async function checkLayout() {
     bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
   });
   const { loadFurniture, buildOfficeLayout, validateAgentRoutes, OfficeState, findPath, GolfPractice, GOLF_BAYS, GOLF_BOUNDS, OFFICE_PORTAL, GOLF_PORTAL, golfSwingPose, golfBallPosition, worldY,
-    projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows, buildTowerStructure, TileType,
+    projectTowerX, unprojectTowerX, towerDepthFactor, projectTowerY, unprojectTowerY, towerDisplayRows, buildTowerStructure, loadTowerArchitecture, renderTowerBackdrop, TileType,
     notificationRows, isPendingProposal, needsDecision, parisDay, cockpitData, resultSummary } =
     await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString("base64")}`);
+  const originalImage=globalThis.Image;
+  try {
+    globalThis.Image=class {
+      width=1536; height=1024;
+      set src(value){queueMicrotask(()=>this.onload());}
+    };
+    await loadTowerArchitecture();
+    for(const [width,height] of [[1600,900],[900,1200],[2560,720],[3200,1800]]){
+      let drawn;
+      const ctx={canvas:{width,height},save(){},restore(){},fillRect(){},
+        drawImage(image,x,y,w,h){drawn={x,y,w,h};}};
+      renderTowerBackdrop(ctx);
+      assert.ok(drawn.x<=0&&drawn.y<=0,'Backdrop reaches the top and left edges');
+      assert.ok(drawn.x+drawn.w>=width&&drawn.y+drawn.h>=height,'Backdrop covers the entire viewport');
+      assert.ok(Math.abs(drawn.x*2+drawn.w-width)<1e-8&&Math.abs(drawn.y*2+drawn.h-height)<1e-8,'Backdrop remains centered');
+      assert.ok(Math.abs(drawn.w/drawn.h-1.5)<1e-8,'Backdrop preserves its aspect ratio');
+    }
+  } finally {globalThis.Image=originalImage;}
+  console.log('Backdrop OK: centered cover at wide, tall, ultrawide and high-DPI viewport sizes.');
   const proposal={id:'proposal',agent_id:'job_hunter',status:'completed',description:'Audit',created_at:'2026-01-01',result:{approval_required:true,role_version:2}};
   const done={id:'done',agent_id:'networker',status:'completed',description:'Contacts',created_at:'2026-01-02',result:{}};
   const rows=notificationRows([done,proposal],[{id:5,task_id:'done',created_at:'2026-01-02'}],4);
@@ -183,11 +202,12 @@ export async function checkLayout() {
     assert.deepEqual([seat?.seatCol,seat?.seatRow],[col,row],`Shifted workstation ${id}`);
   }
   const workstations = [...office.seats].filter(([id]) => /^marketdesk-(chair-|manager-chair$)/.test(id));
-  assert.equal(workstations.length, 13, "Expected thirteen assigned workstations");
+  assert.equal(workstations.length, 14, "Expected fourteen assigned workstations");
   for(const [id,deskType] of [
     ['job_hunter','MD_TECH_DESK'],['city_ui_engineer','MD_TECH_DESK'],
     ['internships_engineer','MD_TECH_DESK'],['quality_engineer','MD_TECH_DESK'],
-    ['networker','MD_NETWORK_DESK'],['securities_scout','MD_NETWORK_DESK'],
+    ['networker','MARKET_TRADING_DESK'],['securities_scout','MARKET_TRADING_DESK'],
+    ['prime_services_scout','MARKET_TRADING_DESK'],
   ]){
     assert.equal(office.layout.furniture.find(item=>item.uid===`marketdesk-desk-${id}`)?.type,deskType,
       `${id} needs a dedicated desk with visible computers`);
@@ -213,7 +233,7 @@ export async function checkLayout() {
     assert.ok(findPath(GOLF_PORTAL.col,GOLF_PORTAL.row,bay.col,bay.row,office.tileMap,office.blockedTiles).length,`Cannot reach golf bay ${bay.index} from portal`);
     assert.ok(findPath(bay.col,bay.row,GOLF_PORTAL.col,GOLF_PORTAL.row,office.tileMap,office.blockedTiles).length,`Cannot leave golf bay ${bay.index}`);
   }
-  const roster=['market_analyst','finance_tutor','job_hunter','networker','outreach_agent','developer','innovation_lab','internship_scout','city_ui_engineer','internships_engineer','quality_engineer','securities_scout','desk_manager'];
+  const roster=['market_analyst','finance_tutor','job_hunter','networker','outreach_agent','developer','innovation_lab','internship_scout','city_ui_engineer','internships_engineer','quality_engineer','securities_scout','prime_services_scout','desk_manager'];
   roster.forEach((id,index)=>{office.addAgent(index,index%6,0,id==='desk_manager'?'marketdesk-manager-chair':`marketdesk-chair-${id}`,true);office.setAgentPinned(index,true);office.setAgentActive(index,false);});
   const golf=new GolfPractice(office,roster);
   assert.ok(golfSwingPose(1.5).angle<golfSwingPose(0).angle,'Backswing lifts the club');

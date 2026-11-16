@@ -20,6 +20,8 @@ markets-career-desk/
 .venv/
 .codex-tools/
 artifacts/
+_site/
+.collection-cache/
 graphify-out/
 GRAPH_REPORT.md
 internships_project/city_frontend/node_modules/
@@ -52,3 +54,9 @@ internships_project/data/candidate_profile.txt
 .city-asset-check/
 .city-startup-check/
 .pytest_city_tmp/
+
+# Local agent configuration and disposable test workspaces
+.agents/
+.codex/
+.vscode/
+.test-*/

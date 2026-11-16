@@ -19,7 +19,7 @@ from .internships import (
     Opportunity, TRACKING_STATUSES, export_tracking, import_tracking, load_opportunities,
     load_delayed_opportunities,
     mark_opened_offer_applied, normalize_status, opportunities_loading, render_opportunities, render_tracking,
-    save_tracking, matching_opportunities,
+    save_tracking, matching_opportunities, source_checks,
 )
 from .career_agent import (CareerAgentError, candidate_name, export_letter_pdf,
                            generate_briefs, generate_letter, generate_linkedin_messages,
@@ -37,28 +37,7 @@ from .llm_usage import llm_user, generation_slot, GenerationLimitError, render_u
 from .private_downloads import register_download
 from . import mail_outreach
 
-CSS = Path(__file__).with_name('ui_styles.css').read_text(encoding='utf-8')
-# New SKEMA emblem published on the school's 2026 brand announcement.
-SKEMA_EMBLEM = base64.b64encode(
-    (Path(__file__).parent / 'assets' / 'skema_emblem_2026.png').read_bytes()
-).decode('ascii')
-
-APP_THEME = gr.themes.Base(primary_hue="purple", secondary_hue="violet", neutral_hue="slate").set(
-    body_background_fill="#f7f8fa", body_background_fill_dark="#f7f8fa",
-    background_fill_primary="#ffffff", background_fill_primary_dark="#ffffff",
-    background_fill_secondary="#f1f3f7", background_fill_secondary_dark="#f1f3f7",
-    block_background_fill="#ffffff", block_background_fill_dark="#ffffff",
-    block_label_background_fill="#ffffff", block_label_background_fill_dark="#ffffff",
-    panel_background_fill="#ffffff", panel_background_fill_dark="#ffffff",
-    input_background_fill="#ffffff", input_background_fill_dark="#ffffff",
-    input_background_fill_hover="#f8f7fd", input_background_fill_hover_dark="#f8f7fd",
-    input_border_color="#dce1e8", input_border_color_dark="#dce1e8",
-    border_color_primary="#dfe3e9", border_color_primary_dark="#dfe3e9",
-    body_text_color="#17202b", body_text_color_dark="#17202b",
-    body_text_color_subdued="#647184", body_text_color_subdued_dark="#647184",
-    button_primary_background_fill="#7657d4", button_primary_background_fill_dark="#7657d4",
-    button_primary_text_color="#ffffff", button_primary_text_color_dark="#ffffff",
-)
+from .internships_theme import APP_THEME, CSS, SKEMA_EMBLEM
 
 OFFER_RETURN_JS = """
 const storageKey = 'markets-career-opened-offer-v1';
@@ -83,7 +62,7 @@ function showOnReturn() {
   toast.hidden = false;
 }
 document.addEventListener('click', (event) => {
-  const link = event.target.closest('a.job-card-main, a.internship-open');
+  const link = event.target.closest('a.job-card-main');
   const card = link?.closest('.internship-card[data-offer-url]');
   if (!card) return;
   const status = card.dataset.trackingStatus;
@@ -207,7 +186,7 @@ careerNavObserver.observe(document.querySelector('#internships-app') || document
                 '<button type="button" data-offer-return-later>Plus tard</button>'
                 '<button type="button" data-offer-return-apply>Marquer « Postulé »</button>'
                 '</div></aside>',
-                js_on_load=OFFER_RETURN_JS, elem_id="offer-return-notification",
+                visible=False, elem_id="offer-return-notification",
             )
             gr.HTML(
                 '<div class="career-masthead" aria-label="À propos du projet">'
@@ -228,10 +207,12 @@ careerNavObserver.observe(document.querySelector('#internships-app') || document
                 with gr.Tab("Offres", id="offres"):
                     gr.HTML(
                         '<header class="internship-hero"><div class="hero-copy">'
-                        '<h1>Trouve ton prochain <em>stage</em></h1>'
-                        '<p>Les offres en finance de marché, réunies au même endroit.</p>'
+                        '<span class="hero-eyebrow">STAGES · VIE · GRADUATE</span>'
+                        '<h1>Les opportunités de <em>marché</em></h1>'
+                        '<p>Banques, sociétés de gestion et services titres.</p>'
                         '</div></header>',
                         js_on_load=nav_js,
+                        elem_id="internship-intro",
                     )
                     with gr.Column(elem_id="internship-search-panel"):
                         with gr.Row(elem_id="internship-search-row"):
@@ -240,7 +221,7 @@ careerNavObserver.observe(document.querySelector('#internships-app') || document
                                 show_label=False, container=False, scale=7,
                                 elem_id="internship-search-input",
                             )
-                            internship_refresh = gr.Button("↻  Actualiser les offres", variant="secondary", scale=1,
+                            internship_refresh = gr.Button("↻  Actualiser", variant="secondary", scale=1,
                                                            elem_id="internship-refresh")
                         current_month = datetime.now(timezone.utc)
                         month_names = ("Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
@@ -283,6 +264,13 @@ careerNavObserver.observe(document.querySelector('#internships-app') || document
                                     month_choices, value="Toutes dates", label="Début à partir de",
                                     show_label=False, container=False, elem_id="internship-start",
                                 )
+                            with gr.Column(elem_id="internship-sort-field"):
+                                gr.HTML('<span class="job-filter-label">Trier par</span>')
+                                internship_sort = gr.Dropdown(
+                                    [("Pertinence", "pertinence"), ("Plus récentes d’abord", "recent")],
+                                    value="pertinence", label="Trier les offres", show_label=False,
+                                    container=False, elem_id="internship-sort",
+                                )
                         with gr.Row(elem_id="internship-active-filters", visible=False) as internship_active_filters:
                             internship_query_chip = gr.Button(visible=False, elem_classes="active-filter-chip")
                             internship_contract_chip = gr.Button(visible=False, elem_classes="active-filter-chip")
@@ -297,13 +285,6 @@ careerNavObserver.observe(document.querySelector('#internships-app') || document
                         secret="ai-sales-desk-local-feedback-v1"))
                     with gr.Tabs(elem_id="jobs-sections"):
                         with gr.Tab("Offres"):
-                            with gr.Row(elem_id="internship-controls-row"):
-                                with gr.Column(elem_id="internship-sort-field"):
-                                    internship_sort = gr.Dropdown(
-                                        [("Par pertinence", "pertinence"), ("Plus récentes d’abord", "recent")],
-                                        value="pertinence", label="Trier les offres", show_label=False,
-                                        container=False, elem_id="internship-sort",
-                                    )
                             internship_board = gr.HTML(
                                 '<div class="calendar-empty">Ouvre cet onglet pour charger les offres publiques.</div>',
                                 elem_id="internship-board",
@@ -314,7 +295,7 @@ careerNavObserver.observe(document.querySelector('#internships-app') || document
                                                            for number in range(1, 6)]
                                 internship_next = gr.Button("Suivant", elem_id="internship-page-next")
                             internship_page = gr.State({"page": 1, "count": 1})
-                        with gr.Tab("Mes candidatures"):
+                        with gr.Tab("Mes candidatures", visible=False):
                             internship_tracking = (gr.State({}) if shared else gr.BrowserState(
                                 default_value={}, storage_key="ai-sales-desk-internships-v1",
                                 secret="ai-sales-desk-local-tracking-v1"))
@@ -790,8 +771,22 @@ element.addEventListener('click', (event) => {
         def show_internships(category: str, query: str, family: str, earliest: str,
                              tracking: dict, feedback: dict, show_hors_cible: bool, period: str, sort_by: str,
                              force: bool = False, request: gr.Request = None, page: int = 1,
-                             refresh: bool = True):
+                             refresh: bool = True, previous_view_key: str = "",
+                             selected: str | None = None):
             jobs, errors, updated = account_opportunities(request, force=force, refresh=refresh)
+            delayed = shared and username(request) != owner
+            loading = opportunities_loading() and not delayed
+            checks = {} if delayed else source_checks()
+            job_keys = tuple(hash(job) for job in jobs)
+            def view_key(current_page: int) -> str:
+                # Session-local state: include content, not only the collection timestamp.
+                # Progressive batches can change offers within the same collection.
+                payload = (job_keys, errors, updated, checks, loading, delayed,
+                           datetime.now(timezone.utc).date(), category, query, family,
+                           earliest, tracking, feedback, show_hors_cible, period, sort_by, current_page)
+                return hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()
+            if previous_view_key and previous_view_key == view_key(page):
+                return tuple(gr.skip() for _ in internship_outputs)
             filtered = matching_opportunities(
                 jobs, category, query, family, earliest, tracking=tracking,
                 hide_dismissed=True, weekly=period == "weekly", daily=period == "daily",
@@ -799,19 +794,20 @@ element.addEventListener('click', (event) => {
             )
             page_count = max(1, (len(filtered) + 49) // 50)
             page = max(1, min(int(page), page_count))
-            page_state = {"page": page, "count": page_count}
+            page_state = {"page": page, "count": page_count, "view_key": view_key(page)}
             page_controls = pagination_updates(page, page_count)
+            choices = offer_choices(jobs, tracking)
             return (
                 render_opportunities(
                     jobs, errors, updated, category, query, family, earliest, tracking=tracking,
                     hide_dismissed=True,
-                    refreshing=opportunities_loading() and (not shared or username(request) == owner),
+                    refreshing=loading,
                     daily=period == "daily", weekly=period == "weekly",
                     feedback=feedback, show_hors_cible=show_hors_cible, sort_by=sort_by,
-                    delayed_updates=shared and username(request) != owner,
+                    delayed_updates=delayed,
                     page=page, page_size=50,
                 ),
-                gr.Dropdown(choices=offer_choices(jobs, tracking), value=None),
+                gr.Dropdown(choices=choices, value=selected if selected in {url for _, url in choices} else None),
                 render_tracking(tracking, jobs),
                 page_state, *page_controls,
             )
@@ -1028,15 +1024,11 @@ element.addEventListener('click', (event) => {
                                      tracking: dict, feedback: dict, show_hors_cible: bool,
                                      period: str, sort_by: str, selected: str,
                                      page: dict, request: gr.Request):
-            rendered = show_internships(
+            return show_internships(
                 category, query, family, earliest, tracking, feedback, show_hors_cible,
                 period, sort_by, request=request, page=int((page or {}).get("page", 1)),
+                previous_view_key=str((page or {}).get("view_key") or ""), selected=selected,
             )
-            jobs, _, _ = account_opportunities(request)
-            choices = offer_choices(jobs, tracking)
-            urls = {url for _, url in choices}
-            return (rendered[0], gr.Dropdown(choices=choices, value=selected if selected in urls else None),
-                    rendered[2], *rendered[3:])
 
         internship_timer.tick(
             refresh_internship_timer, inputs=[*internship_inputs, tracked_offer, internship_page],

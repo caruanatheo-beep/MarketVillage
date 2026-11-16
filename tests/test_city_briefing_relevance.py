@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from internships_project import city_services, internships, state_store
+from internships_project import city_offers, city_services, internships, state_store
 from internships_project.city_routes import add_city_routes
 from internships_project.internship_relevance import rank_offers
 from internships_project.marketdesk_city import CityStore, CityWorker
@@ -25,7 +25,7 @@ def test_hugo_profile_ranking_deadline_and_account_scope(tmp_path, monkeypatch):
     now = datetime.now(timezone.utc)
     monkeypatch.setattr(internships, "opportunities_loading", lambda: False)
     monkeypatch.setattr(internships, "load_opportunities", lambda **kwargs: ([], [], now - timedelta(seconds=1)))
-    monkeypatch.setattr(internships, "refresh_opportunities", lambda **kwargs: ([general, good, expired], [], now))
+    monkeypatch.setattr(city_offers, "load_catalogue", lambda **kwargs: city_offers.Catalogue([general, good, expired], [], now, "public"))
     alice = city_services.run_agent("internship_scout", "alice")
     bob = city_services.run_agent("internship_scout", "bob")
     assert alice["offers"][0]["title"] == "Rates Sales"

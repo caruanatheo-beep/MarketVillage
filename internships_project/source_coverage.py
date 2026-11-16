@@ -13,6 +13,13 @@ class SourceCoverage:
 
 
 SOURCE_COVERAGE: dict[str, SourceCoverage] = {
+    "PIMCO": SourceCoverage("connected", "https://pimco.wd1.myworkdayjobs.com/en-US/pimco-careers", "Official global career page links this public Workday board; complete global pagination and live details required; client management and product roles distinguished from markets Sales; no HTML fallback"),
+    "Jump Trading": SourceCoverage("connected", "https://job-boards.greenhouse.io/jumptrading", "Official students/new-grads page loads this public Greenhouse API; complete global feed, quantitative trading/research campus roles and posting dates; stable requisition URLs, no HTML fallback"),
+    "Five Rings": SourceCoverage("connected", "https://job-boards.greenhouse.io/fiveringsllc", "Official careers page links this public Greenhouse board; complete global feed, internship and campus trading roles, publication dates and stable requisition URLs; no HTML fallback"),
+    "DRW": SourceCoverage("connected", "https://job-boards.greenhouse.io/drweng", "Official DRW internship page links this public Greenhouse board; complete global feed, publication dates and stable requisition URLs; no HTML fallback"),
+    "Fidelity International": SourceCoverage("connected", "https://fidelityinternational.tal.net/vx/lang-en-GB/mobile-0/brand-5/candidate/jobboard/vacancy/1/adv/", "Official Early Careers HTML board; exhaustive programme count checked and live offer descriptions required; separate professional Workday board not collected; no API or browser fallback"),
+    "Capital Group": SourceCoverage("connected", "https://capgroup.wd1.myworkdayjobs.com/en-US/capitalgroupcareers", "Official careers page links this public Workday board; complete global pagination and verified requisition details; no HTML fallback"),
+    "FactSet": SourceCoverage("connected", "https://factset.wd108.myworkdayjobs.com/en-US/FactSetCareers", "Official career page links the public Workday CXS board; live details required; no HTML fallback"),
     # Banks
     "BNP Paribas": SourceCoverage("connected", "https://group.bnpparibas/emploi-carriere/toutes-offres-emploi/stage/france", "Public Playwright collector in graphical Chromium; requires an interactive desktop"),
     "Société Générale": SourceCoverage("connected", "https://careers.societegenerale.com/en/Technical/all-job-offers", "Global English job index and direct public offer pages; includes international locations"),
@@ -22,7 +29,9 @@ SOURCE_COVERAGE: dict[str, SourceCoverage] = {
     "CIBC Capital Markets": SourceCoverage("connected", "https://cibc.wd3.myworkdayjobs.com/campus", "Public Workday CXS board; detail pages provide the job posting when available"),
     "TD Securities": SourceCoverage("connected", "https://td.wd3.myworkdayjobs.com/TD_Bank_Careers", "Public Workday CXS board; detail pages provide the job posting when available"),
     "OCBC Global Markets": SourceCoverage("connected", "https://ocbc.wd102.myworkdayjobs.com/External", "Public Workday CXS board; detail pages provide the job posting when available"),
-    "UBS": SourceCoverage("portal", "https://www.ubs.com/global/en/careers/search-jobs.html", "Official Taleo/TGnewUI board is JavaScript/session dependent; public detail URLs currently report expired sessions, so no scraper is enabled"),
+    "BBVA": SourceCoverage("connected", "https://bbva.wd3.myworkdayjobs.com/en-US/BBVA", "Public Workday board with existing market-role and early-career filters"),
+    "ING": SourceCoverage("connected", "https://ing.wd3.myworkdayjobs.com/en-US/ICSGBLCOR", "Public Workday board with existing market-role and early-career filters"),
+    "UBS": SourceCoverage("connected", "https://jobs.ubs.com/TGnewUI/Search/Home/Home?partnerid=25008&siteid=5131", "Public early-career board rendered headlessly; ordinary search and Next pagination, without login"),
     "Barclays": SourceCoverage("connected", "https://barclays.wd3.myworkdayjobs.com/External_Career_Site_Barclays", "Public Workday CXS board; existing connector verified with live source diagnostics"),
     "Qube Research & Technologies": SourceCoverage("connected", "https://job-boards.greenhouse.io/quberesearchandtechnologies", "Public Greenhouse board; 2027 quantitative research and trading internships include Paris, London and Zurich"),
     "21shares": SourceCoverage("connected", "https://job-boards.greenhouse.io/21shares", "Public Greenhouse board; currently no vacancies listed"),
@@ -33,6 +42,8 @@ SOURCE_COVERAGE: dict[str, SourceCoverage] = {
     "Crédit Mutuel Arkéa": SourceCoverage("connected", "https://recrutement.arkea.com/accueil.aspx"),
     "ODDO BHF": SourceCoverage("connected", "https://www.oddo-bhf.com/fr/decouvrez-nos-offres-demplois/", "Official embedded Altays listing with static and JavaScript-rendered PDF discovery; currently reports an Altays loading error when no PDFs are exposed"),
     "CACEIS": SourceCoverage("connected", "https://jobs.caceis.com/pages/offre/listeoffre.aspx?lcid=1036"),
+    "Crédit Agricole Titres": SourceCoverage("connected", "https://catitres.teamtailor.com/jobs", "Public Teamtailor listing; only eligible markets early-career roles are retained"),
+    "La Française": SourceCoverage("connected", "https://recrutement.creditmutuel.fr/fr/nos_offres.html?socs=39|4962|1499|1497|4963|4965|5007|5008|1496&tc=3", "Dedicated asset-management perimeter linked by the official La Française career page; Crédit Mutuel AM employer retained when identified"),
     "Banque de France": SourceCoverage("connected", "https://bdf.wd103.myworkdayjobs.com/fr-FR/recrutement-banque-de-France", "Public Workday CXS board; contract verified on each detail page"),
     "Bpifrance": SourceCoverage("indirect", "https://talents.bpifrance.fr/opportunites/", "JobTeaser public sitemap only; official career site returned HTTP 403 during local checks"),
     "Banque Richelieu": SourceCoverage("portal", "https://banquerichelieu.com/recrutements", "Public recruitment page checked on 2026-11-07; no direct vacancy links or public feed exposed, only unsolicited applications; automatic collection is not enabled"),

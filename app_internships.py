@@ -13,9 +13,13 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-from internships_project.internships_ui import APP_THEME, CSS, build_internships_app
+OFFERS_ONLY = os.getenv("INTERNSHIPS_OFFERS_ONLY", "1") == "1"
+if OFFERS_ONLY:
+    from internships_project.offers_ui import build_offers_app as build_internships_app
+    from internships_project.internships_theme import APP_THEME, CSS
+else:
+    from internships_project.internships_ui import APP_THEME, CSS, build_internships_app
 from internships_project.internships import start_hourly_refresh
-from internships_project.mail_outreach import start_followup_worker
 from internships_project.login_page import auth_message
 from internships_project.accounts import account_exists, admin_username, authenticate
 from internships_project.registration import add_registration_routes
@@ -61,13 +65,21 @@ def create_shared_server(blocks, users: list[tuple[str, str]] | None, host: str 
         admin_username(users)
     server = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     gradio_app = None
-    if shared:
+    if shared and not OFFERS_ONLY:
         add_registration_routes(server, users)
     login_attempts: dict[str, deque[float]] = defaultdict(deque)
     login_lock = threading.Lock()
 
     @server.get("/confidentialite", response_class=HTMLResponse)
     def privacy_page():
+        if OFFERS_ONLY:
+            return HTMLResponse('''<!doctype html><html lang="fr"><meta charset="utf-8">
+<title>Confidentialité · Offres</title><main><h1>Confidentialité</h1>
+<p>Ce site permet uniquement de consulter les offres publiques. Aucun CV, profil,
+message ou contenu n'est transmis à un service d'intelligence artificielle.</p>
+<p>La connexion utilise des cookies de session. Les offres et les diagnostics de
+collecte sont conservés sur le serveur. Les annonces s'ouvrent sur le site source.</p>
+<p>La création publique de comptes et les fonctions IA sont désactivées.</p></main></html>''')
         return HTMLResponse('''<!doctype html><html lang="fr"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Confidentialité · Offres</title>
 <style>body{font:16px system-ui,sans-serif;line-height:1.6;color:#20243a;background:#f7f7fb;margin:0;padding:32px}
@@ -89,7 +101,7 @@ a{color:#6242be}h1{font-size:28px}li{margin:.6em 0}</style><main><h1>Confidentia
         show_error=False, css=CSS, theme=APP_THEME,
         max_file_size=8_000_000, favicon_path=str(blocks.favicon_path) if blocks.favicon_path else None,
         auth=(lambda name, password: authenticate(name, password, users)) if shared else None,
-        auth_message=auth_message() if shared else None,
+        auth_message=auth_message(signup=not OFFERS_ONLY) if shared else None,
     )
     gradio_app = next(route.app for route in server.routes
                       if hasattr(getattr(route, "app", None), "tokens"))
@@ -100,6 +112,8 @@ a{color:#6242be}h1{font-size:28px}li{margin:.6em 0}</style><main><h1>Confidentia
                                 os.getenv("SPACE_ID") or os.getenv("INTERNSHIPS_PUBLIC_HTTPS"))
         if cloud:
             request.cookies.pop(f"access-token-unsecure-{gradio_app.cookie_id}", None)
+        if OFFERS_ONLY and request.url.path == "/private-download":
+            return JSONResponse({"detail": "Fichier introuvable."}, status_code=404)
         if shared and request.method == "GET" and request.url.path == "/private-download":
             from fastapi.responses import FileResponse
             from internships_project.private_downloads import latest_download
@@ -161,13 +175,18 @@ if __name__ == "__main__":
     if os.getenv("APP_TEST_MODE") == "1":
         print("Internships entry point: OK")
     else:
-        start_hourly_refresh()
-        start_followup_worker()
         cloud = bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID") or
                      os.getenv("SPACE_ID") or os.getenv("INTERNSHIPS_PUBLIC_HTTPS"))
         users = configured_users()
         if cloud and not users:
             raise RuntimeError("Hébergement public refusé : configure INTERNSHIPS_USERS_JSON avant le lancement")
+        if OFFERS_ONLY:
+            from internships_project.offers_schedule import start_scheduled_refresh
+            start_scheduled_refresh()
+        else:
+            from internships_project.mail_outreach import start_followup_worker
+            start_hourly_refresh()
+            start_followup_worker()
         port = int(os.getenv("PORT", "7861")) if cloud else int(os.environ["MARKETDESK_APP_PORT"]) if os.getenv("MARKETDESK_APP_PORT") else available_port()
         host = "0.0.0.0" if cloud else "127.0.0.1"
         print(f"Internships is starting on {host}:{port}")

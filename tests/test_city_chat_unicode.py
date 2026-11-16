@@ -19,8 +19,6 @@ def chat_client(monkeypatch):
         yield json.dumps({"type": "done"})
 
     # Exercise the HTTP boundary without any provider request or stored data.
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key-never-sent")
-    monkeypatch.setattr(city_chat, "_budget_guard", lambda *args: None)
     monkeypatch.setattr(city_chat, "stream_chat", stream)
     app = FastAPI()
     city_routes.add_city_routes(app, lambda _: "synthetic-user",

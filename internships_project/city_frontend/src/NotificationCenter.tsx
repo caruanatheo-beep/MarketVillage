@@ -1,7 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityTimeline} from './ActivityTimeline';
 import {isPendingProposal,needsDecision,notificationRows,parisDay,type NotificationTask,type NotificationEvent} from './notifications';
-import {agentGroup,groupedAgents} from './agentGroups';
+import {agentGroup,agentSections} from './agentGroups';
 
 type Props={tasks:NotificationTask[];events:NotificationEvent[];agents:{id:string;name:string}[];readThrough:number;initialFilter?:string;initialAgent?:string;
   onClose:()=>void;onOpen:(id:string)=>void;onRead:()=>Promise<unknown>;
@@ -31,7 +31,7 @@ export function NotificationCenter(props:Props){
     </div>
     <div className="notification-commands"><span>Les actions à prendre apparaissent en premier dans le fil.</span><button disabled={!!busy} onClick={()=>void action('read',props.onRead,'Notifications marquées comme lues. Les décisions restent à traiter.')}>Tout marquer comme lu</button></div>
     <div className="notification-tabs" role="group" aria-label="Filtrer les notifications">{[['all','Tout'],['decision','Décisions'],['unread','Non lues'],['failed','Erreurs']].map(([id,label])=><button key={id} aria-pressed={filter===id} className={filter===id?'selected':''} onClick={()=>setFilter(id)}>{label}</button>)}</div>
-    <div className="notification-filters"><input aria-label="Rechercher une notification" placeholder="Mission, résultat ou identifiant…" value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="Agent des notifications" value={agent} onChange={e=>setAgent(e.target.value)}><option value="">Tous les agents</option><optgroup label="Développement">{groupedAgents(props.agents).code.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</optgroup><optgroup label="Agents métier">{groupedAgents(props.agents).business.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</optgroup></select></div>
+    <div className="notification-filters"><input aria-label="Rechercher une notification" placeholder="Mission, résultat ou identifiant…" value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="Agent des notifications" value={agent} onChange={e=>setAgent(e.target.value)}><option value="">Tous les agents</option>{agentSections(props.agents).map(({label,agents})=><optgroup key={label} label={label}>{agents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</optgroup>)}</select></div>
     {error&&<p className="notification-feedback error" role="alert">{error}</p>}{notice&&<p className="notification-feedback" role="status">{notice}</p>}
     <div className="notification-feed"><p className="notification-count">{visible.length} mission(s) affichée(s) · décisions en priorité</p>
       {!visible.length&&<div className="notification-empty"><strong>Tout est calme ici.</strong><p>Aucune mission ne correspond à ces filtres.</p></div>}
@@ -45,8 +45,8 @@ export function NotificationCenter(props:Props){
           {task.result.file&&<p className="notification-file">Fichier préparé : <code>{task.result.file}</code></p>}
           <div className="notification-actions"><button onClick={()=>props.onOpen(task.id)}>{task.status==='completed'?'Voir le résultat':'Voir la mission'} →</button>
             {proposal&&<><button className="accept" disabled={!!busy||blocked} onClick={()=>void action(task.id,()=>props.onReview(task.id,true),'Proposition validée et mission suivante créée.')}>Valider la proposition</button><button disabled={!!busy} onClick={()=>void action(task.id,()=>props.onReview(task.id,false),'Proposition refusée.')}>Refuser</button></>}
-            {task.status==='waiting_approval'&&<><button className="accept" disabled={!!busy} onClick={()=>void action(task.id,()=>props.onApprove(task.id),'Mission autorisée.')}>Autoriser la mission</button><button disabled={!!busy} onClick={()=>void action(task.id,()=>props.onCancel(task.id),'Mission annulée.')}>Annuler</button></>}
-            {task.status==='failed'&&(!task.workflow_id||(task.retry_count||0)<(task.max_retries||0))&&<button disabled={!!busy} onClick={()=>void action(task.id,()=>props.onRetry(task.id),'Mission remise en file.')}>Réessayer</button>}
+            {!task.read_only&&task.status==='waiting_approval'&&<><button className="accept" disabled={!!busy} onClick={()=>void action(task.id,()=>props.onApprove(task.id),'Mission autorisée.')}>Autoriser la mission</button><button disabled={!!busy} onClick={()=>void action(task.id,()=>props.onCancel(task.id),'Mission annulée.')}>Annuler</button></>}
+            {!task.read_only&&task.status==='failed'&&(!task.workflow_id||(task.retry_count||0)<(task.max_retries||0))&&<button disabled={!!busy} onClick={()=>void action(task.id,()=>props.onRetry(task.id),'Mission remise en file.')}>Réessayer</button>}
           </div>
         </article>;
       })}

@@ -121,7 +121,7 @@ def test_source_checks_distinguish_results_empty_and_error_and_survive_cache(tmp
     for name in ("_socgen_jobs", "_vie_jobs", "_ca_cib_jobs", "_bnp_cib_jobs", "_bnp_tal_jobs",
                  "_banque_de_france_jobs", "_dnca_jobs", "_covea_finance_jobs", "_comgest_jobs",
                  "_bnp_group_jobs", "_oddo_jobs", "_tikehau_jobs", "_groupama_am_jobs", "_axa_jobs",
-                 "_amundi_jobs", "_arkea_jobs", "_bpce_open_data_jobs", "_jobteaser_jobs"):
+                 "_amundi_jobs", "_arkea_jobs", "_bpce_open_data_jobs", "_jobteaser_jobs", "_ubs_jobs"):
         monkeypatch.setattr(internships, name, lambda *args: [])
 
     jobs, errors, updated = internships.refresh_opportunities()
@@ -225,15 +225,16 @@ def test_jobteaser_does_not_merge_unrelated_or_different_natixis_roles():
     assert {job.url for job in jobs} == {direct.url, other_role.url, unrelated.url}
 
 
-def test_company_icon_uses_official_host_and_unknown_company_keeps_initials():
-    assert _company_icon("Société Générale") == "https://www.societegenerale.com/favicon.ico"
-    assert _company_icon("BNP Paribas Mission Handicap") == "https://group.bnpparibas/favicon.ico"
-    assert _company_icon("Employeur inconnu") == ""
+def test_company_icon_is_local_and_unknown_company_has_a_fallback():
+    assert _company_icon("Société Générale").startswith("data:image/")
+    assert _company_icon("BNP Paribas Mission Handicap") == _company_icon("BNP Paribas")
+    assert _company_icon("Employeur inconnu").startswith("data:image/svg+xml;base64,")
     job = _opportunity("Stage Sales Trading", "Société Générale", "Paris", "Stage",
                        "https://careers.societegenerale.com/fr/emploi/test", "2026-10-25")
     assert job is not None
     card = render_opportunities([job], [], datetime.now(timezone.utc))
-    assert 'src="https://www.societegenerale.com/favicon.ico"' in card
+    assert 'src="data:image/' in card
+    assert '/favicon.ico' not in card
     assert 'onerror="this.remove()"' in card
 
 
@@ -496,7 +497,7 @@ def test_bnp_diagnostics_are_not_shown_in_job_board():
     assert "Voir les stages BNP Paribas sur le site officiel" in board
     other_source = render_opportunities([], ["CACEIS: HTTP 503", "BNP Paribas: HTTP 403"],
                                         datetime(2026, 10, 25, tzinfo=timezone.utc))
-    assert "1 sources indisponibles" in other_source
+    assert "1 source inaccessible" in other_source
     assert "CACEIS: HTTP 503" in other_source
     assert "BNP Paribas: HTTP 403" not in other_source
 
@@ -940,7 +941,7 @@ def test_detected_today_appears_in_today_and_week_filters():
 
     all_view = render_opportunities(jobs, [], stamp, today=today)
     assert "FO Controls" in all_view
-    assert "Publication inconnue<br>Détectée le 2026-11-02" in all_view
+    assert "Publication inconnue · Détectée le 2026-11-02" in all_view
     recent = matching_opportunities(jobs, sort_by="recent", today=today)
     assert [job.url for job in recent] == [source_dated.url, bpce.url]
 
@@ -1023,7 +1024,7 @@ def test_workday_offer_and_explicit_start(monkeypatch):
             return self.payload
 
     def post(url, json=None, **kwargs):
-        if json["searchText"] != "Paris":
+        if json["searchText"] != "":
             return Response({"total": 0, "jobPostings": []})
         return Response({"total": 1, "jobPostings": [
             {"title": "Rates Sales Intern", "locationsText": "Paris",
@@ -1053,7 +1054,7 @@ def test_workday_preserves_relevant_offers_beyond_detail_enrichment_limit(monkey
             return self.payload
 
     def post(url, json=None, **kwargs):
-        if json["searchText"] != "Paris":
+        if json["searchText"] != "":
             return Response({"total": 0, "jobPostings": []})
         offset = json["offset"]
         rows = [{"title": f"Rates Sales Intern {index}", "locationsText": "Paris",
@@ -1331,7 +1332,8 @@ def test_offer_card_keeps_tracking_status_with_contract_details():
     tracked = save_tracking({}, job, "OA", "")
     board = render_opportunities([job], [], datetime.now(timezone.utc), tracking=tracked)
     tags = board.split('<span class="job-card-tags">', 1)[1].split('</span></a>', 1)[0]
-    assert 'class="job-fact kind"' in tags
+    header = board.split('<span class="job-card-header">', 1)[1].split('<strong class="job-title"', 1)[0]
+    assert 'class="job-fact kind">Stage</span>' in header
     assert 'class="job-badge tracked">OA</span>' in tags
     assert 'class="job-badges"' not in board
 
@@ -1427,7 +1429,7 @@ def test_undated_offer_gets_first_detection_date_and_keeps_it(tmp_path, monkeypa
     jobs, _, _ = internships.refresh_opportunities()
     assert jobs[0].published == "2026-10-20"
     assert jobs[0].published_inferred
-    assert "Publication inconnue<br>Détectée le 2026-10-20" in render_opportunities(jobs, [], old_snapshot)
+    assert "Publication inconnue · Détectée le 2026-10-20" in render_opportunities(jobs, [], old_snapshot)
     _, reloaded, _ = internships._read_cache()
     assert reloaded[0].published == "2026-10-20"
 
@@ -1570,7 +1572,7 @@ def test_lbp_listing_associates_details_link_with_offer_heading(monkeypatch):
             pass
 
     def fake_get(url, **kwargs):
-        return Response(listing if url.endswith("nos-offres-d-emploi.html") else detail)
+        return Response(listing if url == internships.CAREER_LISTINGS["La Banque Postale"][0] else detail)
 
     monkeypatch.setattr(internships.requests, "get", fake_get)
     jobs = internships._career_page_jobs("La Banque Postale", internships.CAREER_LISTINGS["La Banque Postale"])
@@ -1600,7 +1602,7 @@ def test_lazard_oracle_connector_paginates_and_retains_full_detail(monkeypatch):
             calls.append((url, kwargs))
             if "/hcmUI/" in url:
                 return Response(text='{"siteNumber":"CX_42"}')
-            if "recruitingCEJobRequisitionDetails/" in url:
+            if url.endswith("/recruitingCEJobRequisitionDetails"):
                 return Response({"ExternalDescription": "The role supports the fixed income trading desk and rates products."})
             if kwargs.get("params", {}).get("finder", "").endswith("offset=0"):
                 return Response({"items": [{"TotalJobsCount": 1, "requisitionList": [{

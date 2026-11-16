@@ -118,13 +118,13 @@ def test_lina_report_reaches_contacts_with_empty_collection_reasons(tmp_path, mo
 
 
 def test_desktop_contacts_empty_report_targeted_retry_and_visible_evidence():
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import sync_playwright, expect
 
     root = Path(__file__).resolve().parents[1]
     bundle = (root / 'internships_project/city_assets/city.js').read_text(encoding='utf-8')
     # Mount the shipped Contacts component alone, with synthetic API responses.
     mount = re.search(r'\.render\((\(0,\w+\.jsx\))\(\w+,\{\}\)\)', bundle)
-    component = re.search(r'\(0,(\w+)\.jsx\)\((\w+),\{\}\),\(0,\1\.jsxs\)\("footer",\{className:"network-window-footer"', bundle)
+    component = re.search(r'\(0,(\w+)\.jsx\)\((\w+),\{[^{}]*\}\),\(0,\1\.jsxs\)\("footer",\{className:"network-window-footer"', bundle)
     assert mount and component
     entry = mount.group(0)[len('.render('):-1]
     assert bundle.count(entry) == 1
@@ -157,6 +157,8 @@ def test_desktop_contacts_empty_report_targeted_retry_and_visible_evidence():
         page.add_script_tag(content=bundle)
         page.get_by_text('Ton répertoire est vide.', exact=False).wait_for()
         page.get_by_role('button', name='Voir les bilans et cibler une recherche').click()
+        page.get_by_text('Dernier bilan de Lina', exact=True).click()
+        page.get_by_text('Dernier bilan de Clara', exact=True).click()
         assert page.get_by_text('3 doublons écartés', exact=False).is_visible()
         assert page.get_by_text('2 fiches insuffisamment sourcées écartées', exact=False).is_visible()
         assert page.get_by_text('Source indisponible', exact=True).is_visible()
@@ -172,6 +174,18 @@ def test_desktop_contacts_empty_report_targeted_retry_and_visible_evidence():
         assert page.get_by_label('Requête LinkedIn').input_value() == 'Collateral CACEIS Paris'
         link = page.get_by_role('link', name='Ouvrir la recherche LinkedIn')
         assert link.get_attribute('href').endswith('keywords=Collateral%20CACEIS%20Paris')
+        page.get_by_role('button', name='Un profil', exact=False).click()
+        assert page.get_by_label('Nom complet', exact=True).is_visible()
+        assert not page.get_by_label('Requête LinkedIn').is_visible()
+        page.get_by_label('Nom complet', exact=True).fill('Alice Exemple')
+        page.get_by_label('Lien LinkedIn ou source publique').fill('https://example.org/biography')
+        page.get_by_role('button', name='Coller une liste', exact=False).click()
+        page.get_by_label('Résultats copiés').fill('Copie conservée entre les méthodes')
+        assert not page.get_by_label('Nom complet', exact=True).is_visible()
+        page.get_by_role('button', name='Un profil', exact=False).click()
+        assert page.get_by_label('Nom complet', exact=True).input_value() == 'Alice Exemple'
+        page.get_by_role('button', name='Coller une liste', exact=False).click()
+        assert page.get_by_label('Résultats copiés').input_value() == 'Copie conservée entre les méthodes'
         # All navigation remains mocked; no external site is opened.
         state['contacts'] = [{'id': 'synthetic', 'name': 'Alex Exemple', 'role': 'FX Sales',
             'company': 'Banque Exemple', 'location': '', 'linkedin_url': '', 'school': '',
@@ -182,12 +196,14 @@ def test_desktop_contacts_empty_report_targeted_retry_and_visible_evidence():
         page.reload()
         page.evaluate('window.__marketdeskNativePanels = true')
         page.add_script_tag(content=bundle)
+        page.get_by_text('Sources et vérification', exact=True).click()
         page.get_by_text('Preuve synthétique du poste.', exact=True).wait_for(state='visible')
         assert page.get_by_role('link', name='Source publique').get_attribute('href') == 'https://example.invalid/bio'
         page.get_by_label('Rechercher un contact').fill('Aucun profil ne porte ce nom')
         assert page.get_by_text('Aucun contact ne correspond aux filtres.', exact=False).is_visible()
         assert page.get_by_text('Ton répertoire est vide.', exact=False).count() == 0
         page.get_by_role('button', name='Effacer les filtres').click()
+        page.get_by_text('Sources et vérification', exact=True).click()
         assert page.get_by_text('Preuve synthétique du poste.', exact=True).is_visible()
         # Pasted profiles can lack a public URL: explain that limitation and
         # keep the evidence visible instead of presenting an invented link.
@@ -196,8 +212,27 @@ def test_desktop_contacts_empty_report_targeted_retry_and_visible_evidence():
         page.evaluate('window.__marketdeskNativePanels = true')
         page.add_style_tag(content=(root / 'internships_project/city_assets/city.css').read_text(encoding='utf-8'))
         page.add_script_tag(content=bundle)
+        page.get_by_text('Sources et vérification', exact=True).click()
         page.get_by_text('Aucun lien public vérifiable enregistré', exact=False).wait_for(state='visible')
         assert page.get_by_text('Preuve synthétique du poste.', exact=True).is_visible()
         assert page.get_by_role('link', name='Source publique').count() == 0
+        state['outreach'] = [dict(id='sent-demo', contact_id='synthetic', recipient_email='alice@example.invalid',
+            subject='Synthetic follow-up', body='Test message', status='sent', sent_at='2026-01-01T12:00:00Z',
+            follow_up_at='2026-01-10', notes='', created_at='2026-01-01', updated_at='2026-01-01')]
+        page.reload()
+        page.evaluate('window.__marketdeskNativePanels = true')
+        page.add_script_tag(content=bundle)
+        page.locator('.network-workspace-tabs').get_by_role('button', name='Messages et suivi').click()
+        filters = page.locator('.outreach-quick-filters')
+        filters.get_by_role('button', name=re.compile('^Brouillons')).click()
+        expect(page.locator('.outreach-record')).to_have_count(0)
+        filters.get_by_role('button', name=re.compile('^À relancer')).click()
+        expect(page.locator('.outreach-record')).to_have_count(1)
+        page.locator('.outreach-record').click()
+        page.get_by_role('button', name='Dans 7 jours', exact=True).click()
+        assert page.get_by_label('Relance prévue').input_value() > '2026-01-10'
+        assert page.get_by_text('Modifications non enregistrées', exact=True).is_visible()
+        page.get_by_role('button', name='Retirer la date', exact=True).click()
+        assert page.get_by_label('Relance prévue').input_value() == ''
         assert not errors
         browser.close()

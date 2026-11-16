@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import os
-import time
 
 
 def _row(name: str, status: str, source: str, detail: str, last_sync: str = "",
@@ -17,11 +16,13 @@ def check_integrations(username: str) -> dict:
     checked_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     checks: list[dict] = []
     try:
-        from .internships import load_opportunities
-        jobs, errors, updated = load_opportunities(refresh=False)
-        checks.append(_row("Internship Tracker", "Connected", "Shared offers cache / connector state",
-                           f"{len(jobs)} cached offers; {len(errors)} current source errors. Check performed without a refresh.",
-                           updated.isoformat(), "Read", False))
+        from .city_offers import load_catalogue
+        catalogue = load_catalogue()
+        metadata = catalogue.metadata()
+        checks.append(_row("Internship Tracker", "Connected" if catalogue.source == 'public' and not metadata['catalog_stale'] and not catalogue.warning else "Unavailable",
+                           "Internships en ligne" if catalogue.source == 'public' else "Cache local de secours",
+                           f"{len(catalogue.jobs)} offres ; {len(catalogue.errors)} alertes de sources. " + metadata['catalog_warning'],
+                           catalogue.updated.isoformat(), "Read", False))
     except Exception as exc:
         checks.append(_row("Internship Tracker", "Error", "Shared offers cache",
                            f"Cache unavailable ({type(exc).__name__})."))
@@ -73,27 +74,18 @@ def check_integrations(username: str) -> dict:
     except Exception as exc:
         checks.append(_row("Outreach Service", "Error", "Existing Mail draft generator",
                            f"Draft service failed to load ({type(exc).__name__})."))
+    from .city_chat import codex_chat_available
+    available = codex_chat_available()
+    checks.append(_row("Desk Manager · Codex", "Connected" if available else "Unavailable", "Abonnement ChatGPT",
+                       "Connexion locale reconnue ; utilise le chat pour vérifier une réponse réelle." if available else
+                       "Connexion Codex locale indisponible. Relance City avec les droits de ton compte Windows.",
+                       access="External request on chat"))
     key = os.getenv("OPENAI_API_KEY", "").strip()
     if not key:
-        checks.append(_row("LLM Provider", "Unavailable", "OpenAI API",
-                           "OPENAI_API_KEY is not configured on the server.", access="External request on chat", separate_process=False))
+        checks.append(_row("Iris · rédaction API", "Unavailable", "OpenAI API existante",
+                           "Rédaction API non configurée ; cela ne bloque pas le chat Codex.", access="Draft only", separate_process=False))
     else:
-        try:
-            import requests
-            started = time.monotonic()
-            response = requests.get("https://api.openai.com/v1/models",
-                                    headers={"Authorization": f"Bearer {key}"}, timeout=(4, 8))
-            latency = round((time.monotonic() - started) * 1000)
-            status = "Connected" if response.ok else "Error"
-            detail = f"OpenAI models endpoint returned HTTP {response.status_code} in {latency} ms; no completion was requested."
-            checks.append(_row("LLM Provider", status, "OpenAI Models API", detail,
-                               checked_at if response.ok else "", "External request on chat", False))
-            if outreach_row and response.ok:
-                outreach_row["status"] = "Connected"
-                outreach_row["detail"] = "Mail draft workflow is available and the provider endpoint responded. No draft or email was created."
-            response.close()
-        except Exception as exc:
-            checks.append(_row("LLM Provider", "Error", "OpenAI Models API",
-                               f"Provider check failed ({type(exc).__name__}); no key or response body is shown.",
-                               access="External request on chat", separate_process=False))
+        checks.append(_row("Iris · rédaction API", "Unavailable", "OpenAI API existante",
+                           "Configuration présente ; aucun appel API effectué. Une rédaction réelle reste à vérifier.",
+                           access="Draft only"))
     return {"checked_at": checked_at, "integrations": checks}

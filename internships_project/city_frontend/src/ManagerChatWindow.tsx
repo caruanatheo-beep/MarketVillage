@@ -14,7 +14,7 @@ export function ManagerChatWindow({children,onClose}:{children:React.ReactNode;o
     onClick={event=>{if(event.target===event.currentTarget){const r=event.currentTarget.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)onClose();}}}>
     <header className="network-window-heading">
       <span className="network-host roster-avatar pixel-agent-avatar desk_manager" aria-hidden="true"><i className="agent-sprite"/></span>
-      <div><span className="network-kicker">Command Center</span><h2 id="manager-chat-title">Desk Manager</h2><p>Confie tes demandes aux agents et retrouve ta conversation.</p></div>
+      <div><span className="network-kicker">COORDINATION DES AGENTS</span><h2 id="manager-chat-title">Desk Manager</h2><p>Bilans, missions et reprises — avec un retour sur chaque action.</p></div>
       <button type="button" className="network-close" onClick={onClose} aria-label="Fermer le chat">×</button>
     </header>
     <div className="command-console manager-chat-content">{children}</div>

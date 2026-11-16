@@ -65,7 +65,6 @@ def test_sales_first_fills_ten_with_adjacent_roles_without_ratio(tmp_path, monke
 
 @pytest.mark.parametrize('completion',['success','error','budget'])
 def test_one_topup_targets_only_shortfall_and_preserves_initial_contacts(tmp_path,monkeypatch,completion):
-    from internships_project import city_chat
     monkeypatch.setattr(state_store,'USER_DB_PATH',tmp_path/'accounts.sqlite3')
     monkeypatch.delenv('MARKETDESK_NETWORK_SEARCH_MODE',raising=False)
     leads=network.parse_results(''.join(result(name=f'Alex Martin{i}',role='Trader',slug=f'alex-{i}') for i in range(10)),'Paris')
@@ -75,17 +74,13 @@ def test_one_topup_targets_only_shortfall_and_preserves_initial_contacts(tmp_pat
         if not top_up:
             return leads[:3],0
         assert len(network.list_contacts(username))==3
-        if completion=='error':
-            raise CityError('Network unavailable')
+        if completion in {'error','budget'}:
+            raise CityError('Quota ChatGPT atteint' if completion=='budget' else 'Network unavailable')
         return leads[3:],0
-    def budget(*args,**kwargs):
-        if completion=='budget':
-            raise CityError('Budget exhausted')
     monkeypatch.setattr(network,'research_contacts',research)
-    monkeypatch.setattr(city_chat,'_budget_guard',budget)
     report=network.discover_contacts('alice')
     assert report['count']==(10 if completion=='success' else 3)
-    assert calls==([(10,False)] if completion=='budget' else [(10,False),(7,True)])
+    assert calls==[(10,False),(7,True)]
     assert len(network.list_contacts('alice'))==report['count']
     assert bool(report['warnings'])==(completion!='success')
     assert network.list_contacts('bob')==[]
@@ -434,72 +429,39 @@ def test_network_routes_are_private_and_require_browser_origin(tmp_path, monkeyp
         assert store.snapshot('bob')['tasks'] == []
 
 
-def test_ai_daily_mission_saves_contacts_and_attributes_cost_without_real_api(tmp_path, monkeypatch):
-    monkeypatch.setattr(state_store, "USER_DB_PATH", tmp_path / "city.sqlite3")
-    monkeypatch.setenv("OPENAI_API_KEY", "test-only-not-a-real-key")
-    monkeypatch.delenv("MARKETDESK_NETWORK_SEARCH_MODE", raising=False)
-    url = 'https://www.linkedin.com/in/alex-martin'
-    data = {"status":"completed", "model":"gpt-5.4-mini", "usage":{
-        "input_tokens":1000,"output_tokens":100,"input_tokens_details":{"cached_tokens":0}}, "output":[
-        {"type":"web_search_call","status":"completed","action":{"type":"search","sources":[{"url":url}]}},
-        {"type":"message","content":[{"type":"output_text","text":json.dumps({"contacts":[{
-            "name":"Alex Martin","role":"Rates Sales","company":"Bank A","location":"Paris",
-            "source_url":url,"linkedin_url":url,"evidence":"Alex Martin, Rates Sales at Bank A in Paris","notes":""}]})}]}]}
-    class Response:
-        status_code = 200
-        def __enter__(self): return self
-        def __exit__(self, *args): pass
-        def iter_content(self, size): yield json.dumps(data).encode()
+def test_subscription_daily_mission_saves_contacts_without_paid_api(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'city.sqlite3')
+    monkeypatch.delenv('MARKETDESK_NETWORK_SEARCH_MODE', raising=False)
+    monkeypatch.setenv('OPENAI_API_KEY', 'must-not-be-used')
+    monkeypatch.setattr(network.requests, 'post', lambda *a, **kw: pytest.fail('No paid API'))
     calls=[]
-    def post(url, **kwargs):
-        calls.append(kwargs['json'])
-        return Response()
-    monkeypatch.setattr(network.requests, 'post', post)
+    def search(target, **kwargs):
+        calls.append((target, kwargs))
+        assert kwargs['markets']
+        return [] if kwargs['existing'] else [dict(name='Alex Martin', role='Rates Sales',
+            company='Bank A', source_url='https://example.org/alex',
+            source_excerpt='Alex Martin, Rates Sales at Bank A in Paris.', origin='lina_public_search')]
+    monkeypatch.setattr(network, '_search_service_contacts_with_codex', search)
     store=CityStore(state_store.USER_DB_PATH)
     store.ensure_agents('alice')
-    assert store.enqueue_network_daily('alice') == 1
+    assert store.enqueue_network_daily('alice')==1
     assert CityWorker(store).run_once()
-    assert store.network_schedule('alice')['report']['count'] == 1
-    assert len(network.list_contacts('alice')) == 1
-    assert calls[0]['model'] == 'gpt-5.4-mini' and calls[0]['tools'][0]['type'] == 'web_search'
-    assert calls[0]['max_tool_calls'] == 3 and calls[0]['store'] is False
-    assert calls[0]['tools'][0]['search_context_size']=='low'
-    assert calls[0]['max_output_tokens']==4500
-    plan=json.loads(calls[0]['input'])
-    assert 'banks_and_managers' in plan['source_groups']
-    assert 'market_articles' in plan['source_groups']
-    assert 'keywords_fr_en' in plan
-    assert {'LCL', 'BRED Banque Populaire', 'CIC Marchés'} <= set(plan['priority_employers'])
-    assert 'lcl.fr' in plan['source_groups']['french_banks']
-    assert 'cic.fr' in plan['source_groups']['french_banks']
-    assert 'LinkedIn is optional' in calls[0]['instructions']
+    report=store.network_schedule('alice')
+    assert report['status']=='completed' and report['report']['count']==1
+    assert len(network.list_contacts('alice'))==1 and network.list_contacts('bob')==[]
+    assert [target for target,kw in calls]==[10,9]
     with store.db() as db:
-        task=db.execute("SELECT api_cost_usd FROM city_tasks WHERE agent_id='networker'").fetchone()
-        assert float(task[0]) > 0.01
-    assert store.enqueue_network_daily('alice') == 0 and len(calls) == 2
-    assert calls[1]['max_tool_calls']==2
-    assert json.loads(calls[1]['input'])['target_new_contacts']==9
-    assert json.loads(calls[1]['input'])['priority_employers'] != plan['priority_employers']
+        assert not db.execute("SELECT api_cost_usd FROM city_tasks WHERE agent_id='networker'").fetchone()[0]
 
 
-@pytest.mark.parametrize('error,expected', [
-    (network.requests.ConnectTimeout('sensitive-detail'), 'délai'),
-    (network.requests.ReadTimeout('sensitive-detail'), 'délai'),
-    (network.requests.ConnectionError('sensitive-detail'), 'accès réseau'),
-    (network.requests.RequestException('sensitive-detail'), 'Erreur de transport'),
-])
-def test_research_transport_errors_are_specific_safe_and_not_retried(tmp_path, monkeypatch, error, expected):
-    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'private.sqlite3')
-    monkeypatch.setenv('OPENAI_API_KEY','test-key-never-sent')
+def test_research_propagates_subscription_failure_without_api_fallback(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'city.sqlite3')
+    monkeypatch.setattr(network.requests, 'post', lambda *a, **kw: pytest.fail('No API fallback'))
     calls=[]
-    def fail(*args, **kwargs):
+    def fail(*args,**kwargs):
         calls.append(1)
-        raise error
-    monkeypatch.setattr(network.requests,'post',fail)
-    with pytest.raises(CityError) as caught:
+        raise CityError('Connecte Codex avec ton abonnement ChatGPT')
+    monkeypatch.setattr(network, '_search_service_contacts_with_codex', fail)
+    with pytest.raises(CityError, match='Connecte Codex'):
         network.research_contacts('alice')
-    assert expected in str(caught.value)
-    assert 'Rechercher maintenant' in str(caught.value)
-    assert 'sensitive-detail' not in str(caught.value)
-    assert caught.value.__cause__ is error
-    assert calls == [1]
+    assert calls==[1]

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="Stages, VIE, graduate et postes junior en finance de marché, réunis pour les étudiants du MSc Financial Markets &amp; Investments de SKEMA.">
+  <title>MarketDesk · SKEMA FMI</title>
+  <link rel="icon" type="image/svg+xml" sizes="any" href="marketdesk-icon.svg">
+  <link rel="stylesheet" href="site.css">
+  <script src="app.js" defer></script>
+  <script src="sources.js" defer></script>
+</head>
+<body>
+<main>
+  <header class="masthead">
+    <a class="brand" href="./" aria-label="Accueil des offres"><span class="brand-mark" aria-hidden="true">M</span>MarketDesk</a>
+    <nav class="primary-nav" aria-label="Navigation principale">
+      <a href="#offres" id="nav-offers" aria-current="page"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="14" rx="3"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12a24 24 0 0 0 18 0M12 11v3"/></svg>Offres</a>
+      <a href="#sources" id="nav-sources"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Sources</a>
+    </nav>
+    <span class="masthead-note">SKEMA · FMI <span class="access-note" title="Site en cours de test et d’amélioration">Version bêta</span></span>
+  </header>
+  <aside id="sources-announcement" class="announcement" aria-labelledby="announcement-title" hidden>
+    <div class="announcement-copy"><div class="announcement-heading"><span class="announcement-badge">Nouveau</span><h2 id="announcement-title">L’onglet Sources est disponible</h2></div><p>Retrouve les sites carrière suivis et propose de nouvelles entreprises qui pourraient intéresser la promo.</p></div>
+    <a id="announcement-discover" class="announcement-action" href="#sources">Découvrir les sources <span aria-hidden="true">→</span></a>
+    <button id="announcement-close" class="announcement-close" type="button" aria-label="Fermer l’annonce"><span aria-hidden="true">×</span></button>
+  </aside>
+  <section id="offers-view" aria-label="Offres">
+  <section class="intro"><div><p class="eyebrow">STAGES · VIE · GRADUATE · JUNIOR</p><h1 lang="en">From FMI to trading floors.</h1><p>Stages et premiers postes en finance de marché.</p></div></section>
+  <section class="filters" aria-label="Rechercher des offres">
+    <div class="search-row"><svg class="icon search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><label class="sr-only" for="search">Métier, entreprise ou ville</label><input id="search" type="search" placeholder="Rechercher un poste, une entreprise ou une ville…" autocomplete="off"></div>
+    <div class="filter-grid">
+      <div class="filter-field"><label for="category" id="category-label">Type de contrat</label><select id="category"><option value="">Tous les contrats</option><option>Stages Paris</option><option>Stages International</option><option>VIE</option><option value="Graduate">Graduate / Junior</option></select></div>
+      <div class="filter-field"><label for="family" id="family-label">Métier</label><select id="family"><option value="">Tous métiers</option></select></div>
+      <div class="filter-field"><label for="period" id="period-label">Publication ou détection</label><select id="period"><option value="">Toutes les dates</option><option value="daily">Aujourd’hui</option><option value="weekly">7 derniers jours</option></select></div>
+      <div class="filter-field"><label for="start" id="start-label">Début à partir de</label><select id="start"><option value="">Toutes les dates</option></select></div>
+    </div>
+  </section>
+  <div class="results-header">
+    <h2 id="count">Chargement des offres…</h2>
+    <div class="sort-toolbar"><span class="sr-only" id="sort-label">Trier les offres</span><div class="sort-options" id="sort-options" role="group" aria-labelledby="sort-label"><button type="button" data-sort="rank" aria-pressed="true" title="Poste et localisation : 50 %, période de début : 35 %, proximité d’avril 2027 : 15 %.">Pertinence</button><button type="button" data-sort="recent" aria-pressed="false">Publication récente</button></div></div>
+    <div class="freshness"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="updated"></span></div>
+  </div>
+  <p id="message" role="status" aria-live="polite"></p>
+  <div id="offers" class="offers" aria-label="Liste des offres"></div>
+  <nav class="pagination" aria-label="Pages des offres"><button id="previous" type="button">← Précédent</button><span id="page"></span><button id="next" type="button">Suivant →</button></nav>
+  </section>
+  <section id="sources-view" aria-label="Sources" hidden>
+    <div class="intro sources-intro"><div><h1 lang="en">Career sites we track</h1><p>Retrouve les sites où sont publiées les offres.</p></div><a class="secondary-action" href="#proposer-source" id="suggest-source">Proposer un site <span aria-hidden="true">+</span></a></div>
+    <div class="sources-layout">
+      <div class="source-directory">
+        <div class="filters source-tools"><div class="search-row"><svg class="icon search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><label class="sr-only" for="source-search">Rechercher une source</label><input id="source-search" type="search" placeholder="Rechercher une banque, une société de gestion…" autocomplete="off"></div>
+          <div class="source-categories" role="group" aria-label="Catégorie de sources"><button type="button" data-category="" aria-pressed="true">Toutes</button><button type="button" data-category="Banques & services titres" aria-pressed="false">Banques & titres</button><button type="button" data-category="Gestion d’actifs" aria-pressed="false">Gestion d’actifs</button><button type="button" data-category="Courtage & trading" aria-pressed="false">Courtage & trading</button><button type="button" data-category="Autres sources" aria-pressed="false">Autres</button></div>
+        </div>
+        <section id="proposed-sources" class="proposed-sources" aria-labelledby="proposed-title" hidden><div class="source-summary"><h2 id="proposed-title">Sources proposées</h2><span>À étudier · visibles par tous</span></div><p id="proposed-status" role="status"></p><div id="proposed-list" class="source-list"></div></section>
+        <div class="source-summary"><h2 id="source-count">Chargement des sources…</h2><span>Sites d’une même entreprise regroupés</span></div>
+        <p id="sources-message" role="status" aria-live="polite"></p>
+        <div id="source-list" class="source-list" aria-label="Catalogue des sources"></div>
+      </div>
+      <aside class="source-request" id="proposer-source" aria-labelledby="source-request-title">
+        <span class="request-mark" aria-hidden="true">+</span><h2 id="source-request-title">Une adresse à partager ?</h2><p>Ajoute le site carrière d’un employeur. Tout le monde pourra le retrouver ici.</p>
+        <form id="source-request-form">
+          <fieldset id="source-request-fields" disabled>
+            <label for="source-name">Entreprise ou organisme<input id="source-name" name="company" type="text" required minlength="2" maxlength="80" placeholder="Ex. Berenberg" autocomplete="organization"></label>
+            <label for="source-url">Lien du site carrière<input id="source-url" name="url" type="url" required maxlength="1000" placeholder="https://…" autocomplete="url"></label>
+            <label for="source-reason">Pourquoi l’ajouter ? <span class="optional">Facultatif</span><textarea id="source-reason" name="reason" maxlength="600" rows="3" placeholder="Ex. Stages Sales à Paris et programmes graduate."></textarea></label>
+            <div class="form-trap" aria-hidden="true"><label>Fax<input name="organization_fax" type="text" tabindex="-1" autocomplete="off"></label></div>
+            <button class="primary-action" id="source-submit" type="submit">Envoyer la suggestion <span aria-hidden="true">↗</span></button>
+          </fieldset>
+          <p id="source-request-status" class="request-status" role="status" aria-live="polite">L’envoi des suggestions est en cours d’activation.</p>
+          <p class="request-privacy">Ta suggestion sera publique. Aucun compte nécessaire. Ne saisis aucune donnée personnelle, adresse email ni mot de passe.</p>
+        </form>
+      </aside>
+    </div>
+  </section>
+  <footer>Version bêta · Offres publiques · Actualisation automatique · Hébergé sur GitHub Pages, qui peut conserver des journaux techniques d’accès.</footer>
+</main>
+<template id="source-template"><article class="source-card"><a class="source-link" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"><span class="logo"><img alt=""><span class="initials" aria-hidden="true"></span></span><div class="source-card-copy"><h3></h3><span class="source-type"></span></div><span class="source-arrow" aria-hidden="true">↗</span></a><details class="source-feeds"><summary></summary><ul></ul></details></article></template>
+<template id="offer-template"><a class="card" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"><div class="card-head"><span class="logo"><img alt="" loading="lazy"><span class="initials" aria-hidden="true"></span></span><span class="company"></span><span class="kind"></span><span class="arrow" aria-hidden="true">↗</span></div><h3></h3><div class="facts"><div><small><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>Lieu</small><span class="location"></span></div><div><small><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 11h18"/></svg>Début</small><span class="start"></span></div></div><div class="card-foot"><span class="family"></span><span class="date"></span></div></a></template>
+</body></html>

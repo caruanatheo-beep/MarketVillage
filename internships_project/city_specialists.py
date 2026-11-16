@@ -20,11 +20,12 @@ from .marketdesk_city import AGENTS, CityError
 VERSION = 2
 CODING_AGENTS = ("job_hunter", "city_ui_engineer", "internships_engineer", "quality_engineer")
 DEVELOPMENT_AGENTS = tuple(agent["id"] for agent in AGENTS)
-SPECIALISTS = {"job_hunter", "finance_tutor", "developer", "innovation_lab", "securities_scout", *CODING_AGENTS}
+SPECIALISTS = {"job_hunter", "finance_tutor", "developer", "innovation_lab", "securities_scout", "prime_services_scout", *CODING_AGENTS}
 DEFAULT_OPERATIONS = {'job_hunter':'repository_audit','finance_tutor':'quant_report',
                       'developer':'daily_questions','innovation_lab':'innovation_review',
                       'city_ui_engineer':'develop','internships_engineer':'develop','quality_engineer':'develop',
-                      'securities_scout':'discover_service_contacts'}
+                      'securities_scout':'discover_service_contacts',
+                      'prime_services_scout':'discover_prime_services_contacts'}
 OPERATIONS = {
     "job_hunter": {"repository_audit", "codex_review", "code_change", "prepare_branch", "develop"},
     "city_ui_engineer": {"develop"},
@@ -34,11 +35,13 @@ OPERATIONS = {
     "developer": {"daily_questions", "mock_interview", "evaluate_answer"},
     "innovation_lab": {"innovation_review"},
     "securities_scout": {"discover_service_contacts"},
+    "prime_services_scout": {"discover_prime_services_contacts"},
 }
 ROLE_NAMES = {"job_hunter": "Software Engineer", "finance_tutor": "Quant Research",
               "developer": "Interview Coach", "innovation_lab": "Innovation Lab",
               "city_ui_engineer": "UI Engineer", "internships_engineer": "Sources Engineer",
-              "quality_engineer": "Quality Engineer", "securities_scout": "Securities Services Scout"}
+              "quality_engineer": "Quality Engineer", "securities_scout": "Securities Services Scout",
+              "prime_services_scout": "Prime Services & Clearing Scout"}
 
 
 def validate_mission(agent_id: str, parameters: dict, description: str = "") -> dict:
@@ -78,6 +81,8 @@ def validate_mission(agent_id: str, parameters: dict, description: str = "") -> 
         if agent_id != 'job_hunter' or not 10 <= len(request) <= 3000:
             raise CityError('Décris la correction ou fonctionnalité souhaitée (10 à 3 000 caractères).')
         payload['request'] = request
+    if agent_id == 'prime_services_scout':
+        contradictions[agent_id] = contradictions['securities_scout']
     if operation not in {'code_change', 'develop'} and re.search(contradictions[agent_id], description, re.IGNORECASE):
         raise CityError(f"Cette consigne contredit la mission exclusive {ROLE_NAMES[agent_id]}.")
     payload["role_version"] = VERSION
@@ -88,17 +93,47 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+class CityGitError(CityError):
+    """Safe Git failure category, without exposing command output or credentials."""
+    def __init__(self, category: str, message: str):
+        super().__init__(message)
+        self.category = category
+        self.retryable = category in {'busy', 'timeout'}
+
+
 def git(root: Path, *args: str) -> str:
     try:
-        completed = subprocess.run(["git", "-c", "core.longpaths=true", "-c", "core.hooksPath=NUL" if os.name == "nt" else "core.hooksPath=/dev/null",
-                                    *args], cwd=root, capture_output=True, text=True, encoding="utf-8",
-                                   errors="replace", timeout=120 if args and args[0] in {'rebase', 'merge'} else 25,
-                                   check=False)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise CityError("Dépôt Git inaccessible ou délai dépassé.") from exc
+        read_only=bool(args and (args[0] in {'rev-parse','status','ls-files','diff','show','log'}
+                                 or args[:2]==('branch','--show-current')))
+        for attempt in range(2 if read_only else 1):
+            try:
+                completed = subprocess.run(["git", "-c", "core.longpaths=true", "-c", "core.hooksPath=NUL" if os.name == "nt" else "core.hooksPath=/dev/null",
+                                            *args], cwd=root, capture_output=True, text=True, encoding="utf-8",
+                                           errors="replace", timeout=60 if attempt else (120 if any(
+                                               command in args for command in ('worktree', 'add', 'commit', 'rebase', 'merge')) else 25),
+                                           check=False, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+                break
+            except subprocess.TimeoutExpired:
+                if not read_only or attempt:raise
+    except subprocess.TimeoutExpired as exc:
+        raise CityGitError('timeout', 'Git a dépassé le délai autorisé ; nouvelle tentative différée.') from exc
+    except PermissionError as exc:
+        raise CityGitError('permission', 'Git : accès refusé. Vérifie les droits Windows du serveur City.') from exc
+    except OSError as exc:
+        raise CityGitError('unavailable', 'Git ne peut pas démarrer. Vérifie son installation.') from exc
     if completed.returncode:
         # Never return raw stderr (remote credentials and filesystem paths).
-        raise CityError("Git indisponible pour cette opération. Vérifie le clone local du dépôt.")
+        detail = (completed.stdout + '\n' + completed.stderr).casefold()
+        if ('--check' in args and any(command in args for command in ('show', 'diff'))
+                and any(term in detail for term in ('trailing whitespace', 'new blank line at eof', 'space before tab', 'conflict marker'))):
+            raise CityGitError('validation', 'Contrôle Git refusé : espaces, fin de fichier ou marqueurs de conflit à corriger dans la branche. Aucune reprise automatique.')
+        if any(term in detail for term in ('permission denied', 'access is denied', 'access denied')):
+            raise CityGitError('permission', 'Git : accès refusé. Vérifie les droits Windows du serveur City.')
+        if any(term in detail for term in ('index.lock', 'another git process', 'could not lock', 'unable to create')) and 'lock' in detail:
+            raise CityGitError('busy', 'Git est verrouillé par une autre opération ; nouvelle tentative différée.')
+        if any(term in detail for term in ('patch failed', 'patch does not apply', 'conflict', 'would be overwritten')):
+            raise CityGitError('conflict', 'Conflit Git : la branche est conservée pour examen. Aucune reprise automatique.')
+        raise CityGitError('command', 'Commande Git refusée ; vérifie la branche de travail. Aucune reprise automatique.')
     return completed.stdout.strip()
 
 
@@ -445,4 +480,7 @@ def run_specialist(agent_id: str, username: str, parameters: dict) -> dict:
     if operation == "discover_service_contacts":
         from .network_discovery import discover_service_contacts
         return discover_service_contacts(username)
+    if operation == "discover_prime_services_contacts":
+        from .network_discovery import discover_prime_services_contacts
+        return discover_prime_services_contacts(username)
     raise CityError("Opération spécialisée inconnue.")

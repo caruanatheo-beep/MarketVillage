@@ -18,15 +18,10 @@ import { renderTowerPerspective, projectTowerX, unprojectTowerX, unprojectTowerY
 type Agent = { id: string; name: string; status: AgentStatus };
 type Task = { id: string; agent_id: string; description?: string; status?: string; depends_on?: string[]; delegated_by?: string; workflow_id?: string; result?: { approval_required?: boolean; role_version?: number; review_decision?: string; branch?: string } };
 type Event = { id: number; task_id: string; agent_id: string; status: string };
-type MarketReading = { series_id: string; label: string; value: number; previous?: number | null;
-  change?: number | null; unit: string; observed_at: string; source?: string; source_url?: string };
-type FeaturedOffer = { title: string; company: string; location: string; url: string; kind?: string; start_period?: string;
-  published?: string; published_inferred?: boolean; source?: string; detected_at?: string; selection_reason?: string;
-  selection_source?: "job_hunter"|"internships_cache"; total_offers?: number; tracker_updated_at?: string };
+type BubbleHit = { x:number; y:number; width:number; height:number; taskId:string };
 type Props = { agents: Agent[]; tasks: Task[]; events: Event[]; selectedId: string; onPick: (id: string) => void;
   onTaskPick: (id: string) => void;
-  marketPoints: MarketReading[]; marketRetrievedAt: string; marketError?: string; internshipError?: string;
-  featuredOffers: FeaturedOffer[] };
+ };
 type AssetLeaf = { id: string; file: string; width: number; height: number; footprintW: number; footprintH: number; orientation?: string; state?: string; frame?: number; mirrorSide?: boolean };
 type MarketDeskPackAsset = AssetLeaf & { name: string; category: string; isDesk: boolean; canPlaceOnWalls?: boolean;
   canPlaceOnSurfaces?: boolean; backgroundTiles?: number; isWallTile?: boolean };
@@ -34,17 +29,9 @@ type LoadedCharacter = { down: SpriteData[]; up: SpriteData[]; right: SpriteData
 type Runtime = { office: OfficeState; golf: GolfPractice; zoom: number; zoomTarget: number; scale: number; offsetX: number; offsetY: number };
 
 const ROOT = "/city/pixel-assets";
-const ROSTER = ["market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout", "city_ui_engineer", "internships_engineer", "quality_engineer", "securities_scout"];
+const ROSTER = ["market_analyst", "finance_tutor", "job_hunter", "networker", "outreach_agent", "developer", "innovation_lab", "internship_scout", "city_ui_engineer", "internships_engineer", "quality_engineer", "securities_scout", "prime_services_scout"];
 const MANAGER_ID = "desk_manager";
 const WORLD_ROSTER = [...ROSTER, MANAGER_ID];
-const OFFERS_PANEL = { col: 100, width: 14, top: 0.65, height: 5.6 };
-const OFFER_NAV_ROW = 5;
-function fitPanel(geometry: typeof OFFERS_PANEL, zoom: number, offsetX: number, canvasWidth: number): typeof OFFERS_PANEL {
-  const cell = TILE_SIZE * zoom, inset = Math.max(3, cell * .35);
-  const maxX = Math.max(inset, canvasWidth - geometry.width * cell - inset);
-  const x = Math.min(maxX, Math.max(inset, offsetX + geometry.col * cell));
-  return { ...geometry, col: (x - offsetX) / cell };
-}
 const agentIndex = (id: string) => id === MANAGER_ID ? ROSTER.length : ROSTER.indexOf(id);
 const agentSeatId = (id: string) => uid(id === MANAGER_ID ? "manager-chair" : `chair-${id}`);
 const FURNITURE_DIRS = ["BIN", "BOOKSHELF", "CACTUS", "CLOCK", "COFFEE", "COFFEE_TABLE", "CUSHIONED_BENCH", "CUSHIONED_CHAIR", "DESK", "DOUBLE_BOOKSHELF", "HANGING_PLANT", "LARGE_PAINTING", "LARGE_PLANT", "PC", "PLANT", "PLANT_2", "POT", "SMALL_PAINTING", "SMALL_PAINTING_2", "SMALL_TABLE", "SOFA", "TABLE_FRONT", "WHITEBOARD", "WOODEN_BENCH", "WOODEN_CHAIR"];
@@ -322,7 +309,7 @@ export function buildOfficeLayout(): OfficeLayout {
     { label: "ATELIER CODE", color: "#70cbb7", agent: ROSTER[2], desk: "MD_TECH_DESK", x0: 1, x1: 14, y0: 22, y1: 30, col: 1, row: 22 },
     { label: "INTERVIEW STUDIO", color: "#a995e5", agent: ROSTER[5], desk: "MD_CAREER_DESK", x0: 16, x1: 23, y0: 22, y1: 30, col: 17, row: 23 },
     { label: "INNOVATION LAB", color: "#70cbb7", agent: ROSTER[6], desk: "MD_RESEARCH_DESK", x0: 24, x1: 31, y0: 22, y1: 30, col: 25, row: 23 },
-    { label: "BIBLIOTHÈQUE RÉSEAU", color: "#70cbb7", agent: ROSTER[3], desk: "MD_NETWORK_DESK", x0: 33, x1: 46, y0: 22, y1: 26, col: 34, row: 22 },
+    { label: "BIBLIOTHÈQUE RÉSEAU", color: "#70cbb7", agent: ROSTER[3], desk: "MARKET_TRADING_DESK", x0: 33, x1: 46, y0: 22, y1: 26, col: 33, row: 22 },
     { label: "OUTREACH", color: "#77d8e7", agent: ROSTER[4], desk: "MD_OUTREACH_DESK", x0: 33, x1: 46, y0: 27, y1: 30, col: 34, row: 27 },
   ];
   // A furnished shared atrium replaces the long corridors and connects every wing.
@@ -483,11 +470,12 @@ export function buildOfficeLayout(): OfficeLayout {
   put("career-board", "MD_CAREER_BOARD", 16, 22); 
   put("career-cabinet", "MD_CAREER_CABINET", 16, 28);
   put("career-books", "BOOKSHELF", 29, 28);
-  put("desk-securities_scout", "MD_NETWORK_DESK", 41, 22);
-  put("chair-securities_scout", "MARKET_ERGO_CHAIR", 43, 24);
+  put("desk-securities_scout", "MARKET_TRADING_DESK", 38, 22);
+  put("chair-securities_scout", "MARKET_ERGO_CHAIR", 40, 24);
+  put("desk-prime_services_scout", "MARKET_TRADING_DESK", 43, 22);
+  put("chair-prime_services_scout", "MARKET_ERGO_CHAIR", 45, 24);
   put("network-world-map", "MD_NETWORK_WORLD_MAP", 40, 20);
   put("network-library-west", "BOOKSHELF", 33, 25);
-  put("network-library-east", "BOOKSHELF", 45, 24);
   put("outreach-board", "MD_OUTREACH_DISPLAY", 40, 27); put("outreach-phone", "MD_CONTACT_PHONE", 38, 29);
   put("outreach-books", "BOOKSHELF", 33, 29); put("outreach-table", "SMALL_TABLE_FRONT", 41, 29);
   put("outreach-plant", "PLANT", 45, 29);
@@ -727,88 +715,7 @@ function renderZoneLabels(ctx: CanvasRenderingContext2D, zoom: number, offsetX: 
   ctx.restore();
 }
 
-function renderFeaturedOffer(ctx: CanvasRenderingContext2D, zoom: number, offsetX: number, offsetY: number,
-  featured: FeaturedOffer | null, offerIndex: number, offerCount: number, internshipError?: string): void {
-  const cell = TILE_SIZE * zoom;
-  const panel = (geometry: typeof OFFERS_PANEL, accent: string) => {
-    const x = offsetX + geometry.col * cell, y = offsetY + geometry.top * cell;
-    const w = geometry.width * cell, h = geometry.height * cell;
-    ctx.save();
-    ctx.shadowColor='#031c1fbd';ctx.shadowBlur=cell*.9;ctx.shadowOffsetY=cell*.2;
-    const glass=ctx.createLinearGradient(x,y,x+w,y+h);
-    glass.addColorStop(0,'#214e4cf8');glass.addColorStop(.55,'#173d41f8');glass.addColorStop(1,'#102d36fa');
-    ctx.beginPath();ctx.roundRect(x,y,w,h,cell*.34);
-    ctx.fillStyle=glass;ctx.fill();
-    ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetY=0;
-    ctx.strokeStyle='#9dd5bdba';ctx.lineWidth=Math.max(1,zoom*.55);ctx.stroke();
-    ctx.fillStyle=accent;ctx.fillRect(x+cell*.45,y+cell*.22,w-cell*.9,Math.max(2,zoom*.7));
-    ctx.restore();return {x,y,w,h};
-  };
-  const write = (value: string, x: number, y: number, color: string, size: number, weight = "normal", maxWidth?: number) => {
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = color;
-    ctx.font = `${weight} ${Math.min(size >= 15 ? 20 : size >= 11 ? 15 : 13, Math.max(9, size * zoom))}px Inter, Arial, sans-serif`;
-    // Truncate rather than horizontally distorting the type.
-    let text = value;
-    if (maxWidth && ctx.measureText(text).width > maxWidth) {
-      while (text.length && ctx.measureText(text + "…").width > maxWidth) text = text.slice(0, -1);
-      text += "…";
-    }
-    ctx.fillText(text, x, y);
-  };
-  const jobs = panel(fitPanel(OFFERS_PANEL, zoom, offsetX, ctx.canvas.width), "#f1c782");
-  const x = jobs.x + cell * 0.62;
-  const max = jobs.w - cell * 1.25;
-  write("OPPORTUNITÉ DU JOUR", x, jobs.y + cell * 1.02, "#f7d7a3", 11.5, "700", max);
-  if (!featured) {
-    write(internshipError ? "Offres temporairement indisponibles" : "Aucune offre à afficher",
-      x, jobs.y + cell * 2.8, "#d2e0dc", 11, "500", max);
-    return;
-  }
-  ctx.beginPath();
-  ctx.roundRect(jobs.x + cell * .38, jobs.y + cell * 1.52, jobs.w - cell * .76, cell * 2.95, cell * .2);
-  ctx.fillStyle = "#071d2866"; ctx.fill();
-  ctx.fillStyle = "#f1c782";
-  ctx.fillRect(jobs.x + cell * .38, jobs.y + cell * 1.75, Math.max(2, zoom * .8), cell * 2.45);
-  write(featured.company || "Entreprise non indiquée", x, jobs.y + cell * 2.04, "#fff8ed", 16, "700", max);
-  ctx.font = `500 ${Math.min(15, Math.max(9, 11 * zoom))}px Inter, Arial, sans-serif`;
-  const words = featured.title.split(/\s+/);
-  let line = "";
-  while (words.length && ctx.measureText([line, words[0]].filter(Boolean).join(" ")).width <= max) line += (line ? " " : "") + words.shift();
-  if (!line) line = words.shift() || "";
-  write(line, x, jobs.y + cell * 2.8, "#e7f0ed", 11, "500", max);
-  write(words.join(" "), x, jobs.y + cell * 3.45, "#e7f0ed", 11, "500", max);
-  write(featured.location || "Lieu non indiqué", x, jobs.y + cell * 4.1, "#b8d6cf", 10, "600", max);
-  const navY = jobs.y + cell * OFFER_NAV_ROW;
-  ctx.beginPath(); ctx.roundRect(x, navY - cell * .32, cell * 4.35, cell * .64, cell * .16);
-  ctx.fillStyle = "#cceee0"; ctx.fill();
-  write("Voir l’offre ↗", x + cell * .33, navY, "#17443f", 10, "700", cell * 3.8);
-  if (offerCount > 1) {
-    const buttonW = cell * 0.88, buttonH = cell * 0.58;
-    const prevX = jobs.x + jobs.w - cell * 2.62;
-    const nextX = jobs.x + jobs.w - cell * 1.48;
-    ctx.save();
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "center";
-    ctx.font = `700 ${Math.max(6, 5 * zoom)}px Inter, Arial, sans-serif`;
-    for (const [label, bx] of [["‹", prevX], ["›", nextX]] as const) {
-      ctx.fillStyle = "#275653";
-      ctx.beginPath(); ctx.roundRect(bx, navY - buttonH / 2, buttonW, buttonH, cell * .1); ctx.fill();
-      ctx.strokeStyle = "#a9d5c5b0";
-      ctx.lineWidth = Math.max(1, zoom * 0.35);
-      ctx.stroke();
-      ctx.fillStyle = "#edf5fa";
-      ctx.fillText(label, bx + buttonW / 2, navY);
-    }
-    ctx.textAlign = "right";
-    ctx.fillStyle = "#a6b5c4";
-    ctx.fillText(`${offerIndex + 1} / ${offerCount}`, prevX - cell * 0.2, navY);
-    ctx.restore();
-  }
-}
 
-type BubbleHit = { x: number; y: number; width: number; height: number; taskId: string };
 function renderTaskBubbles(ctx: CanvasRenderingContext2D, zoom: number, offsetX: number, offsetY: number,
   office: OfficeState, agents: Agent[], tasks: Task[]): BubbleHit[] {
   const hits: BubbleHit[] = [];
@@ -954,11 +861,6 @@ export function PixelFloorGame(props: Props): React.ReactElement {
   const visits = useRef(new Map<string, number>());
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const [offerIndex, setOfferIndex] = useState(0);
-  const offerIndexRef = useRef(offerIndex);
-  offerIndexRef.current = offerIndex;
-  const offerKey = props.featuredOffers.map(offer => offer.url).join("|");
-  useEffect(() => setOfferIndex(0), [offerKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -972,7 +874,7 @@ export function PixelFloorGame(props: Props): React.ReactElement {
         WORLD_ROSTER.forEach((id, index) => {
           const seatId = agentSeatId(id);
           if (!office.seats.has(seatId)) throw new Error(`Le poste fixe de ${id} est absent du plan.`);
-          office.addAgent(index, id === MANAGER_ID ? 5 : id === "innovation_lab" ? 4 : index % 6, id === MANAGER_ID ? 250 : id === "innovation_lab" ? 120 : id === "internship_scout" ? 200 : 0, seatId, true);
+          office.addAgent(index, id === MANAGER_ID ? 5 : id === "innovation_lab" ? 4 : index % 6, id === MANAGER_ID ? 250 : id === "innovation_lab" ? 120 : id === "internship_scout" ? 200 : id === "prime_services_scout" ? 185 : 0, seatId, true);
           office.setAgentPinned(index, true);
           office.setAgentActive(index, false);
           office.setAgentTool(index, null);
@@ -1058,15 +960,12 @@ export function PixelFloorGame(props: Props): React.ReactElement {
         renderEveningLight(ctx,position.offsetX,position.offsetY,scale,floor);
         renderLuminaires(ctx,position.offsetX,position.offsetY,scale);
         runtime.current?.golf.render(ctx,position.offsetX,position.offsetY,scale);
-        const offers = latest.current.featuredOffers;
-        const visibleOffer = offers.length ? offers[Math.min(offerIndexRef.current, offers.length - 1)] : null;
-
         if (live) {
           live.scale = scale; live.offsetX = position.offsetX; live.offsetY = position.offsetY;
           node.dataset.viewScale=String(scale);node.dataset.viewX=String(position.offsetX);node.dataset.viewY=String(position.offsetY);
         }
         output.clearRect(0,0,node.width,node.height);
-        renderTowerBackdrop(output,position.offsetX,position.offsetY,scale);
+        renderTowerBackdrop(output);
         renderTowerPerspective(output,worldCanvas,position.offsetX,position.offsetY,scale);
         renderZoneLabels(output,scale,position.offsetX,position.offsetY);
         const focus=floor.characters.get(index),agent=latest.current.agents.find(a=>a.id===selected.current);
@@ -1082,9 +981,6 @@ export function PixelFloorGame(props: Props): React.ReactElement {
           output.textAlign='center';output.textBaseline='middle';output.fillStyle='#173b3d';
           output.fillText(agent.name,x,top+11);output.restore();
         }
-        // Billboards face the viewer: keep their type on a flat, legible plane.
-        renderFeaturedOffer(output,scale,position.offsetX,position.offsetY,visibleOffer,offerIndexRef.current,
-          offers.length,latest.current.internshipError);
         bubbleHits.current=renderTaskBubbles(output,scale,position.offsetX,position.offsetY,floor,latest.current.agents,latest.current.tasks);
       },
     });
@@ -1148,29 +1044,6 @@ export function PixelFloorGame(props: Props): React.ReactElement {
     const y = (screenY - live.offsetY) / live.scale;
     const tileX = ((event.clientX-rect.left)*dpr-live.offsetX)/live.scale/TILE_SIZE;
     const tileY = ((event.clientY-rect.top)*dpr-live.offsetY)/live.scale/TILE_SIZE;
-    const offersPanel = fitPanel(OFFERS_PANEL,live.scale,live.offsetX,node.width);
-    const offers = latest.current.featuredOffers;
-    if (tileX >= offersPanel.col && tileX <= offersPanel.col + offersPanel.width &&
-      tileY >= offersPanel.top && tileY <= offersPanel.top + offersPanel.height) {
-      const prevX = offersPanel.col + offersPanel.width - 2.62;
-      const nextX = offersPanel.col + offersPanel.width - 1.48;
-      if (offers.length > 1 && Math.abs(tileY - offersPanel.top - OFFER_NAV_ROW) <= .32) {
-        if (tileX >= prevX && tileX <= prevX + 0.88) {
-          setOfferIndex((offerIndexRef.current - 1 + offers.length) % offers.length);
-          return;
-        }
-        if (tileX >= nextX && tileX <= nextX + 0.88) {
-          setOfferIndex((offerIndexRef.current + 1) % offers.length);
-          return;
-        }
-      }
-      const offer = offers[Math.min(offerIndexRef.current, offers.length - 1)];
-      try {
-        const url = new URL(offer?.url || "");
-        if (url.protocol === "https:" || url.protocol === "http:") window.open(url.href, "_blank", "noopener,noreferrer");
-      } catch { /* Ignore a malformed job link. */ }
-      return;
-    }
     const agents = live.office.getCharacters().filter(character => !character.isSubagent && character.id >= 0 && character.id < WORLD_ROSTER.length);
     const hit = agents.find(character => Math.abs(x - character.x) <= 11 && Math.abs(y - character.y) <= 18);
     if (hit) { pick.current(WORLD_ROSTER[hit.id]); return; }
@@ -1190,21 +1063,6 @@ export function PixelFloorGame(props: Props): React.ReactElement {
     const y = (screenY - live.offsetY) / live.scale;
     const tileX = ((event.clientX-rect.left)*dpr-live.offsetX)/live.scale/TILE_SIZE;
     const tileY = ((event.clientY-rect.top)*dpr-live.offsetY)/live.scale/TILE_SIZE;
-    const offersPanel = fitPanel(OFFERS_PANEL,live.scale,live.offsetX,node.width);
-    const offers = latest.current.featuredOffers;
-    if (tileX >= offersPanel.col && tileX <= offersPanel.col + offersPanel.width &&
-      tileY >= offersPanel.top && tileY <= offersPanel.top + offersPanel.height) {
-      node.style.cursor = "pointer";
-      const offer = offers[Math.min(offerIndexRef.current, offers.length - 1)];
-      const prevX = offersPanel.col + offersPanel.width - 2.62;
-      const nextX = offersPanel.col + offersPanel.width - 1.48;
-      const isPager = offers.length > 1 && Math.abs(tileY - offersPanel.top - OFFER_NAV_ROW) <= .32 &&
-        (tileX >= prevX && tileX <= prevX + 0.88 || tileX >= nextX && tileX <= nextX + 0.88);
-      node.title = isPager ? "Parcourir les offres" : offer
-        ? `${offer.company} — ${offer.title}\n${offer.location || "Lieu non indiqué"}\nContrat : ${offer.kind || "non indiqué"}\nDébut : ${offer.start_period || "non indiqué"}\nPublication : ${offer.published ? offer.published_inferred ? `date estimée à la détection (${offer.published})` : offer.published : "non indiquée"}\nSource : ${offer.source || "non indiquée"}${offer.selection_reason ? `\n${offer.selection_reason}` : ""}`
-        : latest.current.internshipError || "Aucune offre disponible";
-      return;
-    }
     node.title = "Clique sur un agent ou un poste de travail pour le sélectionner.";
     const hit = live.office.getCharacters().find(character => character.id >= 0 && character.id < WORLD_ROSTER.length && Math.abs(x - character.x) <= 11 && Math.abs(y - character.y) <= 18);
     live.office.hoveredAgentId = hit?.id ?? null;
@@ -1212,18 +1070,7 @@ export function PixelFloorGame(props: Props): React.ReactElement {
   };
 
   return <div className="tower-game pixelagents-game" role="application" aria-label="MarketDesk City, bureau Pixel Agents animé">
-    <canvas ref={canvas} tabIndex={0} onClick={pickAt} onMouseMove={hoverAt} onKeyDown={event => {
-      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        const count = latest.current.featuredOffers.length;
-        if (count > 1) {
-          event.preventDefault();
-          setOfferIndex((offerIndexRef.current + (event.key === "ArrowRight" ? 1 : -1) + count) % count);
-        }
-      } else if (event.key === "Enter") {
-        const offer = latest.current.featuredOffers[Math.min(offerIndexRef.current, latest.current.featuredOffers.length - 1)];
-        if (offer?.url) window.open(offer.url, "_blank", "noopener,noreferrer");
-      }
-    }} onWheel={event => {
+    <canvas ref={canvas} tabIndex={0} onClick={pickAt} onMouseMove={hoverAt} onWheel={event => {
       event.preventDefault();
       if (runtime.current) runtime.current.zoomTarget = Math.min(1.8, Math.max(1, runtime.current.zoomTarget * Math.exp(-event.deltaY * 0.001)));
     }} onMouseLeave={() => { if (runtime.current) runtime.current.office.hoveredAgentId = null; }} />

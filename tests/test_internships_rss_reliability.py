@@ -52,7 +52,10 @@ def test_one_broken_feed_preserves_verified_offers(monkeypatch, broken, broken_c
     feeds[broken_contract] = broken
     install_public_pages(monkeypatch, feeds, detail_date="04/11/2024")
 
-    jobs = internships._amundi_jobs()
+    with pytest.raises(internships._PartialSourceError) as partial:
+        internships._amundi_jobs()
+    jobs = partial.value.jobs
+    assert partial.value.preserve_cached
 
     assert len(jobs) == 1
     assert jobs[0].url == URL
@@ -136,6 +139,27 @@ def test_duplicates_fetch_one_detail_and_keep_confirmed_date(monkeypatch, dated_
     assert internships._deduplicate_opportunities(jobs + jobs) == jobs
 
 
+def test_rss_collection_rejects_non_public_or_non_https_offer_links(monkeypatch):
+    links = [
+        f"https://jobs.amundi.com/offer/secure",
+        f"http://jobs.amundi.com/offer/insecure",
+        f"https://user@jobs.amundi.com/offer/credentials",
+        f"https://jobs.amundi.com:444/offer/nonstandard-port",
+        "https://jobs.amundi.com.evil.invalid/offer/lookalike",
+    ]
+    items = "".join(
+        f"<item><title>Stage Trading</title><link>{url}</link></item>" for url in links
+    )
+    content = f"<rss><channel>{items}</channel></rss>".encode()
+    monkeypatch.setattr(internships.requests, "get", lambda *a, **kw: Mock(content=content))
+    detail = Mock(return_value=None)
+    monkeypatch.setattr(internships, "_career_detail", detail)
+
+    internships._career_rss_jobs("Amundi", "jobs.amundi.com", (579,))
+
+    detail.assert_called_once_with("https://jobs.amundi.com/offer/secure", "Amundi", "Stage Trading")
+
+
 @pytest.mark.skipif(os.getenv("LIVE_AMUNDI_RSS") != "1", reason="Public live check is opt-in")
 def test_amundi_public_collection_live(monkeypatch):
     statuses = []
@@ -148,11 +172,19 @@ def test_amundi_public_collection_live(monkeypatch):
 
     monkeypatch.setattr(internships.requests, "get", get)
     started = perf_counter()
-    jobs = internships._amundi_jobs()
+    collection_error = None
+    try:
+        jobs = internships._amundi_jobs()
+    except internships._PartialSourceError as exc:
+        # A broken contract feed must remain visible while still allowing us to
+        # inspect and time the offers verified from the healthy feed.
+        jobs = exc.jobs
+        collection_error = str(exc)
     elapsed = perf_counter() - started
     unique = internships._deduplicate_opportunities(jobs)
     print(f"Amundi: {elapsed:.3f}s; offers={len(jobs)}; unique={len(unique)}; "
-          f"dated={sum(bool(job.published) for job in unique)}; HTTP={sorted(statuses)}")
+          f"dated={sum(bool(job.published) for job in unique)}; HTTP={sorted(statuses)}; "
+          f"partial_error={collection_error or 'none'}")
     for job in unique:
         print(f"{job.title} | {job.kind} | {job.location} | {job.published} | {job.url}")
     assert unique, "No usable market internship could be verified"

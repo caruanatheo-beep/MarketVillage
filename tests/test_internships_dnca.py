@@ -113,10 +113,11 @@ def test_partial_collection_keeps_only_still_listed_failed_offers(tmp_path, monk
     assert check["count"] == len(jobs)
     assert "collecte incomplète" in error and check["error"] in error
     assert check["last_success"] == (old_snapshot["updated"] if with_cache else "")
-    if with_cache:
-        assert internships._source_job_cache["DNCA"] is old_snapshot
-    else:
-        assert "DNCA" not in internships._source_job_cache
+    remembered = internships._source_job_cache["DNCA"]
+    assert remembered["jobs"] == jobs
+    assert remembered["updated"] == (old_snapshot["updated"] if with_cache else "")
+    assert remembered["check"]["status"] == "stale"
+    assert remembered["check"]["next_retry_at"] > check["checked_at"]
     monkeypatch.setattr(internships, "source_checks", lambda: {"DNCA": check})
     board = internships.render_opportunities(jobs, [error], datetime.now(timezone.utc))
     assert "Collecte incomplète, certaines fiches indisponibles" in board

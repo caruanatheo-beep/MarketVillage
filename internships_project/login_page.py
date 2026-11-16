@@ -30,7 +30,7 @@ div.main.app:has(.career-auth-content) {
   margin: 0;
   padding: 24px;
   box-sizing: border-box;
-  background: radial-gradient(circle at 50% 8%, #eee8ff 0, #f7f7fb 42%, #f8f9fc 100%);
+  background: radial-gradient(circle at 50% 8%, #e5f2fb 0, #f7f9fb 42%, #f8fafc 100%);
   font-family: Arial, Helvetica, sans-serif;
   color: #17213a;
 }
@@ -41,10 +41,10 @@ div.main.app:has(.career-auth-content) {
   min-width: 0 !important;
   position: relative;
   padding: 28px 32px 24px;
-  border: 1px solid #e8e3f1;
+  border: 1px solid #dce6ef;
   border-radius: 16px;
   background: #fff;
-  box-shadow: 0 18px 46px rgba(49, 36, 90, .09), 0 2px 8px rgba(49, 36, 90, .04);
+  box-shadow: 0 18px 46px rgba(22, 58, 88, .10), 0 2px 8px rgba(22, 58, 88, .04);
   display: flex;
   flex-direction: column;
   height: auto;
@@ -103,9 +103,9 @@ div.main.app:has(.career-auth-content) {
 .wrap:has(.career-auth-content) input[data-testid="password"] { padding-right: 88px; }
 .wrap:has(.career-auth-content) input::placeholder { color: #8290a5; opacity: 1; }
 .wrap:has(.career-auth-content) input:focus-visible {
-  outline: 3px solid rgba(112, 81, 207, .16);
+  outline: 3px solid rgba(20, 120, 184, .18);
   outline-offset: 1px;
-  border-color: #7051cf;
+  border-color: #1478b8;
 }
 .career-auth-content > .career-auth-toggle { display: none; }
 .career-auth-toggle {
@@ -118,11 +118,11 @@ div.main.app:has(.career-auth-content) {
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #6546bc;
+  color: #0d5e96;
   font: 600 12px Arial, Helvetica, sans-serif;
   cursor: pointer;
 }
-.career-auth-toggle:hover, .career-auth-toggle:focus-visible { background: #f1ecff; outline: none; }
+.career-auth-toggle:hover, .career-auth-toggle:focus-visible { background: #eaf4fa; outline: none; }
 .wrap:has(.career-auth-content) .input-container .career-auth-toggle {
   display: inline-block; position: absolute; right: 7px; left: auto; top: 50%;
   width: auto; height: auto; transform: translateY(-50%); margin: 0;
@@ -130,15 +130,15 @@ div.main.app:has(.career-auth-content) {
 }
 .wrap:has(.career-auth-content) button.primary {
   width: 100%; height: 48px; min-height: 48px; margin-top: 20px;
-  border: 1px solid #7051cf; border-radius: 10px;
-  background: #7051cf; color: #fff;
+  border: 1px solid #1478b8; border-radius: 10px;
+  background: #1478b8; color: #fff;
   font-size: 0; font-family: Arial, Helvetica, sans-serif;
   font-weight: 700; cursor: pointer;
   transition: background .15s ease, box-shadow .15s ease, transform .15s ease;
 }
 .wrap:has(.career-auth-content) button.primary::after { content: "Se connecter"; font-size: 15px; }
-.wrap:has(.career-auth-content) button.primary:hover { background: #5c3db8; box-shadow: 0 5px 12px rgba(88, 58, 169, .18); }
-.wrap:has(.career-auth-content) button.primary:focus-visible { outline: 3px solid rgba(112, 81, 207, .3); outline-offset: 3px; }
+.wrap:has(.career-auth-content) button.primary:hover { background: #0d5e96; box-shadow: 0 5px 12px rgba(15, 83, 127, .2); }
+.wrap:has(.career-auth-content) button.primary:focus-visible { outline: 3px solid rgba(20, 120, 184, .3); outline-offset: 3px; }
 .wrap:has(.career-auth-content) button.primary:disabled { cursor: wait; opacity: .72; transform: none; box-shadow: none; }
 .wrap[data-career-auth-loading="true"] button.primary::after { content: "Connexion…"; }
 .wrap:has(.career-auth-content) p.creds {
@@ -147,10 +147,10 @@ div.main.app:has(.career-auth-content) {
   background: #fff5f5; color: #a12635; font-size: 0;
 }
 .wrap:has(.career-auth-content) p.creds::after { content: "Identifiant ou mot de passe incorrect."; font-size: 13px; }
-.wrap:has(.career-auth-content) .career-auth-signup { display: block; margin-top: 14px; color: #6546bc;
+.wrap:has(.career-auth-content) .career-auth-signup { display: block; margin-top: 14px; color: #0d5e96;
   font-size: 14px; font-weight: 600; text-align: center; text-decoration: none; }
 .career-auth-signup:hover { text-decoration: underline; }
-.career-auth-signup:focus-visible { outline: 3px solid rgba(112, 81, 207, .3); outline-offset: 3px; }
+.career-auth-signup:focus-visible { outline: 3px solid rgba(20, 120, 184, .3); outline-offset: 3px; }
 .career-auth-footer {
   display: block; margin-top: 19px; padding-top: 14px;
   border-top: 1px solid #eceaf2; text-align: center;
@@ -225,7 +225,7 @@ _ENHANCE = """(function(image){
 })(this)"""
 
 
-def auth_message() -> str:
+def auth_message(*, signup: bool = True) -> str:
     return (
         _CSS
         + '<span class="career-auth-content">'
@@ -238,7 +238,7 @@ def auth_message() -> str:
         + '<strong class="career-auth-title">Bienvenue</strong>'
         + '<span class="career-auth-subtitle">Connecte-toi pour retrouver tes offres et tes candidatures.</span>'
         + '<button class="career-auth-toggle" type="button" aria-label="Afficher le mot de passe" aria-pressed="false">Afficher</button>'
-        + '<a class="career-auth-signup" href="/inscription">Créer un compte</a>'
+        + ('<a class="career-auth-signup" href="/inscription">Créer un compte</a>' if signup else '')
         + '<span class="career-auth-footer"><span>MSc Financial Markets &amp; Investments</span>'
         + '<span>Théo Caruana</span></span></span>'
     )

@@ -1053,7 +1053,7 @@ footer { display:none !important; }
 """
 
 
-THEME_VARIANT = "orange"
+THEME_VARIANT = "blue"
 
 if THEME_VARIANT == "blue":
     _BLUE_REPLACEMENTS = {

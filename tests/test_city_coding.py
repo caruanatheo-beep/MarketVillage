@@ -34,6 +34,8 @@ def repo(tmp_path,monkeypatch):
     git('init');git('config','user.name','test');git('config','user.email','test@example.invalid')
     (root/'sample.py').write_text('value = 1\n')
     (root/'tests').mkdir()
+    (root/'scripts').mkdir()
+    (root/'scripts/city_test.py').write_text('# test runner fixture\n')
     (root/'tests/test_internships_start_dates.py').write_text('def test_baseline():\n    assert True\n')
     git('add','.');git('-c','commit.gpgsign=false','commit','-m','fixture')
     monkeypatch.setattr(coding,'repo_root',lambda:root)
@@ -127,11 +129,12 @@ def test_autonomous_engineer_integrates_validated_code_without_approval(repo, mo
         return original_run(command, **kwargs)
     monkeypatch.setattr(coding.subprocess, 'run', run)
     def execute(command, directory, prompt, env):
-        assert '--model' in command and command[command.index('--model') + 1] == 'gpt-6.1-sol'
+        assert '--model' in command and command[command.index('--model') + 1] == coding.development_model('internships_engineer')
+        assert 'model_reasoning_effort="high"' in command
         assert 'Sacha' in prompt
         assert 'choisis celui qui gêne le plus l’utilisateur' in prompt
-        assert 'accélérer la collecte' in prompt
-        assert 'Ne prétends pas avoir validé un site externe' in prompt
+        assert 'Priorité aux Sales' in prompt
+        assert "n'annonce pas une source en ligne avant confirmation" in prompt
         assert 'pages et flux publics des sites carrières' in prompt
         assert 'sandbox_workspace_write.network_access=true' in command
         assert 'scripts/city_test.py' in prompt
@@ -150,6 +153,29 @@ def test_autonomous_engineer_integrates_validated_code_without_approval(repo, mo
     assert (root/'internships_project/city_sample.py').read_text() == 'value = 2\n'
 
 
+def test_autonomous_integration_can_remove_obsolete_tracked_code(repo, monkeypatch):
+    root, git = repo
+    source = root/'internships_project'/'obsolete.py'
+    source.parent.mkdir()
+    source.write_text('obsolete = True\n')
+    git('add', 'internships_project/obsolete.py')
+    git('-c', 'commit.gpgsign=false', 'commit', '-m', 'Add obsolete module')
+    revision = git('rev-parse', 'HEAD')
+    branch = 'city-delete-fixture'
+    directory = root/'.city-worktrees'/('d'*32)
+    directory.parent.mkdir(exist_ok=True)
+    git('worktree', 'add', '-b', branch, directory.relative_to(root).as_posix(), revision)
+    (directory/'internships_project/obsolete.py').unlink()
+    monkeypatch.setattr(coding, '_integration_checks', lambda *args, **kwargs: 'focused checks')
+
+    result = coding._auto_integrate(root, directory, branch, revision,
+                                    ['internships_project/obsolete.py'],
+                                    'job_hunter')
+
+    assert result['integrated']
+    assert not source.exists()
+
+
 def test_every_autonomous_engineer_has_a_distinct_product_focus():
     assert set(coding.AUTONOMOUS_FOCUS) == set(specialists.CODING_AGENTS)
     assert len(set(coding.AUTONOMOUS_FOCUS.values())) == len(specialists.CODING_AGENTS)
@@ -157,14 +183,11 @@ def test_every_autonomous_engineer_has_a_distinct_product_focus():
     assert 'parcours Contacts de Clara et Lina' not in coding.AUTONOMOUS_FOCUS['city_ui_engineer']
 
 
-def test_codex_daily_budget_prevents_a_new_worktree(repo, store, monkeypatch):
+def test_exhausted_subscription_prevents_a_new_worktree(repo, store, monkeypatch):
     root, _ = repo
-    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 60)
-    before = coding.require_daily_codex_budget('codex', {})
-    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 60 + coding.CODEX_DAILY_USAGE_PERCENT)
-    coding.record_daily_codex_usage('codex', {}, before)
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 100)
     monkeypatch.setattr(coding, '_execute', lambda *_args: pytest.fail('Codex must stay stopped'))
-    with pytest.raises(CityError, match='budget Codex quotidien'):
+    with pytest.raises(CityError, match='quota Codex hebdomadaire épuisé'):
         coding.implement_change('9'*32, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
     assert not (root/'.city-worktrees'/('9'*32)).exists()
 
@@ -181,8 +204,7 @@ def test_git_failure_does_not_consume_codex_fallback_budget(repo, store, monkeyp
     with pytest.raises(CityError, match='Git indisponible'):
         coding.implement_change('f' * 32, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
     with store.db() as db:
-        consumed, calls = db.execute('SELECT consumed,fallback_calls FROM city_codex_agent_usage').fetchone()
-    assert consumed == 0 and calls == 0
+        assert db.execute("SELECT name FROM sqlite_master WHERE name='city_codex_agent_usage'").fetchone() is None
     assert not (root / '.city-worktrees' / ('f' * 32)).exists()
 
 
@@ -196,37 +218,16 @@ def test_codex_daily_budget_reads_weekly_window_only():
         coding._weekly_usage_percent({'codex': {'primary': {'usedPercent': 85, 'windowDurationMins': 300}}})
 
 
-def test_codex_daily_budget_resets_on_new_day_and_weekly_reset(store, monkeypatch):
-    from datetime import datetime, timedelta
-    from zoneinfo import ZoneInfo
-    today = datetime(2026, 11, 6, 10, tzinfo=ZoneInfo('Europe/Paris'))
-    current = [today]
-    used = [62.0]
-    monkeypatch.setattr(coding, 'datetime', SimpleNamespace(now=lambda _tz: current[0]))
-    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: used[0])
-    before = coding.require_daily_codex_budget('codex', {})
-    used[0] = 75.0
-    coding.record_daily_codex_usage('codex', {}, before)
-    before = coding.require_daily_codex_budget('codex', {})
-    used[0] = 77.0
-    coding.record_daily_codex_usage('codex', {}, before)
-    with pytest.raises(CityError, match='budget Codex quotidien'):
-        coding.require_daily_codex_budget('codex', {})
-    current[0] = today + timedelta(days=1)
-    before = coding.require_daily_codex_budget('codex', {})
-    used[0] = 2.0  # Subscription's weekly window reset during the day.
-    coding.record_daily_codex_usage('codex', {}, before)
-    before = coding.require_daily_codex_budget('codex', {})
-    used[0] = 13.0
-    coding.record_daily_codex_usage('codex', {}, before)
-    before = coding.require_daily_codex_budget('codex', {})
-    used[0] = 15.0
-    coding.record_daily_codex_usage('codex', {}, before)
-    with pytest.raises(CityError, match='budget Codex quotidien'):
-        coding.require_daily_codex_budget('codex', {})
+def test_city_does_not_limit_repeated_calls_when_subscription_available(store, monkeypatch):
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 80.0)
+    for _ in range(12):
+        before = coding.require_daily_codex_budget('codex', {})
+        coding.record_daily_codex_usage('codex', {}, before)
+    with store.db() as db:
+        assert db.execute("SELECT name FROM sqlite_master WHERE name='city_codex_agent_usage'").fetchone() is None
 
 
-def test_codex_budget_excludes_usage_between_agent_calls(store, monkeypatch):
+def test_no_local_budget_tracks_usage_between_agent_calls(store, monkeypatch):
     used = [60.0]
     monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: used[0])
     before = coding.require_daily_codex_budget('codex', {})
@@ -237,24 +238,48 @@ def test_codex_budget_excludes_usage_between_agent_calls(store, monkeypatch):
     used[0] = 81.0
     coding.record_daily_codex_usage('codex', {}, before)
     with store.db() as db:
-        consumed = db.execute('SELECT consumed FROM city_codex_agent_usage').fetchone()[0]
-    assert consumed == 3.0
+        assert db.execute("SELECT name FROM sqlite_master WHERE name='city_codex_agent_usage'").fetchone() is None
 
 
-def test_codex_budget_allows_bounded_calls_when_meter_is_unavailable(store, monkeypatch):
+def test_no_local_budget_when_meter_is_unavailable(store, monkeypatch):
     def unavailable(*_args):
         raise CityError('Quota Codex indisponible : missions de développement suspendues.')
     monkeypatch.setattr(coding, 'codex_usage_percent', unavailable)
-    for _ in range(coding.CODEX_DAILY_FALLBACK_CALLS):
+    for _ in range(12):
         assert coding.require_daily_codex_budget('codex', {}) is None
-    with pytest.raises(CityError, match='budget Codex quotidien'):
-        coding.require_daily_codex_budget('codex', {})
 
 
-def test_autonomous_worktree_resumes_after_main_becomes_clean(repo, monkeypatch):
+def test_development_report_requires_a_nonempty_user_summary(repo, monkeypatch):
+    root, _ = repo
+    monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 12)
+
+    def execute(command, directory, prompt, env):
+        target = directory/'internships_project/city_sample.py'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('value = 2\n')
+        Path(command[command.index('--output-last-message') + 1]).write_text(json.dumps(
+            {'summary': '  ', 'tests': 'Test passé', 'limitations': 'Aucune'}))
+        return [{'type': 'turn.completed'}]
+
+    monkeypatch.setattr(coding, '_execute', execute)
+    task_id = 'e'*32
+    with pytest.raises(CityError, match='Rapport Codex incomplet'):
+        coding.implement_change(task_id, {'coding_request': ''},
+                                agent_id='job_hunter', auto_integrate=True)
+    assert (root/'.city-worktrees'/task_id/'internships_project/city_sample.py').is_file()
+    assert coding._valid_development_report({'summary': 'Une correction.', 'tests': '', 'limitations': ''})
+    assert not coding._valid_development_report({'summary': '', 'tests': 'OK', 'limitations': ''})
+
+
+def test_autonomous_worktree_integrates_without_discarding_local_edits(repo, monkeypatch):
     root, git = repo
     monkeypatch.setattr(coding, 'codex_usage_percent', lambda *_: 12)
-    monkeypatch.setattr(coding, '_integration_checks', lambda *_args, **_kwargs: 'focused tests')
+    def checks(current_root, candidate, files, agent, **kwargs):
+        # A concurrent local fix belongs to the candidate tested for integration,
+        # even though it was absent from the agent's initial snapshot.
+        assert (candidate/'internships_project/current_context.py').read_text() == 'updated = True\n'
+        return 'focused tests'
+    monkeypatch.setattr(coding, '_integration_checks', checks)
     calls = []
     def execute(command, directory, prompt, env):
         calls.append(command)
@@ -263,22 +288,34 @@ def test_autonomous_worktree_resumes_after_main_becomes_clean(repo, monkeypatch)
         target.write_text('value = 2\n')
         Path(command[command.index('--output-last-message') + 1]).write_text(json.dumps(
             {'summary': 'Une valeur a été corrigée.', 'tests': 'Test ciblé réussi.', 'limitations': 'Aucune.'}))
+        (directory/'test_run_output.txt').write_text('local diagnostic only')
         (root/'sample.py').write_text('value = 9\n')
+        (root/'internships_project').mkdir(exist_ok=True)
+        (root/'internships_project/current_context.py').write_text('updated = True\n')
         return [{'type': 'turn.completed'}]
     monkeypatch.setattr(coding, '_execute', execute)
     task_id = 'a'*32
-    with pytest.raises(CityError, match='modifications locales suivies'):
-        coding.implement_change(task_id, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
-    worktree = root/'.city-worktrees'/task_id
-    assert (worktree/'.jules-complete.json').exists()
-    assert len(calls) == 1
-    (root/'sample.py').write_text('value = 1\n')
-    monkeypatch.setattr(coding, '_execute', lambda *_args: pytest.fail('Codex must not run again'))
     result = coding.implement_change(task_id, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
     assert result['integrated'] and result['plain_summary'] == 'Une valeur a été corrigée.'
-    assert git('status', '--porcelain', '--untracked-files=no') == ''
+    assert result['integration_mode'] == 'working_tree'
+    assert 'test_run_output.txt' not in result['files']
+    assert (root/'sample.py').read_text() == 'value = 9\n'
+    assert (root/'internships_project/city_sample.py').read_text() == 'value = 2\n'
+    worktree = root/'.city-worktrees'/task_id
     assert not (worktree/'.jules-complete.json').exists()
     assert len(calls) == 1
+
+
+def test_source_worktree_housekeeping_does_not_enter_the_integration_delta(tmp_path,monkeypatch):
+    (tmp_path/'.gitignore').write_text('cache/\n.sacha-source-attempts.json\n')
+    monkeypatch.setattr(coding,'git',lambda *args:'cache/')
+    names=['.gitignore','internships_project/city_frontend/vendor/missing.png',
+           'internships_project/internships.py','tests/test_internships_new.py']
+    assert coding._source_worktree_files(tmp_path,names,'internships_engineer')==names[2:]
+    # A real ignore-policy edit is still rejected by the existing integration guard.
+    (tmp_path/'.gitignore').write_text('cache/\n*.py\n')
+    assert '.gitignore' in coding._source_worktree_files(tmp_path,names,'internships_engineer')
+    assert coding._source_worktree_files(tmp_path,names,'job_hunter')==names
 
 
 def test_interrupted_autonomous_worktree_continues_existing_change(repo, store, monkeypatch):
@@ -324,15 +361,20 @@ def test_autonomous_worktree_resumes_after_branch_commit(repo, monkeypatch):
         return [{'type': 'turn.completed'}]
     monkeypatch.setattr(coding, '_execute', execute)
     task_id = 'f'*32
-    with pytest.raises(CityError, match='modifications locales suivies'):
+    from internships_project import city_worktree
+    integrate = city_worktree.integrate_patch
+    def interrupted(*args):
+        raise CityError('Intégration interrompue après le commit')
+    monkeypatch.setattr(city_worktree, 'integrate_patch', interrupted)
+    with pytest.raises(CityError, match='après le commit'):
         coding.implement_change(task_id, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
     directory = root/'.city-worktrees'/task_id
-    coding.git(directory, 'add', '--', 'internships_project/city_sample.py')
-    coding.git(directory, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Improve MarketDesk with job_hunter')
-    (root/'sample.py').write_text('value = 1\n')
+    assert coding.git(directory, 'log', '-1', '--format=%s') == 'Improve MarketDesk with job_hunter'
+    monkeypatch.setattr(city_worktree, 'integrate_patch', integrate)
     monkeypatch.setattr(coding, '_execute', lambda *_args: pytest.fail('Codex must not run again'))
     result = coding.implement_change(task_id, {'coding_request': ''}, agent_id='job_hunter', auto_integrate=True)
-    assert result['integrated'] and result['commit'] == git('rev-parse', 'HEAD')
+    assert result['integrated'] and result['commit'] in city_worktree.activation_commits(root)
+    assert (root/'sample.py').read_text() == 'value = 9\n'
     assert 'internships_project/city_sample.py' in result['files']
 
 
@@ -393,11 +435,12 @@ def test_failed_development_can_retry_with_other_missions_queued(store):
     assert store.retry_task('alice', failed['id']) == {'id': failed['id'], 'status': 'queued'}
 
 
-def test_conflicted_development_retries_from_fresh_task_and_preserves_branch(store):
+@pytest.mark.parametrize('conflict', ['conflit avec une autre mission', 'conflit avec les modifications locales'])
+def test_conflicted_development_retries_from_fresh_task_and_preserves_branch(store, conflict):
     failed = store.create_task('alice', 'city_ui_engineer', 'Améliorer Contacts', {'operation': 'develop'})
     with store.db() as db:
         db.execute("UPDATE city_tasks SET status='failed',error=? WHERE id=?",
-                   ('Intégration suspendue : conflit avec une autre mission. La branche reste disponible.',
+                   ('Intégration suspendue : '+conflict+'. La branche reste disponible.',
                     failed['id']))
     retried = store.retry_task('alice', failed['id'])
     assert retried['id'] != failed['id']
@@ -419,6 +462,11 @@ def test_coding_history_is_private_compact_and_keeps_full_detail(store):
     assert len(history['tasks']) == 1
     assert history['tasks'][0]['result']['plain_summary'] == 'Date corrigée.'
     assert 'diff' not in history['tasks'][0]['result']
+    daily = store.daily_coding_changes('alice')
+    assert daily['count'] == 1
+    assert daily['changes'][0]['summary'] == 'Date corrigée.'
+    assert daily['changes'][0]['files'] == ['internships_project/city_services.py']
+    assert store.daily_coding_changes('bob')['count'] == 0
     assert any(event['task_id'] == task['id'] and 'Tests ciblés' in event['message'] for event in history['events'])
     assert store.coding_history('bob')['tasks'] == []
     assert store.task_detail('bob', task['id']) is None
@@ -461,6 +509,17 @@ def test_coding_history_distinguishes_integrated_from_live(store):
     store.active_revision = 'newer'
     store.active_commits = {'older', 'abc123', 'newer'}
     assert store.coding_history('alice')['tasks'][0]['result']['live'] is True
+
+
+@pytest.mark.parametrize('files', [[], ['internships_project/internships.py'],
+    ['internships_project/city_services.py', 'app_internships.py']])
+def test_city_restart_does_not_claim_other_app_changes_are_live(store, files):
+    task = store.create_task('alice', 'job_hunter', 'Corriger les services', {'operation': 'develop'})
+    store.claim_next()
+    store.finish(task['id'], result={'integrated': True, 'commit': 'abc123', 'files': files})
+    store.active_revision = 'abc123'
+    store.active_commits = {'abc123'}
+    assert store.coding_history('alice')['tasks'][0]['result']['live'] is None
 
 
 def test_stale_completed_codex_work_is_requeued_without_another_call(store, tmp_path, monkeypatch):
@@ -559,10 +618,10 @@ def test_internships_gate_uses_offline_tests_and_names_a_failure(repo, monkeypat
     original_run = subprocess.run
     commands = []
     def run(command, **kwargs):
-        if command[:2] == [sys.executable, '-c']:
-            commands.append(command[2])
+        if command[0] == sys.executable and Path(command[1]).as_posix().endswith('scripts/city_test.py'):
+            commands.append(' '.join(command[2:]))
             return SimpleNamespace(returncode=1,
-                                   stdout='FAILED tests\\test_internships_weekly_dates.py::test_weekly\n')
+                                   stdout='FAILED tests\\test_internships_weekly_dates.py::test_weekly\n', stderr='')
         return original_run(command, **kwargs)
     monkeypatch.setattr(coding.subprocess, 'run', run)
     with pytest.raises(CityError, match='test_internships_weekly_dates.py::test_weekly'):
@@ -584,8 +643,8 @@ def test_quality_gate_runs_changed_market_tests(repo, monkeypatch):
     original_run = subprocess.run
     commands = []
     def run(command, **kwargs):
-        if command[:2] == [sys.executable, '-c']:
-            commands.append(command[2])
+        if command[0] == sys.executable and Path(command[1]).as_posix().endswith('scripts/city_test.py'):
+            commands.append(' '.join(command[2:]))
             return SimpleNamespace(returncode=0, stdout='')
         return original_run(command, **kwargs)
     monkeypatch.setattr(coding.subprocess, 'run', run)
@@ -822,6 +881,22 @@ def test_supervised_worker_drains_after_integrating_code(store, monkeypatch):
     assert worker._stop.is_set()
 
 
+@pytest.mark.parametrize('message,expected', [
+    ('stream disconnected: private endpoint', 'Connexion Codex interrompue'),
+    ('usage limit reached: private account', 'Quota Codex indisponible'),
+    ('authentication failed: private token', 'Connecte Codex'),
+])
+def test_codex_failures_are_classified_without_exposing_details(monkeypatch, tmp_path, message, expected):
+    class Process:
+        returncode = 1
+        def communicate(self, *args, **kwargs):
+            return ('', message)
+    monkeypatch.setattr(subprocess, 'Popen', lambda *args, **kwargs: Process())
+    with pytest.raises(CityError, match=expected) as exc:
+        coding._execute(['codex'], tmp_path, 'task', {})
+    assert 'private' not in str(exc.value)
+
+
 def test_codex_failure_and_missing_completion_never_report_success(monkeypatch,tmp_path):
     class Process:
         returncode=1
@@ -831,3 +906,40 @@ def test_codex_failure_and_missing_completion_never_report_success(monkeypatch,t
     assert 'private' not in str(exc.value)
     Process.returncode=0
     with pytest.raises(CityError,match='pas confirmé'):coding._execute(['codex'],tmp_path,'task',{})
+
+@pytest.mark.parametrize('platform', ['nt', 'posix'])
+def test_codex_timeout_reports_timeout_even_if_tree_kill_fails(monkeypatch, tmp_path, platform):
+    from types import SimpleNamespace
+
+    calls = {'communicate': 0, 'kill': 0}
+
+    class Process:
+        pid = 123
+        returncode = None
+
+        def communicate(self, *args, **kwargs):
+            calls['communicate'] += 1
+            if kwargs.get('timeout') is not None:
+                raise subprocess.TimeoutExpired('codex', kwargs['timeout'])
+            return ('', '')
+
+        def kill(self):
+            calls['kill'] += 1
+            self.returncode = -9
+
+    monkeypatch.setattr(coding.subprocess, 'Popen', lambda *args, **kwargs: Process())
+    monkeypatch.setattr(coding, 'os', SimpleNamespace(name=platform))
+    if platform == 'nt':
+        monkeypatch.setattr(subprocess, 'CREATE_NO_WINDOW', 0, raising=False)
+        monkeypatch.setattr(subprocess, 'run', lambda *args, **kwargs:
+                            (_ for _ in ()).throw(subprocess.TimeoutExpired('taskkill', 15)))
+    else:
+        import signal
+        # This case simulates POSIX even when pytest itself runs on Windows.
+        monkeypatch.setattr(signal, 'SIGKILL', 9, raising=False)
+        monkeypatch.setattr(coding, 'os', SimpleNamespace(name=platform, killpg=lambda *args:
+                            (_ for _ in ()).throw(ProcessLookupError())))
+
+    with pytest.raises(CityError, match='dépassé'):
+        coding._execute(['codex'], tmp_path, 'task', {}, timeout_seconds=1)
+    assert calls == {'communicate': 2, 'kill': 1}

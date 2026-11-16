@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from internships_project import city_agents, city_services, state_store
+from internships_project import city_offers, city_agents, city_services, state_store
 from internships_project.marketdesk_city import CityError, CityStore
 
 
@@ -132,7 +132,7 @@ def test_jules_filters_contract_and_searches_all_pages_and_description(monkeypat
     def load(refresh=False):
         refreshes.append(refresh)
         return list(reversed(jobs)), [], datetime.now(timezone.utc)
-    monkeypatch.setattr(internships, "load_opportunities", load)
+    monkeypatch.setattr(city_offers, "load_catalogue", lambda: city_offers.Catalogue(*load(), "public"))
     pages = [city_agents._cached_jobs("FX", bank="etude", contract="internship", page=p) for p in range(1, 5)]
     urls = [o["url"] for page in pages for o in page["offers"]]
     assert len(urls) == len(set(urls)) == 25
@@ -170,7 +170,7 @@ def test_manager_searches_next_internship_page_with_filters(monkeypatch):
         refreshes.append(refresh)
         return jobs, [], datetime.now(timezone.utc)
 
-    monkeypatch.setattr(internships, "load_opportunities", load)
+    monkeypatch.setattr(city_offers, "load_catalogue", lambda: city_offers.Catalogue(*load(), "public"))
     tool = city_agents.build_agent("desk_manager", TestModel())._function_toolset.tools[
         "search_internship_cache"].function
     ctx = SimpleNamespace(deps=city_agents.ChatDeps("owner", None))
@@ -225,7 +225,7 @@ def test_manager_recent_internships_require_confirmed_dates_and_preserve_paginat
         refreshes.append(refresh)
         return jobs + excluded, [], FixedDatetime.now(timezone.utc)
 
-    monkeypatch.setattr(internships, "load_opportunities", load)
+    monkeypatch.setattr(city_offers, "load_catalogue", lambda: city_offers.Catalogue(*load(), "public"))
     tool = city_agents.build_agent("desk_manager", TestModel())._function_toolset.tools[
         "search_internship_cache"].function
     ctx = SimpleNamespace(deps=city_agents.ChatDeps("owner", None))

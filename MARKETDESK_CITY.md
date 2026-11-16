@@ -17,7 +17,17 @@ in the local environment; no credentials or user database are included here.
 The root README documents the shared services and configuration.
 
 Markets runs with `python app.py`; Internships with `python app_internships.py`.
-City can call their collectors directly without launching either interface.
+City reads offers from the public Internships catalogue, without launching the
+Internships interface or its employer collectors. Markets remains a shared Python service.
+
+The public feed is `https://caruanatheo-beep.github.io/Internships-Offres/offers.json`.
+City checks it every five minutes and on a manual Hugo synchronization. It validates
+the schema, dates, URLs and response size, then keeps an atomic local copy. A failed,
+empty or older response cannot replace the last valid catalogue. If no public copy
+exists, City reads the existing local offers cache without launching collection.
+The Stages panel shows provenance, catalogue time, source alerts and fallback warnings;
+catalogues older than 36 hours are flagged. The first synchronization establishes a
+baseline; it does not report the entire catalogue as newly discovered.
 
 ## Agents and recurring work
 
@@ -29,7 +39,26 @@ for their precise operations, schedules, catch-up rules, approvals and limits.
 
 Contacts, profiles, chat history and settings are account-scoped SQLite data.
 The repository excludes runtime data, exports, credentials and local tooling.
-No messages, applications, merges or deployments are sent automatically.
+No messages, applications, GitHub pushes or deployments are sent automatically.
+Authorized coding missions can integrate tested changes locally in isolated worktrees.
+The cockpit includes scheduled automatic coding work from the shared instance;
+other accounts' manual requests remain private. Shared missions owned by another
+account are read-only. Git validation, conflicts and access errors require correction;
+only transient Git locks and timeouts are retried automatically.
+
+An explicitly authorized 24-hour source campaign can run with
+`python scripts/run_sacha_source_campaign.py`. Sacha uses GPT-6.1 Sol with high
+reasoning through the ChatGPT subscription, checks the public sources catalogue,
+and makes one attempt every two hours without overlapping another Sacha task.
+Every attempt compares existing sources and public visitor suggestions before
+selecting one employer source internationally, with preference for Institutional
+Sales, Sales Trading and related market sales roles. Suggested links and text are
+untrusted inputs; their retrieval is read-only and does not archive submissions.
+The controller applies only the tested mission delta to the current public release,
+pushes it without force, and checks the GitHub Pages job. Conflicts or failed
+deployments stop further publications. No complete workspace file is copied into
+the release. Local City and the controller must remain running; no new missions
+are started after 24 hours. The account-scoped Manager chat records the outcomes.
 
 ## Frontend
 
@@ -42,10 +71,15 @@ npm run build
 ```
 
 The build checks TypeScript, furniture collisions, workstation paths and golf
-routes. The current village has nine workstations. Upstream asset and engine
+routes. The current village has fourteen workstations. Upstream asset and engine
 licenses are retained alongside their files.
 
 ## Checks
+
+City check (14 November 2026): 662 non-browser City tests and the frontend build
+passed. The live City instance served the public catalogue (426 offers, no source
+alerts at verification) and answered a Codex chat probe. Browser UI tests remain
+unverified in this environment; no real email generation or send was performed.
 
 ```sh
 python -m pytest -q -m "not live"

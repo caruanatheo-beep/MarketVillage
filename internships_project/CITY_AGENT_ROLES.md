@@ -16,38 +16,34 @@ sont accessibles dans Réglages. Le chat du Manager et les contacts conservent l
 
 | Agent | Opérations serveur | Récurrence (Europe/Paris) | Livrable |
 |---|---|---|---|
-| Jules | `repository_audit`, `codex_review`, `develop`, préparation de branche historique | Audit quotidien et six missions de développement autonomes par jour pendant un mois | Correction City, commit local et vérifications dans un worktree isolé |
-| Camille | `develop` | Six créneaux autonomes par jour pendant un mois, espacés de quatre heures | Correction visuelle concrète dans City ou Internships, build et commit local |
-| Sacha | `develop` | Six créneaux par jour pendant un mois, dont le premier dédié à une nouvelle source | Une source carrière vérifiée par jour visée, priorité aux petites banques et sociétés de gestion françaises ; autres créneaux consacrés notamment à la vitesse et à la fiabilité de collecte |
-| Maël | `develop` | Six missions autonomes par jour pendant un mois | Correction de régression ou fiabilisation, test et commit local |
+| Jules | `repository_audit`, `codex_review`, `develop`, préparation de branche historique | Audit quotidien et trois créneaux de développement par jour pendant un mois | Correction City, commit local et vérifications dans un worktree isolé |
+| Camille | `develop` | Trois créneaux autonomes par jour pendant un mois | Correction visuelle concrète dans City ou Internships, build et commit local |
+| Sacha | `develop` | Trois créneaux par jour pendant un mois | Analyse du catalogue et des propositions visiteurs, recherche internationale sans préférence nationale, priorité aux Sales de marché ; sélection d'une source, collecte réelle, tests et intégration au catalogue public |
+| Maël | `develop` | Trois créneaux autonomes par jour pendant un mois | Correction de régression ou fiabilisation, test et commit local |
 | Noé | `quant_report` | Sur demande uniquement | Courbe de capital, rendement net, Sharpe à taux sans risque nul, volatilité, drawdown, hypothèses et limites |
 | Axel | `daily_questions`, `mock_interview`, `evaluate_answer` | Sur demande uniquement | Questions Sales/S&T/Global Markets, HireVue, grille de couverture indicative et historique des réponses |
 | Nova | `innovation_review` | Deux fois par semaine : lundi et jeudi | Deux projets publics GitHub non déjà proposés par revue, licence, spécification de prototype isolé, complexité et coûts à mesurer |
 | Lina | Recherche de contacts existante + `refresh_internships` | Collecte quotidienne de contacts inchangée | Contacts ; collecte réelle des offres sur demande |
 | Clara | `discover_service_contacts` | Sur demande uniquement | Contacts publics en services titres et collateral, ajoutés au carnet partagé sans appel API payant ; BP2S = BNP Paribas Securities Services |
+| Élodie | `discover_prime_services_contacts` | 9 h et 17 h chaque jour, heure de Paris | Prime Services, Clearing et Securities Financing a Paris ; Sales en priorite ; contacts publics ajoutes au carnet partage et dedoublonnes |
 | Hugo | `refresh_internships` via le service Python existant | Chaque jour + sur demande | Bilan des nouveaux stages détectés dans la synthèse du Manager ; recherche des publications du jour sur demande |
 | Mira | `collect_markets` via le service Python Markets | Chaque jour + sur demande | Brief de marché et sentiment sourcé dans la synthèse quotidienne |
 
 Iris et le Desk Manager conservent leurs autres responsabilités.
 
-Du 4 novembre au 3 décembre 2026 inclus, chaque agent de développement reçoit six
-missions quotidiennes. Le choix du changement concret lui appartient. Jusqu'à quatre
+Du 4 novembre au 3 décembre 2026 inclus, chaque agent de développement dispose de trois
+créneaux quotidiens, avec regroupement des rattrapages. Les rattrapages sont regroupés dans la mission déjà en attente
+pour éviter de remplir la file. Le choix du changement concret lui appartient. Jusqu'à quatre
 missions de développement peuvent s'exécuter ensemble, une par agent et par compte,
 dans des worktrees Git distincts, avec Codex connecté à
-l'abonnement ChatGPT et `gpt-6.1-sol` en raisonnement moyen. Aucun appel API payant
+l'abonnement ChatGPT et `gpt-6-luna` en raisonnement moyen pour les missions Codex. Aucun appel API payant
 n'est utilisé pour ce développement. Le réglage « Missions simultanées » de chaque
-compte s'applique aussi. City mesure la progression du quota hebdomadaire pendant
-les appels des programmeurs, de Jules et de Clara, puis la compare à un budget
-commun de 1/7 du quota par jour (14,3 points), remis à zéro à minuit heure de Paris.
-Sacha peut consulter en lecture seule les sites carrières publics pour vérifier une
-nouvelle source. L'objectif d'une source fonctionnelle par jour dépend des offres
-publiquement accessibles : une source inaccessible ou vide est signalée, jamais comptée
-comme ajout réussi.
-L'usage personnel de Codex entre deux appels City n'entre pas dans ce calcul.
-Si Codex ne renvoie pas sa mesure, City autorise au plus six appels partagés par jour.
-Quand le budget est atteint, le développement reprend le lendemain.
-Une mission déjà lancée peut faire dépasser ce seuil ; il ne s'agit pas d'un plafond
-imposé par OpenAI à l'abonnement.
+compte s'applique aussi. Seules les limites réelles de l'abonnement Codex sont
+appliquées ; City n'impose plus de plafond journalier interne. Une mesure de quota
+indisponible ne certifie pas du quota restant ; les refus réels de Codex restent
+signalés et les missions différées. Aucun repli automatique vers une API payante.
+Sacha peut consulter en lecture seule les sites carrières publics. Une source vide
+ou inaccessible n'est jamais annoncée comme un ajout fonctionnel.
 
 City contrôle le périmètre des fichiers, la syntaxe Python, un test ciblé et le build
 frontend lorsque nécessaire. Les intégrations sont successives : si une autre mission
@@ -64,6 +60,13 @@ Hugo et Mira avec leurs dates, puis les propositions et validations en attente.
 Ce briefing déterministe est isolé par compte, conservé dans le chat et ne lance
 ni collecte ni appel IA supplémentaire. Il est aussi publié automatiquement une fois
 par jour, après les missions prévues ; une mission en erreur y est signalée avec sa date.
+
+Hugo synchronise le catalogue JSON public Internships. Le Manager et le panneau
+Stages utilisent ce même catalogue. Une dernière copie publique valide est conservée ;
+en son absence, seul le cache local est lu. Les erreurs réseau, copies de secours et
+catalogues de plus de 36 heures sont signalés. La synchronisation ne lance plus les
+collecteurs employeurs locaux et n'envoie aucun e-mail. Les paragraphes ci-dessous
+sur l'ancien collecteur décrivent son fonctionnement historique.
 
 Hugo classe les stages actualisés selon les métiers, lieux et mois de début
 explicitement renseignés dans le premier profil enregistré. Le classement est

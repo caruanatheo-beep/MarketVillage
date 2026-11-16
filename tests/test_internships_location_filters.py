@@ -52,7 +52,7 @@ class LocationFilterTests(unittest.TestCase):
             category="Stages Paris", delayed_updates=True,
         )
         self.assertIn('data-offer-url="https://example.invalid/offer"', board)
-        self.assertIn("Fontenay sous Bois", board)
+        self.assertIn("Fontenay-sous-Bois · France", board)
         self.assertIn("Offres 1–1 sur 1", board)
 
     def test_international_filter_excludes_french_region_typography_variants(self):

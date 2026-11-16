@@ -19,6 +19,31 @@ from .marketdesk_city import CityError, refresh_jobs_workflow
 _DRAFT_LOCKS = [threading.Lock() for _ in range(32)]
 
 
+def _budget_guard(username: str, settings: dict, reserve_usd: float = 0) -> None:
+    """Keep the existing paid draft path within account limits; never enable a provider."""
+    from decimal import Decimal
+    from zoneinfo import ZoneInfo
+    from .llm_usage import _connect
+    now = datetime.now(ZoneInfo('Europe/Paris'))
+    totals = {'day': Decimal(0), 'month': Decimal(0)}
+    with _connect() as db:
+        rows = db.execute('SELECT created_at,estimated_cost_usd FROM llm_usage WHERE username=?',
+                          (username,)).fetchall()
+    for created, cost in rows:
+        when = datetime.fromisoformat(created.replace('Z', '+00:00')).astimezone(ZoneInfo('Europe/Paris'))
+        if (when.year, when.month) != (now.year, now.month):
+            continue
+        if cost is None:
+            raise CityError('Coût IA inconnu ce mois-ci : vérifie le journal avant une nouvelle rédaction.')
+        totals['month'] += Decimal(str(cost))
+        if when.date() == now.date():
+            totals['day'] += Decimal(str(cost))
+    for period, key in [('day', 'daily_limit_usd'), ('month', 'monthly_limit_usd')]:
+        limit = Decimal(str(settings[key]))
+        if totals[period] >= limit or totals[period] + Decimal(str(reserve_usd)) > limit:
+            raise CityError('Budget IA atteint : vérifie les limites dans les paramètres City.')
+
+
 def _fingerprint(value: object) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
 
@@ -95,10 +120,9 @@ def run_agent(agent_id: str, username: str, parameters: dict | None = None) -> d
         from .state_store import load_user_data
         profiles = clean_catalog(load_user_data(username, "profiles"))
         profile = next(iter(profiles.values()), None)
-        return {**refresh_jobs_workflow(published_today=not detected, detected_today=detected,
-                                        profile=profile), "source": "Service Python Internships, sans interface Gradio"}
+        return refresh_jobs_workflow(published_today=not detected, detected_today=detected, profile=profile)
     if agent_id == "networker" and parameters.get("operation") == "refresh_internships":
-        return {**refresh_jobs_workflow(), "title": "Lina · collecte Internships", "source": "Service Python Internships, sans interface Gradio"}
+        return {**refresh_jobs_workflow(), "title": "Lina · synchronisation Internships"}
     if agent_id == 'networker' and parameters.get('operation') == 'enrich_schools':
         from .network_discovery import enrich_schools
         return enrich_schools(username)
@@ -383,12 +407,30 @@ def market_snapshot() -> dict:
 
 
 def internship_highlight() -> dict:
-    """Read the current Internships cache without starting a new source collection."""
+    """Read the public catalogue without starting employer collectors."""
     from . import internships
-
-    jobs, errors, updated = internships.load_opportunities(refresh=False)
+    from .city_offers import load_catalogue
+    from zoneinfo import ZoneInfo
+    catalogue = load_catalogue()
+    jobs, errors, updated = catalogue.jobs, catalogue.errors, catalogue.updated
     ranked = sorted(jobs, key=internships._opportunity_sort_key)
     job = ranked[0] if ranked else None
+    today = datetime.now(ZoneInfo("Europe/Paris")).date()
+    def is_recent(item) -> bool:
+        try:
+            age = (today - datetime.strptime(item.published, "%Y-%m-%d").date()).days
+        except (TypeError, ValueError):
+            return False
+        return 0 <= age <= 7
+
+    recent = sorted((item for item in jobs if is_recent(item)),
+                    key=lambda item: item.published, reverse=True)
+    recent_offers = [{
+        "title": item.title, "company": item.company, "location": item.location,
+        "url": item.url, "kind": item.kind, "published": item.published,
+        "published_inferred": item.published_inferred, "source": item.source,
+        "start_period": item.start_period,
+    } for item in recent[:40]]
     offer = ({
         "title": job.title,
         "company": job.company,
@@ -399,11 +441,14 @@ def internship_highlight() -> dict:
         "published": job.published,
         "published_inferred": job.published_inferred,
         "source": job.source,
-        "selection_source": "internships_cache",
-        "selection_reason": "Offre en tête du classement actuel d’Internships.",
+        "selection_source": "internships_public" if catalogue.source == 'public' else "internships_cache",
+        "selection_reason": "Offre du catalogue Internships en ligne." if catalogue.source == 'public' else "Offre du cache local de secours.",
     } if job else None)
     return {
+        **catalogue.metadata(),
         "featured_offer": offer,
+        "recent_offers": recent_offers,
+        "recent_count": len(recent),
         "updated_at": updated.isoformat(),
         "total_count": len(jobs),
         "source_errors": len(errors),

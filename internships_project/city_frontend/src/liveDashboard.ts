@@ -27,6 +27,7 @@ type InternshipResponse = {
   total_count?: number;
   source_errors?: number;
   error?: string;
+  catalog_warning?: string;
 };
 type CityTask = {
   id: string;
@@ -89,7 +90,7 @@ function shortDate(value?: string): string {
 function agentOffer(tasks: CityTask[] | undefined): { offer: Offer; finishedAt: string; today: boolean; result: NonNullable<CityTask["result"]> } | null {
   const today = dateKey(new Date().toISOString());
   const completed = [...(tasks || [])]
-    .filter(task => task.agent_id === "networker" && task.status === "completed" && task.result?.featured_offer?.title)
+    .filter(task => (task.agent_id === "internship_scout" || task.agent_id === "networker") && task.status === "completed" && task.result?.featured_offer?.title)
     .sort((a, b) => (b.finished_at || "").localeCompare(a.finished_at || ""));
   const selected = completed.find(task => dateKey(task.finished_at) === today) || completed[0];
   const offer = selected?.result?.featured_offer;
@@ -236,7 +237,7 @@ async function loadFeeds(): Promise<void> {
     cacheOffer = data.featured_offer || null;
     view.offerCount = data.total_count || 0;
     view.sourceErrors = data.source_errors || 0;
-    view.internshipError = data.error || "";
+    view.internshipError = data.error || data.catalog_warning || "";
     view.internshipUpdatedAt = data.updated_at || "";
   } else {
     const message = internshipResult.reason instanceof Error ? internshipResult.reason.message : "Internships indisponible.";
@@ -246,11 +247,11 @@ async function loadFeeds(): Promise<void> {
   }
   if (stateResult.status === "fulfilled") {
     const result = agentOffer(stateResult.value.tasks);
-    view.offer = result
+    view.offer = result && !cacheOffer
       ? { ...result.offer, selection_source: "job_hunter",
           selection_reason: `${result.today ? "aujourd’hui" : `le ${shortDate(result.finishedAt)}`} · ${result.result.new_count ?? 0} nouvelles offres` }
       : cacheOffer;
-    if (result) {
+    if (result && !cacheOffer) {
       view.offerCount = result.result.total_count || view.offerCount;
       view.sourceErrors = result.result.source_errors ?? view.sourceErrors;
       view.internshipUpdatedAt = result.result.updated_at || view.internshipUpdatedAt;

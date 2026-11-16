@@ -1,4 +1,4 @@
-"""Source preparation must not exhaust City's bounded Codex review budget."""
+"""Source preparation and failed reviews must not create a City budget."""
 
 import json
 from pathlib import Path
@@ -72,23 +72,21 @@ def test_preparation_failures_preserve_all_review_slots(review, monkeypatch, fai
                 return original(path, *args, **kwargs)
             preparation.setattr(Path, 'write_text', write)
 
-        for _ in range(coding.CODEX_DAILY_FALLBACK_CALLS):
+        for _ in range(7):
             with pytest.raises((CityError, OSError)):
                 coding.review_repository()
         assert calls == []
 
-    # Recovery still has the complete daily allowance, then must stop.
-    for _ in range(coding.CODEX_DAILY_FALLBACK_CALLS):
+    # More than the former six-call cap can run when the meter is unavailable.
+    for _ in range(8):
         result = coding.review_repository()
         assert result['approval_required'] is True
-    with pytest.raises(CityError, match='budget Codex quotidien'):
-        coding.review_repository()
-    assert len(calls) == coding.CODEX_DAILY_FALLBACK_CALLS
+    assert len(calls) == 8
     with store.db() as db:
-        assert db.execute('SELECT fallback_calls FROM city_codex_agent_usage').fetchone()[0] == len(calls)
+        assert db.execute("SELECT name FROM sqlite_master WHERE name='city_codex_agent_usage'").fetchone() is None
 
 
-def test_failed_codex_execution_still_consumes_a_review_slot(review, monkeypatch):
+def test_failed_codex_execution_does_not_create_a_local_limit(review, monkeypatch):
     store, _, calls = review
 
     def execute(*_):
@@ -96,11 +94,9 @@ def test_failed_codex_execution_still_consumes_a_review_slot(review, monkeypatch
         raise CityError('Codex interrompu')
 
     monkeypatch.setattr(coding, '_execute', execute)
-    for _ in range(coding.CODEX_DAILY_FALLBACK_CALLS):
+    for _ in range(8):
         with pytest.raises(CityError, match='Codex interrompu'):
             coding.review_repository()
-    with pytest.raises(CityError, match='budget Codex quotidien'):
-        coding.review_repository()
-    assert len(calls) == coding.CODEX_DAILY_FALLBACK_CALLS
+    assert len(calls) == 8
     with store.db() as db:
-        assert db.execute('SELECT fallback_calls FROM city_codex_agent_usage').fetchone()[0] == len(calls)
+        assert db.execute("SELECT name FROM sqlite_master WHERE name='city_codex_agent_usage'").fetchone() is None

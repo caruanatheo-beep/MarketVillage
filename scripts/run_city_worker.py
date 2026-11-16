@@ -5,9 +5,15 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / ".venv" / "Lib" / "site-packages")]
 
-from dotenv import load_dotenv
-
-load_dotenv(ROOT / ".env")
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    # The standalone worker only needs python-dotenv when the optional
+    # dependency is installed; deployments without it can still process work
+    # configured through the process environment.
+    pass
+else:
+    load_dotenv(ROOT / ".env")
 
 from internships_project.marketdesk_city import CityStore, CityWorker
 

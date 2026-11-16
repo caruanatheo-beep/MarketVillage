@@ -64,18 +64,16 @@ def test_notifications_do_not_extend_quota_deadline(cli, monkeypatch, initialize
     {'id': 2, 'result': {'rateLimitsByLimitId': [], 'rateLimits': []}},
     {'id': 2, 'result': {'rateLimitsByLimitId': ['invalid']}},
 ])
-def test_invalid_quota_uses_bounded_fallback_budget(cli, monkeypatch, tmp_path, reply):
+def test_invalid_quota_does_not_impose_a_local_budget(cli, monkeypatch, tmp_path, reply):
     monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path / 'usage.sqlite3')
     cli.replies({'id': 1, 'result': {}}, reply)
     assert coding.require_daily_codex_budget('fixture-codex', {}) is None
     assert cli.stopped and cli.waited
-    # Unavailable quotas must preserve the existing daily cap.
-    for _ in range(coding.CODEX_DAILY_FALLBACK_CALLS - 1):
+    # A temporarily unavailable meter must not reintroduce City's former cap.
+    for _ in range(8):
         cli.replies({'id': 1, 'result': {}}, reply)
         assert coding.require_daily_codex_budget('fixture-codex', {}) is None
-    cli.replies({'id': 1, 'result': {}}, reply)
-    with pytest.raises(CityError, match='budget Codex quotidien'):
-        coding.require_daily_codex_budget('fixture-codex', {})
+    assert not (tmp_path / 'usage.sqlite3').exists()
 
 
 @pytest.mark.parametrize('limits', [

@@ -1,5 +1,85 @@
 # Sources d'offres : état au 26 octobre 2026
 
+## Five Rings — ajout vérifié le 16 novembre 2026
+
+Le connecteur Greenhouse existant collecte deux stages et quatre postes campus
+ou jeunes diplômés de trading quantitatif, recherche quantitative et Trading
+Assistant à New York, Londres et Amsterdam. La fiche Sources inclut le logo
+officiel et la date d'ajout du 16 novembre 2026. Voir les
+[preuves publiques et limites](SOURCES_FIVE_RINGS.md).
+
+## DRW — ajout vérifié le 16 novembre 2026
+
+Le connecteur Greenhouse existant collecte cinq stages de trading quantitatif
+et de recherche à Chicago, New York, Londres et Singapour. Les cinq fiches
+publiques ont été confirmées HTTP 200 ; la fiche Sources et le logo officiel
+sont inclus. Voir [les preuves et validations DRW](SOURCES_DRW.md).
+
+## Maven Securities — ajout vérifié le 15 novembre 2026
+
+Maven, demandé dans la catégorie quant/market making, était absent des registres
+actifs et du [catalogue public](https://caruanatheo-beep.github.io/Internships-Offres/sources.json)
+consulté à 21:50 UTC (69 sources, actualisation 21:48:25 UTC). TP ICAP était déjà
+couvert : aucune seconde fiche de groupe n'est créée. Aucune recommandation
+publique supplémentaire n'était fournie dans la demande ; BlackRock reste en pause.
+
+Le [site carrières officiel](https://www.mavensecurities.com/jobs/) répond HTTP 200
+et embarque explicitement le tableau `mavensecuritiesholdingltd`. Son
+[API publique Greenhouse](https://boards-api.greenhouse.io/v1/boards/mavensecuritiesholdingltd/jobs?content=true)
+répond HTTP 200 avec 36 annonces. Le collecteur Greenhouse existant est réutilisé,
+avec les filtres et le dédoublonnage communs ; aucun filtre géographique n'est ajouté.
+L'API fournit la liste complète en une réponse, sans pagination ; si `meta.total`
+est présent et ne concorde pas, la collecte signale une réponse incomplète.
+Les erreurs HTTP, notamment 403/429, restent des erreurs sans nouvelle tentative
+immédiate ni repli HTML. Aucun repli non testé n'est annoncé.
+
+Les trois fiches publiques ont répondu HTTP 200 et confirmé titre et lieu :
+
+| Offre officielle | Lieu publié | Publication API | Début explicite |
+| --- | --- | --- | --- |
+| [Amsterdam Trader Summer Internship 2027](https://job-boards.greenhouse.io/mavensecuritiesholdingltd/jobs/8048591) | Amsterdam | 2026-09-01 | 21 juin 2027 |
+| [London Trader Summer Internship 2027](https://job-boards.greenhouse.io/mavensecuritiesholdingltd/jobs/7806970) | London | 2026-09-07 | 21 juin 2027 |
+| [Graduate Floor Trader 2027](https://job-boards.greenhouse.io/mavensecuritiesholdingltd/jobs/8352763) | Chicago | 2026-11-11 | 6 septembre 2027 |
+
+Les stages annoncent « Programme dates: 21st June – 20th August 2027 » ; le graduate
+annonce une formation « beginning on 6th September 2027 ». Ces débuts sont distincts
+des années de diplôme, de `updated_at` et de la date de collecte. Aucune échéance
+de candidature n'est publiée dans le champ API : elle reste vide ; le 20 août est
+la fin du programme et ne devient pas une échéance de candidature.
+
+Le [logo officiel](https://www.mavensecurities.com/wp-content/uploads/2020/02/Maven-LogoIcon-150x150.png)
+est lié depuis cette même page carrière et conservé localement sous
+`assets/company_logos/www.mavensecurities.com.png`. La fiche Sources est produite
+par le registre actif, catégorie « Courtage & trading », date d'ajout 2026-11-15.
+Le test réel opt-in `INTERNSHIPS_MAVEN_LIVE=1` collecte les offres sans charger
+ni écrire de cache, puis vérifie chaque fiche publique ; aucune offre n'est publiée
+par ce test. Le journal `.sacha-source-attempts.json` sert uniquement à la reprise.
+
+Validation locale : test réel Maven, 40 tests réussis, trois offres collectées en
+0,389 s, trois fiches HTTP 200, aucun doublon. Vérification ciblée finale :
+308 tests réussis et quatre ignorés (trois audits réseau opt-in et le test
+d'export complet). Les assets `deploy/github-pages/site` sont absents de cet
+espace isolé : l'export complet n'est pas validé ici ; aucun asset fictif n'est
+créé pour remplacer ces pages. La publication reste à la charge du contrôleur.
+
+## Ajouts vérifiés le 9 novembre 2026
+
+- **La Française / Crédit Mutuel AM** : collecte de la liste de stages du périmètre asset management, liée par la [page carrière officielle](https://www.la-francaise.com/fr-lu/carriere.html). Le connecteur conserve Crédit Mutuel AM comme employeur lorsque la fiche l'identifie. Une collecte réelle a remonté le stage Assistant gestion taux à Paris. Les intitulés « gestion taux » et « fund manager » sont désormais reconnus, avec les exclusions immobilières et back-office existantes.
+- **Crédit Agricole Titres** : [tableau Teamtailor public](https://catitres.teamtailor.com/jobs), lié à ses pages de stages. La liste a répondu correctement ; aucune offre correspondant aux critères de marché suivis lors de la vérification. Le connecteur est actif sans fabriquer d'offre de remplacement.
+
+Les deux sources réutilisent la collecte HTML, les filtres, le dédoublonnage et les diagnostics existants. Les autres sources restent disponibles. Les instantanés progressifs sont publiés immédiatement pour la première et la dernière source ; les mises à jour intermédiaires sont regroupées à une seconde d'intervalle pour éviter de dédoublonner et réécrire toute la liste après chaque source. Le cache par source reste persisté une seule fois en fin de collecte.
+
+## Audit des filtres — 9 novembre 2026
+
+Contrôle des intitulés avant filtrage sur cinq catalogues publics : Société Générale (630), BPCE Open Data (1 790), Amundi (29), CACEIS (26), La Française (15), soit 2 490 entrées, tous contrats confondus lorsque le catalogue les mélange. Les descriptions RSS et un échantillon de fiches officielles ont été relus. Le flux CA CIB a expiré lors de deux essais ; sa fiche de financements structurés a néanmoins pu être vérifiée sur le site officiel. Cet échantillon ne constitue pas une garantie de couverture exhaustive.
+
+- Faux négatifs corrigés : gestion actions, gestion diversifiée et rôles Risk Management confirmés par la description du flux. Exemple : [OCIO Solutions — Amundi](https://www.jobs.amundi.com/job/job-stage-ocio-solutions-advisory-gestion-diversifiee-h-f_117043.aspx).
+- Faux positifs corrigés : Middle Officer/MiddleOffice, réconciliation et traitement post-marché, servicing, financements structurés corporate et actifs privés. Le [financement de projets CA CIB](https://jobs.ca-cib.com/job/job-assistant-charge-d-affaires-financements-structures-h-f_115046.aspx?LCID=2057) est distinct de la structuration de produits de marché. Le risque de marché, DCM/ECM et les métiers Sales/Trading restent admis.
+- Contrats : « internal » et « international » ne signifient plus « intern ». Société Générale utilise son contrat structuré et non une exigence de diplôme « Graduate » dans la description. Le contrat source est conservé avec les nouvelles annonces.
+- Les règles s'appliquent aussi aux instantanés en cache, y compris l'affichage différé. Une description validant un métier est conservée ; les candidatures et autres données de compte ne sont pas modifiées.
+- La mention d'échanges avec le Middle Office ne suffit pas à exclure un stage de desk. Un rattachement explicite au Middle Office, Back Office ou à une équipe de gestion immobilière est en revanche excluant.
+- Collectes RSS partielles : une panne d'un flux de contrat ou de certaines fiches est signalée et les offres en cache concernées sont conservées. Les vérifications Amundi ont rencontré des expirations réseau ; la disponibilité réelle ne doit pas être confondue avec un rejet métier.
+
 L'inventaire exhaustif des établissements demandés est dans [`source_coverage.py`](source_coverage.py). Les statuts ont un sens précis :
 
 - **`connected`** : un connecteur interroge effectivement un flux, une API publique ou une liste de liens d'annonces officielles, puis vérifie les annonces. Cela ne garantit pas qu'une annonce pertinente existe actuellement.
@@ -49,7 +129,13 @@ Le [moteur public JobTeaser](https://www.jobteaser.com/fr/job-offers?locale=fr) 
 
 ## Autres pages carrière recensées
 
-Le portail officiel [UBS Careers](https://www.ubs.com/global/en/careers/search-jobs.html) utilise une interface Taleo/TGnewUI. La recherche publique indexe actuellement le poste « 2027 Graduate Talent Program - Global Markets - Paris », mais la page de détail consultable sans session indique que le lien n'est plus valide / que la session a expiré. Aucun connecteur d'extraction n'est activé tant qu'une route publique stable et des liens directs vérifiables ne sont pas confirmés. Le portail reste listé comme référence, sans produire d'offres synthétiques.
+Le portail officiel [UBS Careers](https://www.ubs.com/global/en/careers/search-jobs.html) utilise une interface TGnewUI. Depuis le 10 novembre 2026, son catalogue public Early Careers est collecté avec Playwright sans fenêtre ni connexion : recherche globale, pagination ordinaire « Next » et liens directs fournis par le portail. Les anciennes mentions de session expirée appartenaient notamment aux modèles HTML non rendus ; une fiche réelle a été vérifiée dans le navigateur sans compte.
+
+BBVA et ING sont également actifs depuis le 10 novembre 2026 via leurs catalogues Workday publics, en réutilisant les filtres métier/contrat, le dédoublonnage et le cache par source. Les recherches incluent explicitement « Intern » et « Internship ». Aucun poste permanent, Middle Office ou de finance corporate n'est ajouté pour remplir un catalogue vide. Le crédit corporate et les services transactionnels sont exclus ; les Sales de marché restent admissibles. Zéro offre retenue indique un catalogue accessible sans résultat compatible, pas une source indisponible.
+
+BBVA réutilise une connexion HTTP avec des requêtes séquentielles et découvre le filtre public de contrats « Trainees / Interns ». Ce filtre récupère aussi les stages dont le titre ne mentionne pas le contrat ; les recherches Intern, Internship, Graduate et VIE complètent la couverture. Un échec partiel reste signalé même si aucune offre pertinente n'a encore été trouvée. Vérification du 10 novembre 2026 : 14 stages dans le catalogue officiel, aucun compatible avec les critères de marché ; les anciennes fiches SFT, Trading/Sales et DCM vérifiées ne sont plus disponibles.
+
+UBS conserve le lieu et la description structurés du catalogue. Une date de dernière modification n'est pas utilisée comme date de publication ou de début. Une interruption de pagination conserve les résultats obtenus et signale une collecte partielle ; les offres précédentes sont préservées par le cache commun.
 
 La Banque Postale, Rothschild & Co et Lazard ont depuis été ajoutés comme connecteurs actifs ; leurs URLs ci-dessous restent des références officielles. Le statut de chaque entrée est tenu à jour dans `source_coverage.py`.
 
@@ -133,3 +219,50 @@ Detail descriptions returned by Greenhouse, Lever, Ashby and SmartRecruiters are
 | BNP Paribas public browser collector and Groupama AM | Both discarded eligible offer links after fixed 12/30 item limits. | Removed the silent truncation and process each eligible public link. |
 
 The Société Générale offers [26000MO2](https://careers.societegenerale.com/en/job-offers/internship-equity-derivatives-quantitative-pricing-26000MO2-en) and [26000MH3](https://careers.societegenerale.com/en/job-offers/graduate-trainee-global-markets-sales-26000MH3-en) are both in the official global English index. The latter is a Global Markets Sales graduate trainee role in Sydney, published 2026-10-25 with a 2026-11-23 start date. The connector's mocked regression tests cover both global-market locations. The live collector still needs a runtime refresh to confirm the jobs appear in the user's local dashboard; no live result is claimed here.
+
+
+## La Banque Postale and Amundi employer catalogues (9 November 2026)
+
+La Banque Postale now uses its public Stage catalogue and follows the numbered `.p-N.html` pagination. Amundi also has a direct connector for the Credit Agricole group catalogue, filtered by Amundi and checked against each posting's structured hiring organization. Both reuse the existing location, start-date and mission-description parsers. JobTeaser duplicates yield to matching employer postings; different known start cohorts remain separate.
+
+Pagination excludes fragment-only navigation links and is bounded to 25 pages. Incomplete listings or failed details report a partial collection and preserve the appropriate cached offers. Missing start dates remain unknown rather than being inferred from publication dates. No authenticated JobTeaser access is required.
+
+## European Graduate coverage audit (11 November 2026)
+
+The published snapshot contained 26 Graduate-labelled offers; five MUFG Summer
+Analyst programmes were internships, and one Goldman Sachs Controls Governance
+and Testing posting was outside the requested desk scope. Summer Analyst/Associate
+programmes now remain internships; explicit Graduate/New Analyst programmes can
+use permanent contracts. Plural Graduates and dated Full-Time Analyst/Associate
+programme titles are recognised without admitting ordinary permanent or senior jobs.
+
+Optiver's former Greenhouse board was empty while its current official website
+advertised Graduate Quantitative Researcher and Graduate Equity Analyst in
+Amsterdam. Its public `/en/api/v1/jobs?from=16&size=16` catalogue replaces that
+board, with bounded pagination, one retry on transient connection failures, and
+partial-result preservation. Expressions of interest and talent pools are excluded.
+Da Vinci's public Greenhouse board adds Graduate Quant, Graduate Trader and
+Graduate Trading Risk Analyst in Amsterdam. The exact European Greenhouse host
+`job-boards.eu.greenhouse.io` is now accepted; lookalike domains remain rejected.
+
+Live comparisons covered Barclays, MUFG, ING, UBS, Deutsche Bank, Flow Traders,
+Optiver and IMC, with Goldman Sachs in the published snapshot. Barclays' active
+Markets graduate catalogue advertised Frankfurt and three Asian locations; older
+Paris, London and Milan search results were no longer in that catalogue. ING's
+Amsterdam programme page linked to a 404 vacancy, Citi's sampled London programme
+returned 404, and the sampled Deutsche Bank FIC London requisition said registration
+was closed. These were not treated as confirmed missing live vacancies.
+
+This sample is not exhaustive. Deutsche Bank uses a separate Yello early-career
+board beyond its collected Workday site; BlackRock, Citi, HSBC and Morgan Stanley
+are not dedicated sources. Generic multi-function programme pages require checking
+the actual open role and location before importing them as markets vacancies.
+
+### BNP Graduate contract discovery follow-up
+
+The reported JUNIOR SALES (Graduate Program, Global Markets) in Milan is filed
+under Fixed Term Contract/CDD, not Internship. The dedicated BNP Graduate source
+now traverses both `graduate-programme-cdi` and `cdd`, reusing the isolated browser
+and pagination. Only Graduate-classified market roles are retained; failures of
+one catalogue preserve verified results and cached offers. BNP English detail
+labels for job type and location are parsed when structured metadata is missing.

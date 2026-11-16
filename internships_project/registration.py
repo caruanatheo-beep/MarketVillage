@@ -52,10 +52,10 @@ def _page(token: str, requires_code: bool) -> str:
 <style>
 * {{ box-sizing:border-box }}
 body {{ margin:0; min-height:100dvh; display:grid; place-items:center; padding:20px;
-  background:radial-gradient(circle at 50% 8%,#eee8ff 0,#f7f7fb 42%,#f8f9fc 100%);
+  background:radial-gradient(circle at 50% 8%,#e5f2fb 0,#f7f9fb 42%,#f8fafc 100%);
   color:#17213a; font-family:Arial,Helvetica,sans-serif }}
-.card {{ width:min(100%,420px); padding:28px 32px 24px; border:1px solid #e8e3f1;
-  border-radius:16px; background:#fff; box-shadow:0 18px 46px rgba(49,36,90,.09) }}
+.card {{ width:min(100%,420px); padding:28px 32px 24px; border:1px solid #dce6ef;
+  border-radius:16px; background:#fff; box-shadow:0 18px 46px rgba(22,58,88,.10) }}
 .brand {{ display:flex; align-items:center; gap:12px; margin-bottom:20px }}
 .emblem {{ width:84px; height:88px; flex:none; overflow:hidden; clip-path:circle(37px at 42px 44px) }}
 .emblem img {{ display:block; width:1078px; height:135px; max-width:none; transform:translate(-497px,-7px) }}
@@ -69,20 +69,20 @@ label {{ margin-top:8px; color:#28334d; font-size:14px; font-weight:600 }}
 input {{ width:100%; height:48px; padding:0 14px; border:1px solid #d8dce7; border-radius:10px;
   background:#fff; color:#17213a; font:400 16px Arial,Helvetica,sans-serif }}
 input::placeholder {{ color:#8290a5 }}
-input:focus-visible,button:focus-visible,a:focus-visible {{ outline:3px solid rgba(112,81,207,.22);
-  outline-offset:1px; border-color:#7051cf }}
+input:focus-visible,button:focus-visible,a:focus-visible {{ outline:3px solid rgba(20,120,184,.22);
+  outline-offset:1px; border-color:#1478b8 }}
 .password-wrap {{ position:relative }}
 .password-wrap input {{ padding-right:88px }}
 .toggle {{ position:absolute; right:7px; top:10px; padding:7px 8px; border:0;
-  background:transparent; color:#6546bc; font:600 12px Arial,Helvetica,sans-serif; cursor:pointer }}
+  background:transparent; color:#0d5e96; font:600 12px Arial,Helvetica,sans-serif; cursor:pointer }}
 .hint {{ margin:2px 0 0; color:#68748a; font-size:12px; line-height:1.4 }}
 .submit {{ width:100%; height:48px; margin-top:20px; border:0; border-radius:10px;
-  background:#7051cf; color:white; font:700 15px Arial,Helvetica,sans-serif; cursor:pointer }}
-.submit:hover {{ background:#5c3db8 }}
+  background:#1478b8; color:white; font:700 15px Arial,Helvetica,sans-serif; cursor:pointer }}
+.submit:hover {{ background:#0d5e96 }}
 .submit:disabled {{ opacity:.72; cursor:wait }}
 .message {{ min-height:18px; margin:9px 0 0; color:#a12635; font-size:13px; line-height:1.35 }}
 .message.success {{ color:#267044 }}
-.back {{ display:inline-block; margin-top:4px; color:#6546bc; font-size:14px; text-decoration:none }}
+.back {{ display:inline-block; margin-top:4px; color:#0d5e96; font-size:14px; text-decoration:none }}
 .back:hover {{ text-decoration:underline }}
 footer {{ margin-top:19px; padding-top:14px; border-top:1px solid #eceaf2; color:#758094;
   font-size:11px; line-height:1.5; text-align:center }}

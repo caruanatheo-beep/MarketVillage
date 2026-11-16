@@ -15,6 +15,62 @@ from internships_project.city_routes import add_city_routes
 from internships_project.marketdesk_city import CityStore, CityWorker
 
 
+@pytest.mark.parametrize("invalid_parameters", ["not-json", "[]", "null"])
+def test_invalid_queued_payload_does_not_block_valid_mission(tmp_path, monkeypatch, invalid_parameters):
+    monkeypatch.setattr(state_store, "USER_DB_PATH", tmp_path / "private.db")
+    store = CityStore(tmp_path / "city.db")
+    invalid = store.create_task("alice", "market_analyst", "Invalid mission",
+                                {"operation": "collect_markets"})
+    valid = store.create_task("alice", "developer", "Prepare questions",
+                              {"operation": "daily_questions"})
+    with store.db() as db:
+        db.execute("UPDATE city_tasks SET parameters_json=?,priority=10 WHERE id=?",
+                   (invalid_parameters, invalid["id"]))
+
+    claimed = store.claim_next()
+    assert claimed["id"] == valid["id"]
+    assert store.task_detail("alice", invalid["id"])["status"] == "cancelled"
+
+
+def test_connection_interruption_retries_only_once(tmp_path, monkeypatch):
+    from internships_project import city_coding
+    from internships_project.marketdesk_city import CityError
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'private.db')
+    store = CityStore(tmp_path/'city.db')
+    task = store.create_task('alice', 'job_hunter', 'Corriger City', {'operation': 'develop'})
+    def interrupted(*args, **kwargs):
+        raise CityError('Connexion Codex interrompue ; travail conservé.')
+    monkeypatch.setattr(city_coding, 'implement_change', interrupted)
+    worker = CityWorker(store)
+    assert worker.run_once()
+    assert store.task_detail('alice', task['id'])['status'] == 'queued'
+    with store.db() as db:
+        assert db.execute('SELECT retry_count FROM city_tasks WHERE id=?', (task['id'],)).fetchone()[0] == 1
+        db.execute('UPDATE city_tasks SET scheduled_at=NULL WHERE id=?', (task['id'],))
+    assert worker.run_once()
+    assert store.task_detail('alice', task['id'])['status'] == 'failed'
+
+
+def test_interrupted_code_resumes_once_with_same_worktree(tmp_path, monkeypatch):
+    from internships_project import city_specialists
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'private.db')
+    monkeypatch.setattr(city_specialists, 'repo_root', lambda: tmp_path)
+    store = CityStore(tmp_path/'city.db')
+    task = store.create_task('alice', 'quality_engineer', 'Vérifier City', {'operation': 'develop'})
+    assert store.claim_next()['id'] == task['id']
+    directory = tmp_path/'.city-worktrees'/task['id']
+    directory.mkdir(parents=True)
+    (directory/'partial.py').write_text('value = 1\n')
+    for expected in ('queued', 'failed'):
+        with store.db() as db:
+            db.execute("UPDATE city_tasks SET heartbeat_at='2020-01-01T00:00:00+00:00' WHERE id=?", (task['id'],))
+        assert store.recover_stale() == 1
+        assert store.task_detail('alice', task['id'])['status'] == expected
+        assert (directory/'partial.py').read_text() == 'value = 1\n'
+        if expected == 'queued':
+            assert store.claim_next()['id'] == task['id']
+
+
 @pytest.mark.parametrize("operation,completed_work", [
     ("develop", True), ("develop", False), ("daily_questions", False),
 ])

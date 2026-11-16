@@ -8,4 +8,5 @@ This repository contains three separate applications: Markets (`app.py`), Intern
 - Reuse existing components, services, and tests. Make the smallest complete change, including necessary callers and validation; avoid duplicate implementations and speculative scaffolding.
 - Keep `.env`, user data, CVs, exports, and authentication material out of search output, Graphify, and commits. Graphify exclusions live in `.graphifyignore`.
 - Run the focused test or build for the touched area. Expand testing only to resolve a concrete risk.
+- Publish substantial validated changes to this repository's GitHub origin. Check the staged files for private data, commit the complete implementation and push the current branch without force. Report the commit link and distinguish source publication from deployment; publish the separate Internships Pages repository when that live site is affected.
 - Preserve existing auth, APIs, and user data. Do not enable third-party hooks, model gateways, or new paid APIs without explicit approval.

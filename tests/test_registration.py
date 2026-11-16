@@ -88,7 +88,9 @@ def test_admin_can_delete_registered_member_and_private_state(tmp_path, monkeypa
 
 def test_signup_uses_native_gradio_auth_and_protects_routes(tmp_path, monkeypatch):
     import gradio as gr
+    import app_internships
     from app_internships import create_shared_server
+    monkeypatch.setattr(app_internships, "OFFERS_ONLY", False)
 
     monkeypatch.setattr(state_store, "USER_DB_PATH", tmp_path / "accounts.sqlite3")
     monkeypatch.delenv("INTERNSHIPS_SIGNUP_CODE", raising=False)
@@ -116,7 +118,9 @@ def test_signup_uses_native_gradio_auth_and_protects_routes(tmp_path, monkeypatc
 
 def test_signup_invitation_code_when_configured(tmp_path, monkeypatch):
     import gradio as gr
+    import app_internships
     from app_internships import create_shared_server
+    monkeypatch.setattr(app_internships, "OFFERS_ONLY", False)
 
     monkeypatch.setattr(state_store, "USER_DB_PATH", tmp_path / "accounts.sqlite3")
     monkeypatch.setenv("INTERNSHIPS_SIGNUP_CODE", "friends-only-code")

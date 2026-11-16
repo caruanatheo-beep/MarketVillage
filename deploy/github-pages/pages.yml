@@ -1,0 +1,151 @@
+name: Collect and publish public offers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      email_test:
+        description: Envoyer un mail de test à mon adresse (optionnel)
+        type: boolean
+        default: false
+  schedule:
+    # Retry slots compensate for missed/delayed schedule delivery. The window
+    # job skips collection when the published snapshot is under 55 minutes old.
+    - cron: '7,27,47 0-3,6-23 * * *'
+      timezone: Etc/UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-offers-pages
+  cancel-in-progress: false
+
+jobs:
+  window:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      active: ${{ steps.window.outputs.active }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Respect Paris opening and New York closing hours
+        id: window
+        env:
+          PUBLIC_OFFERS_URL: https://caruanatheo-beep.github.io/Internships-Offres/offers.json
+        run: python3 scripts/internships_refresh_window.py
+
+  build:
+    needs: window
+    if: needs.window.outputs.active == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      INTERNSHIPS_DATA_DIR: ${{ github.workspace }}/.collection-cache
+      PYTHONUNBUFFERED: '1'
+      INTERNSHIPS_SOURCE_CACHE_SECONDS: '3300'
+      SOURCE_REQUEST_ENDPOINT: ${{ vars.SOURCE_REQUEST_ENDPOINT }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r deploy/github-pages/requirements.txt pytest
+      - name: Check public export boundaries
+        run: python -m pytest -q tests/test_pages_export.py tests/test_pages_email.py tests/test_workday_pagination.py tests/test_internships_publication_sort.py tests/test_internships_source_browser_repair.py tests/test_internships_graduate_coverage.py tests/test_internships_refresh_window.py tests/test_internships_deduplication.py tests/test_internships_location_display.py tests/test_internships_candriam_bny.py tests/test_internships_commerz_standard.py tests/test_internships_reliability.py tests/test_internships_offer_metadata.py
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .collection-cache
+          key: public-career-feeds-v1-${{ github.run_id }}
+          restore-keys: public-career-feeds-v1-
+      - name: Install background browser
+        run: python -m playwright install --with-deps chromium
+      - name: Check filter menus in Chromium
+        run: python -m pytest -q tests/test_pages_filters.py tests/test_pages_sources.py tests/test_source_catalog.py
+      - name: Collect public employer offers and build static site
+        if: github.event_name != 'workflow_dispatch'
+        run: xvfb-run --auto-servernum python scripts/build_internships_pages.py --collect --output _site
+      - name: Manually refresh all public sources and build static site
+        if: github.event_name == 'workflow_dispatch'
+        run: xvfb-run --auto-servernum python scripts/build_internships_pages.py --collect --force --output _site
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .collection-cache
+          key: public-career-feeds-v1-${{ github.run_id }}
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+          retention-days: 1
+      - name: Transfer only the public snapshot to notifications
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: public-offer-snapshot
+          path: _site/offers.json
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish the verified static artifact
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  notify:
+    if: vars.EMAIL_ALERTS_ENABLED == 'true'
+    needs: [build, deploy]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: write
+      actions: read
+    environment:
+      name: email-alerts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.34.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: public-offer-snapshot
+          path: public-snapshot
+      - name: Send one digest only when new offers were detected
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          INTERNSHIPS_EMAIL_ALERTS_ENABLED: '1'
+          INTERNSHIPS_ALERT_EMAIL_TO: ${{ secrets.INTERNSHIPS_ALERT_EMAIL_TO }}
+          INTERNSHIPS_ALERT_EMAIL_FROM: ${{ secrets.INTERNSHIPS_ALERT_EMAIL_FROM }}
+          INTERNSHIPS_SMTP_HOST: ${{ secrets.INTERNSHIPS_SMTP_HOST }}
+          INTERNSHIPS_SMTP_PORT: ${{ secrets.INTERNSHIPS_SMTP_PORT }}
+          INTERNSHIPS_SMTP_USERNAME: ${{ secrets.INTERNSHIPS_SMTP_USERNAME }}
+          INTERNSHIPS_SMTP_PASSWORD: ${{ secrets.INTERNSHIPS_SMTP_PASSWORD }}
+          INTERNSHIPS_SMTP_SECURITY: ${{ secrets.INTERNSHIPS_SMTP_SECURITY }}
+        run: python scripts/notify_internships_pages.py
+      - name: Test the configured SMTP delivery
+        if: github.event_name == 'workflow_dispatch' && inputs.email_test
+        env:
+          INTERNSHIPS_ALERT_EMAIL_TO: ${{ secrets.INTERNSHIPS_ALERT_EMAIL_TO }}
+          INTERNSHIPS_ALERT_EMAIL_FROM: ${{ secrets.INTERNSHIPS_ALERT_EMAIL_FROM }}
+          INTERNSHIPS_SMTP_HOST: ${{ secrets.INTERNSHIPS_SMTP_HOST }}
+          INTERNSHIPS_SMTP_PORT: ${{ secrets.INTERNSHIPS_SMTP_PORT }}
+          INTERNSHIPS_SMTP_USERNAME: ${{ secrets.INTERNSHIPS_SMTP_USERNAME }}
+          INTERNSHIPS_SMTP_PASSWORD: ${{ secrets.INTERNSHIPS_SMTP_PASSWORD }}
+          INTERNSHIPS_SMTP_SECURITY: ${{ secrets.INTERNSHIPS_SMTP_SECURITY }}
+        run: python scripts/notify_internships_pages.py --test

@@ -21,15 +21,18 @@ def feed(contract):
 
 def test_rss_latency_and_complete_results(monkeypatch):
     calls = []
-    simultaneous = threading.Barrier(2, timeout=3)
+    simultaneous_feeds = threading.Barrier(2, timeout=3)
+    simultaneous_details = threading.Barrier(2, timeout=3)
 
     def get(url, params, **kwargs):
-        simultaneous.wait()
+        simultaneous_feeds.wait()
         time.sleep(0.15)
         calls.append(params["Rss_Contract"])
         return feed(params["Rss_Contract"])
 
     def detail(url, company, title):
+        simultaneous_details.wait()
+        time.sleep(0.15)
         return internships._opportunity(title, company, "Paris", "Stage", url, "")
 
     monkeypatch.setattr(internships.requests, "get", get)
@@ -37,9 +40,12 @@ def test_rss_latency_and_complete_results(monkeypatch):
     started = time.perf_counter()
     jobs = internships._amundi_jobs()
     elapsed = time.perf_counter() - started
-    print(f"RSS: {elapsed:.3f}s, 150ms/feed, {len(jobs)} offers")
+    print(f"RSS + details: {elapsed:.3f}s, 150ms/request, {len(jobs)} offers")
     assert sorted(calls) == [579, 1478]
     assert [job.url for job in jobs] == [f"https://{HOST}/offer/{i}" for i in (579, 1478)]
+    # Two feed requests and two details take ~600ms sequentially, but only
+    # ~300ms total when both stages run concurrently. Allow scheduler variance.
+    assert elapsed < 0.5
 
 
 def test_all_detail_failures_are_reported(monkeypatch):
@@ -62,7 +68,10 @@ def test_one_feed_failure_preserves_other_contract(monkeypatch, malformed):
     monkeypatch.setattr(internships.requests, "get", get)
     monkeypatch.setattr(internships, "_career_detail", lambda url, company, title:
                         internships._opportunity(title, company, "Paris", "Stage", url, ""))
-    assert [job.url for job in internships._amundi_jobs()] == [f"https://{HOST}/offer/1478"]
+    with pytest.raises(internships._PartialSourceError) as partial:
+        internships._amundi_jobs()
+    assert [job.url for job in partial.value.jobs] == [f"https://{HOST}/offer/1478"]
+    assert partial.value.preserve_cached
 
 
 def test_all_feed_failures_are_reported(monkeypatch):

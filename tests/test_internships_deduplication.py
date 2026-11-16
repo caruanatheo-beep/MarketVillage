@@ -13,6 +13,26 @@ from internships_project.internships import (
 
 
 class DeduplicationTests(unittest.TestCase):
+    def test_translated_city_names_merge_the_same_posting(self):
+        for english, french in [('Singapore, Singapore', 'Singapour, Singapour'),
+                                ('London', 'Londres'), ('Frankfurt', 'Francfort'),
+                                ('Geneva', 'Genève')]:
+            direct = replace(self.offer, location=english)
+            translated = replace(direct, location=french, url='https://example.invalid/translated')
+            for ordered in permutations([direct, translated]):
+                with self.subTest(location=french, order=[job.url for job in ordered]):
+                    self.assertEqual(len(_deduplicate_opportunities(list(ordered))), 1)
+
+    def test_translated_city_still_preserves_contract_cohort_and_country(self):
+        first = replace(self.offer, location='Singapore, Singapore', start_period='April 2027')
+        other_contract = replace(first, location='Singapour, Singapour', kind='VIE',
+                                 url='https://example.invalid/vie')
+        other_cohort = replace(first, location='Singapour, Singapour', start_period='September 2027',
+                               url='https://example.invalid/september')
+        other_country = replace(first, location='Singapore, United States', url='https://example.invalid/us')
+        for ordered in permutations([first, other_contract, other_cohort, other_country]):
+            self.assertEqual(len(_deduplicate_opportunities(list(ordered))), 4)
+
     def setUp(self):
         self.offer = Opportunity(
             "Assistant Trading", "Synthetic Bank", "Paris", "Stage",
@@ -195,6 +215,29 @@ class DeduplicationTests(unittest.TestCase):
             with self.subTest(order=[job.url for job in ordered]):
                 self.assertCountEqual(_deduplicate_opportunities(ordered),
                                       [self.offer, vie])
+
+    def test_jobteaser_matching_skips_unrelated_employers_and_contracts(self):
+        teaser = replace(self.offer, source="JobTeaser ?? sitemap",
+                         url="https://example.invalid/teaser")
+        unrelated = [
+            replace(self.offer, company=f"Synthetic Bank {index}",
+                    url=f"https://example.invalid/{index}")
+            for index in range(100)
+        ]
+        unrelated.append(replace(self.offer, kind="VIE",
+                                 url="https://example.invalid/vie"))
+        original = internships.SequenceMatcher
+        compared = []
+
+        def counted_matcher(*args, **kwargs):
+            compared.append(args[:2])
+            return original(*args, **kwargs)
+
+        with patch.object(internships, "SequenceMatcher", side_effect=counted_matcher):
+            result = internships._without_jobteaser_duplicates([teaser, *unrelated])
+
+        self.assertEqual(len(result), 102)
+        self.assertEqual(len(compared), 0)
 
     def test_direct_source_in_another_city_keeps_jobteaser_offer(self):
         direct = replace(self.offer, location="New York, USA")

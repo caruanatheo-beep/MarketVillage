@@ -134,7 +134,7 @@ def test_clara_can_queue_behind_two_programmers(tmp_path, monkeypatch):
     assert clara['status'] == 'queued'
 
 
-def test_clara_uses_one_codex_search_when_public_engines_fail(tmp_path, monkeypatch):
+def test_clara_uses_bounded_codex_topup_when_public_engines_fail(tmp_path, monkeypatch):
     import json
     from pathlib import Path
     from internships_project import city_coding
@@ -165,7 +165,8 @@ def test_clara_uses_one_codex_search_when_public_engines_fail(tmp_path, monkeypa
 
     report = network.discover_service_contacts('alice')
 
-    assert report['count'] == 1 and len(calls) == 1
+    assert report['count'] == 1 and len(calls) == 2
+    assert 'passage 2' in calls[1][1] and 'Luc Bernard' in calls[1][1]
     assert '--search' in calls[0][0] and calls[0][3] == 180
     assert 'Eva Laurent' in calls[0][1]
     assert 'OPENAI_API_KEY' not in calls[0][2]
@@ -201,13 +202,133 @@ def test_clara_codex_fallback_obeys_subscription_stop(tmp_path, monkeypatch):
     monkeypatch.setattr(city_coding, 'codex_binary', lambda: 'codex')
     monkeypatch.setattr(city_coding, 'codex_environment', lambda: {})
     monkeypatch.setattr(city_coding, 'require_chatgpt', lambda *_args: None)
-    usage = [60.0]
-    monkeypatch.setattr(city_coding, 'codex_usage_percent', lambda *_args: usage[0])
-    before = city_coding.require_daily_codex_budget('codex', {})
-    usage[0] += city_coding.CODEX_DAILY_USAGE_PERCENT
-    city_coding.record_daily_codex_usage('codex', {}, before)
+    monkeypatch.setattr(city_coding, 'codex_usage_percent', lambda *_args: 100.0)
     monkeypatch.setattr(city_coding, '_execute', lambda *_args, **_kwargs:
                         pytest.fail('Codex must not run at the quota stop'))
 
-    with pytest.raises(CityError, match='budget Codex quotidien'):
+    with pytest.raises(CityError, match='quota Codex hebdomadaire épuisé'):
         network.discover_service_contacts('alice')
+
+
+def test_elodie_parses_public_bank_biographies_with_verified_paris_location():
+    results = [{'url': 'https://group.bnpparibas/en/news/prime-services-team',
+                'title': 'Alice Martin - Prime Brokerage Sales - BNP Paribas',
+                'snippet': 'Alice Martin, Prime Brokerage Sales at BNP Paribas in Paris.'},
+               {'url': 'https://group.bnpparibas/en/news/prime-services-team',
+                'title': 'London profile',
+                'snippet': 'Bob Martin, Repo Sales at BNP Paribas in London.'}]
+    found = network._prime_contacts_from_results(results, 'BNP Paris Prime Brokerage', 'Bing RSS')
+    assert len(found) == 1
+    assert found[0]['name'] == 'Alice Martin'
+    assert found[0]['company'] == 'BNP Paribas'
+    assert found[0]['sales_priority'] is True
+    assert found[0]['origin'] == 'prime_services_public_search'
+
+
+def test_elodie_prime_articles_are_included_in_the_public_search_parser():
+    results = [{'url': 'https://group.bnpparibas/en/news/prime-services-team',
+                'title': 'Alice Martin — Prime Brokerage Sales — BNP Paribas',
+                'snippet': 'Alice Martin, Prime Brokerage Sales at BNP Paribas in Paris.'}]
+    found = network._contacts_from_results(results, 'BNP Paris Prime Brokerage', 'Bing RSS',
+                                          prime_services=True)
+    assert len(found) == 1
+    assert found[0]['name'] == 'Alice Martin'
+    assert found[0]['origin'] == 'prime_services_public_search'
+
+
+def test_elodie_saves_new_profiles_and_excludes_shared_contact_duplicates(tmp_path, monkeypatch):
+    monkeypatch.setattr(network, '_search_service_contacts_with_codex', lambda *args, **kwargs: [])
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
+    store = CityStore(state_store.USER_DB_PATH)
+    store.ensure_agents('alice')
+    network.save_leads('alice', [{'name': 'Camille Dupont', 'role': 'Prime Services Sales',
+                                 'company': 'CACEIS', 'location': 'Paris, France',
+                                 'source_url': 'https://example.org/camille',
+                                 'source_excerpt': 'Camille Dupont Prime Services Sales CACEIS Paris',
+                                 'origin': 'lina_public_search'}])
+    candidates = [
+        {'name': 'Camille Dupont', 'role': 'Prime Services Sales', 'company': 'CACEIS',
+         'location': 'Paris, France', 'linkedin_url': 'https://www.linkedin.com/in/camille-dupont',
+         'source_url': 'https://www.linkedin.com/in/camille-dupont', 'source_title': 'Camille Dupont - Prime Services Sales - CACEIS',
+         'source_excerpt': 'Camille Dupont Prime Services Sales at CACEIS Paris'},
+        {'name': 'Luc Bernard', 'role': 'Securities Lending Sales', 'company': 'CACEIS',
+         'location': 'Paris, France', 'linkedin_url': 'https://www.linkedin.com/in/luc-bernard',
+         'source_url': 'https://www.linkedin.com/in/luc-bernard', 'source_title': 'Luc Bernard - Securities Lending Sales - CACEIS',
+         'source_excerpt': 'Luc Bernard Securities Lending Sales at CACEIS Paris'},
+        {'name': 'Eva Martin', 'role': 'Clearing Relationship Manager', 'company': 'BNP Paribas',
+         'location': 'Paris, France', 'linkedin_url': 'https://www.linkedin.com/in/eva-martin',
+         'source_url': 'https://www.linkedin.com/in/eva-martin', 'source_title': 'Eva Martin - Clearing Relationship Manager - BNP Paribas',
+         'source_excerpt': 'Eva Martin Clearing Relationship Manager at BNP Paribas Paris'},
+        {'name': 'Out of Scope', 'role': 'Repo Sales', 'company': 'CACEIS',
+         'location': 'London, UK', 'linkedin_url': 'https://www.linkedin.com/in/out-of-scope',
+         'source_url': 'https://www.linkedin.com/in/out-of-scope', 'source_title': 'Out of Scope - Repo Sales - CACEIS',
+         'source_excerpt': 'Out of Scope Repo Sales at CACEIS London'},
+    ]
+    calls = []
+    def search(query, *, service_roles=False, prime_services=False):
+        calls.append(prime_services)
+        assert prime_services and not service_roles
+        return candidates
+    monkeypatch.setattr(network, 'search_public', search)
+    report = network.discover_prime_services_contacts('alice')
+    assert report['count'] == 2
+    assert report['duplicates'] >= 1
+    assert len(network.list_contacts('alice')) == 3
+    assert {c['name'] for c in network.list_contacts('alice')} == {'Camille Dupont', 'Luc Bernard', 'Eva Martin'}
+    assert all(c['origin'] == 'prime_services_public_search' for c in network.list_contacts('alice') if c['name'] != 'Camille Dupont')
+    assert calls and all(calls)
+
+
+def test_elodie_manual_and_scheduled_searches_execute_through_the_worker(tmp_path, monkeypatch):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
+    store = CityStore(state_store.USER_DB_PATH)
+    store.ensure_agents('alice')
+    calls = []
+    def discover(username):
+        calls.append(username)
+        return {'count': 0, 'contacts': [], 'text': 'Recherche terminee.'}
+    monkeypatch.setattr(network, 'discover_prime_services_contacts', discover)
+    store.enqueue_specialist_schedules(datetime(2026, 11, 9, 9, tzinfo=ZoneInfo('Europe/Paris')))
+    with store.db() as db:
+        db.execute("UPDATE city_tasks SET status='cancelled' WHERE agent_id!='prime_services_scout'")
+    assert CityWorker(store).run_once()
+    assert store.prime_services_scout_status('alice')['status'] == 'completed'
+    task = store.create_task('alice', 'prime_services_scout', 'Recherche Prime Services',
+                             {'operation': 'discover_prime_services_contacts'}, auto_run=True)
+    assert task['status'] == 'queued'
+    assert CityWorker(store).run_once()
+    assert calls == ['alice', 'alice']
+    assert store.prime_services_scout_status('bob')['status'] == 'idle'
+
+
+def test_elodie_prioritizes_ten_sales_and_rejects_unrelated_or_past_roles(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
+    CityStore(state_store.USER_DB_PATH)
+    def profile(name, role, bank='CACEIS'):
+        return {'name': name, 'role': role, 'company': bank, 'location': 'Paris',
+                'source_url': 'https://example.org/' + name.replace(' ', '-'),
+                'source_excerpt': f'{name}, {role} at {bank} in Paris. Former employer: CACEIS.'}
+    sales = [profile('Alice '+surname, 'Securities Lending Sales') for surname in
+             ['Martin','Dupont','Moreau','Bernard','Petit','Roux','Laurent','Michel','Simon','Robert','Garcia']]
+    leads = [profile('Desk Leader', 'Head of Prime Services'),
+             profile('Outside Bank', 'Repo Sales', 'Barclays'),
+             profile('Past Role', 'Former Prime Brokerage Sales'),
+             profile('Other Role', 'Prime Services Software Engineer'), *sales]
+    monkeypatch.setattr(network, 'search_public', lambda *a, **kw: leads)
+    report = network.discover_prime_services_contacts('alice')
+    assert report['count'] == 10
+    assert all(c['name'].startswith('Alice ') and c['sales_priority'] for c in report['contacts'])
+    assert network.contact_focus({**leads[0], 'origin': 'prime_services_public_search'})['sales_priority'] is False
+
+
+def test_elodie_shared_save_deduplicates_bank_aliases_in_both_directions(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path/'accounts.sqlite3')
+    source = {'name': 'Alice Martin', 'role': 'Prime Brokerage Sales', 'company': 'BNP Paribas CIB',
+              'source_url': 'https://example.org/alice', 'origin': 'lina_public_search'}
+    assert len(network.save_leads('alice', [source])[0]) == 1
+    prime = {**source, 'company': 'BNP Paribas', 'origin': 'prime_services_public_search'}
+    assert network.save_leads('alice', [prime]) == ([], 1)
+    assert len(network.save_leads('bob', [prime])[0]) == 1
+    assert network.save_leads('bob', [source]) == ([], 1)

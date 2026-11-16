@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from internships_project import internships, state_store
+from internships_project import city_offers, internships, state_store
 from internships_project.marketdesk_city import CityStore, CityWorker, CityError
 
 
@@ -30,7 +30,10 @@ def test_manager_hugo_refresh_and_same_day_repeat(tmp_path, monkeypatch):
     def refresh(**kwargs):
         calls.append(kwargs)
         return jobs, ['Source unavailable'], now
-    monkeypatch.setattr(internships, 'refresh_opportunities', refresh)
+    def public_refresh(**kwargs):
+        calls.append(kwargs)
+        return city_offers.Catalogue(jobs, ['Source unavailable'], now, 'public', new_urls=frozenset(j.url for j in jobs if j.url not in {o.url for o in current}))
+    monkeypatch.setattr(city_offers, 'load_catalogue', public_refresh)
     manager = build_agent('desk_manager', TestModel())
     ctx = SimpleNamespace(deps=ChatDeps('alice',store))
     tool = manager._function_toolset.tools['collect_dashboard_data'].function
@@ -41,7 +44,7 @@ def test_manager_hugo_refresh_and_same_day_repeat(tmp_path, monkeypatch):
     result=store.snapshot('alice')['tasks'][0]['result']
     assert {job['title'] for job in result['offers']}=={'cached-today','new-today'}
     assert result['today_count']==2 and result['source_errors']==1
-    assert calls==[{'force':True,'notify_email':False,'fail_if_busy':True}]
+    assert calls==[{'refresh':True}]
     assert store.snapshot('bob')['tasks']==[]
     store.create_task('alice','internship_scout','Stages du jour')
     assert CityWorker(store).run_once()
@@ -81,7 +84,7 @@ def test_daily_hugo_reports_detection_not_publication_and_posts_once(tmp_path, m
           internships.Opportunity('Known offer','Bank','Paris','Stage','https://example.com/known',old,90)]
     monkeypatch.setattr(internships,'opportunities_loading',lambda:False)
     monkeypatch.setattr(internships,'load_opportunities',lambda **kwargs:([jobs[1]],[],now-timedelta(seconds=1)))
-    monkeypatch.setattr(internships,'refresh_opportunities',lambda **kwargs:(jobs,[],now))
+    monkeypatch.setattr(city_offers,'load_catalogue',lambda **kwargs:city_offers.Catalogue(jobs,[],now,'public',new_urls=frozenset([jobs[0].url])))
     store=CityStore(state_store.USER_DB_PATH)
     store.ensure_agents('alice')
     store.enqueue_specialist_schedules()
@@ -96,7 +99,10 @@ def test_daily_hugo_reports_detection_not_publication_and_posts_once(tmp_path, m
     # The daily manager digest waits for Mira, Hugo and Jules before posting once.
     assert store.chat_history('alice','desk_manager')==[]
     assert store.chat_history('bob','desk_manager')==[]
-    assert store.enqueue_specialist_schedules()==0
+    # Unrelated slots (e.g. Élodie at 17 h) may become eligible after cancellation.
+    # Hugo's completed daily mission must never be duplicated.
+    store.enqueue_specialist_schedules()
+    assert len([t for t in store.snapshot('alice')['tasks'] if t['agent_id']=='internship_scout']) == 1
 
 
 def test_daily_hugo_failure_is_reported_once(tmp_path, monkeypatch):

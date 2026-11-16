@@ -165,8 +165,40 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
             return denied()
         from .network_discovery import list_contacts
         return JSONResponse({"contacts": list_contacts(username), "schedule": store.network_schedule(username),
-                             "clara": store.securities_scout_status(username)},
+                             "clara": store.securities_scout_status(username),
+                             "prime_services": store.prime_services_scout_status(username),
+                             "outreach": store.outreach_records(username)},
                             headers={"Cache-Control": "private, no-store"})
+
+    @server.post('/city/api/outreach')
+    async def save_city_outreach(request: Request):
+        username = owner(request)
+        if not username:
+            return denied()
+        if not safe_post(request):
+            return JSONResponse({'detail': 'Requête refusée.'}, status_code=403)
+        try:
+            payload = await bounded_json(request, 65000)
+            allowed = {'id', 'contact_id', 'recipient_email', 'subject', 'body', 'status', 'follow_up_at', 'notes'}
+            if set(payload) - allowed or any(not isinstance(value, str) for value in payload.values()):
+                raise CityError('Les champs du suivi doivent être du texte.')
+            if not {'contact_id', 'subject', 'body'} <= set(payload):
+                raise CityError('Choisis un contact et complète le brouillon.')
+            if '\n' in payload.get('recipient_email', '') or '\r' in payload.get('recipient_email', ''):
+                raise CityError('L’adresse e-mail ne peut pas contenir de retour à la ligne.')
+            if '\n' in payload.get('subject', '') or '\r' in payload.get('subject', ''):
+                raise CityError('L’objet ne peut pas contenir de retour à la ligne.')
+            from .network_discovery import list_contacts
+            contact_exists = any(contact['id'] == payload['contact_id'] for contact in list_contacts(username))
+            owned_record = any(record['id'] == payload.get('id') and record['contact_id'] == payload['contact_id']
+                               for record in store.outreach_records(username)) if not contact_exists else False
+            if not contact_exists and not owned_record:
+                raise CityError('Ce contact n’est plus dans ton répertoire.')
+            record = store.save_outreach(username, payload)
+            return JSONResponse({'record': record}, status_code=200 if payload.get('id') else 201,
+                                headers={'Cache-Control': 'private, no-store'})
+        except (ValueError, TypeError) as exc:
+            return JSONResponse({'detail': str(exc)}, status_code=400)
 
     @server.get('/city/api/notifications')
     def notification_state(request: Request):
@@ -257,7 +289,7 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
                 raise CityError('Cette action lance uniquement la mission principale de cet agent.')
             task=store.create_task(username,agent_id,'Nouvelle mission · '+AGENT_BY_ID[agent_id]['name'],
                                    {'operation':DEFAULT_OPERATIONS[agent_id]},
-                                   auto_run=DEFAULT_OPERATIONS[agent_id]=='develop')
+                                   auto_run=DEFAULT_OPERATIONS[agent_id] in {'develop','discover_service_contacts','discover_prime_services_contacts'})
             return JSONResponse({'task':task},status_code=201)
         except (ValueError,TypeError) as exc:
             return JSONResponse({'detail':str(exc)},status_code=400)
@@ -390,6 +422,8 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
         settings = store.get_settings(username)
         settings["available_models"] = list(CITY_MODELS)
         settings["api_key_configured"] = bool(__import__("os").getenv("OPENAI_API_KEY", "").strip())
+        from .city_chat import codex_chat_available
+        settings["codex_chat_available"] = codex_chat_available()
         return JSONResponse(settings, headers={"Cache-Control": "private, no-store"})
 
     @server.post("/city/api/settings")
@@ -456,11 +490,7 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
                 raise ValueError("Message invalide ou trop long.")
             if len(selection) > 4 or any(not isinstance(v, str) or len(v) > 100 for v in selection.values()):
                 raise ValueError("S\u00e9lection de contexte invalide.")
-            import os
-            if not os.getenv("OPENAI_API_KEY", "").strip():
-                return JSONResponse({"detail": "Le fournisseur IA n'est pas configur\u00e9 sur le serveur."}, status_code=503)
-            from .city_chat import _budget_guard, stream_chat
-            _budget_guard(username, store.get_settings(username))
+            from .city_chat import stream_chat
             events = stream_chat(store, username, agent_id, message, selection)
             return StreamingResponse(_chat_sse(events), media_type="text/event-stream",
                                      headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})

@@ -2,33 +2,64 @@
 from __future__ import annotations
 
 import difflib
-from datetime import datetime
 import json
 import os
 from pathlib import Path
 from queue import Empty, Queue
 import re
 import shutil
-import sqlite3
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 from typing import Callable
-from zoneinfo import ZoneInfo
 
-from .marketdesk_city import AGENT_BY_ID, CityError
+from .marketdesk_city import AGENT_BY_ID, CityError, SACHA_DAILY_SOURCE_REQUEST
 from .city_specialists import VERSION, git, repo_root, approved_base, branch_context
-from . import state_store
 
 _integration_lock = threading.Lock()
-CODEX_DAILY_USAGE_PERCENT = 100 / 7
-CODEX_DAILY_FALLBACK_CALLS = 6
+CODEX_AGENT_MODEL = 'gpt-6-luna'
+
+
+def development_model(agent_id: str) -> str:
+    return 'gpt-6.1-sol' if agent_id == 'internships_engineer' else CODEX_AGENT_MODEL
+
+
+def development_profile(agent_id: str, parameters: dict) -> str:
+    if (agent_id=='quality_engineer' and parameters.get('source_campaign_lane')=='B'
+            and parameters.get('source_campaign')):
+        return 'internships_engineer'
+    return agent_id
+
+
+def _source_worktree_files(directory: Path, names: list[str], agent_id: str) -> list[str]:
+    """Leave incidental source-worktree housekeeping outside the integration delta."""
+    if agent_id!='internships_engineer':return names
+    selected=[]
+    for name in names:
+        path=directory/name
+        if '/vendor/' in name and not path.exists():continue
+        if name=='.gitignore' and path.is_file():
+            baseline=git(directory,'show','HEAD:.gitignore').splitlines()
+            current=path.read_text(encoding='utf-8-sig').splitlines()
+            if current[:len(baseline)]==baseline and all(line.strip() in {
+                '', '.sacha-source-attempts.json', '.sacha-source-controls.json'} for line in current[len(baseline):]):
+                continue
+        selected.append(name)
+    return selected
 
 
 class CodexTemporaryQuotaError(CityError):
     """An exhausted short window must not be treated as an unknown quota."""
+
+
+def _valid_development_report(result: object) -> bool:
+    """Require a user-facing summary before a mission can be called complete."""
+    return (isinstance(result, dict)
+            and all(isinstance(result.get(key), str)
+                    for key in ('summary', 'tests', 'limitations'))
+            and bool(result['summary'].strip()))
 
 
 def codex_binary() -> str:
@@ -59,7 +90,8 @@ def codex_environment() -> dict:
 def require_chatgpt(binary: str, env: dict) -> None:
     try:
         status = subprocess.run([binary, 'login', 'status'], env=env, capture_output=True,
-                                text=True, encoding='utf-8', errors='replace', timeout=15)
+                                text=True, encoding='utf-8', errors='replace', timeout=15,
+                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise CityError('Impossible de vérifier la connexion Codex locale.') from exc
     if status.returncode or 'chatgpt' not in (status.stdout+status.stderr).lower():
@@ -139,7 +171,7 @@ def _weekly_usage_percent(limits: dict) -> float:
 
 
 def require_daily_codex_budget(binary: str, env: dict, *, activity: str = 'Développement') -> float | None:
-    """Reserve one agent call without charging unrelated Codex activity to City."""
+    """Only respect limits reported by Codex; City imposes no daily budget."""
     try:
         used = codex_usage_percent(binary, env)
     except CodexTemporaryQuotaError:
@@ -148,57 +180,15 @@ def require_daily_codex_budget(binary: str, env: dict, *, activity: str = 'Déve
         used = None
     if used is not None and used >= 100:
         raise CityError(f'{activity} reporté : quota Codex hebdomadaire épuisé.')
-    day = datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
-    path = state_store.USER_DB_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path, timeout=15) as db:
-        db.execute('BEGIN IMMEDIATE')
-        db.execute('CREATE TABLE IF NOT EXISTS city_codex_agent_usage ('
-                   'day TEXT PRIMARY KEY, consumed REAL NOT NULL, last_seen REAL, fallback_calls INTEGER NOT NULL)')
-        row = db.execute('SELECT consumed,fallback_calls FROM city_codex_agent_usage WHERE day=?', (day,)).fetchone()
-        consumed, fallback_calls = row if row else (0.0, 0)
-        if consumed >= CODEX_DAILY_USAGE_PERCENT or (used is None and fallback_calls >= CODEX_DAILY_FALLBACK_CALLS):
-            raise CityError(f'{activity} reporté : budget Codex quotidien atteint.')
-        if used is None:
-            consumed += CODEX_DAILY_USAGE_PERCENT / CODEX_DAILY_FALLBACK_CALLS
-            fallback_calls += 1
-        db.execute('INSERT INTO city_codex_agent_usage VALUES(?,?,?,?) '
-                   'ON CONFLICT(day) DO UPDATE SET consumed=excluded.consumed, '
-                   'fallback_calls=excluded.fallback_calls',
-                   (day, consumed, used, fallback_calls))
-        db.execute('DELETE FROM city_codex_agent_usage WHERE day<?', (day,))
     return used
 
 
 def record_daily_codex_usage(binary: str, env: dict, before: float | None) -> None:
-    if before is None:
-        return  # A bounded fallback call was reserved before execution.
-    try:
-        after = codex_usage_percent(binary, env)
-    except CityError:
-        after = None
-    day = datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
-    with sqlite3.connect(state_store.USER_DB_PATH, timeout=15) as db:
-        db.execute('BEGIN IMMEDIATE')
-        row = db.execute('SELECT consumed,last_seen FROM city_codex_agent_usage WHERE day=?', (day,)).fetchone()
-        if row is None:
-            return
-        delta = (CODEX_DAILY_USAGE_PERCENT / CODEX_DAILY_FALLBACK_CALLS if after is None or after < before
-                 else max(0.0, after - max(before, row[1] if row[1] is not None else before)))
-        db.execute('UPDATE city_codex_agent_usage SET consumed=?,last_seen=? WHERE day=?',
-                   (row[0] + delta, after if after is not None else row[1], day))
+    """Compatibility hook: no local daily accounting is imposed."""
 
 
 def release_unused_codex_reservation(before: float | None) -> None:
-    """Return a fallback slot when preparation failed before Codex started."""
-    if before is not None:
-        return
-    day = datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
-    with sqlite3.connect(state_store.USER_DB_PATH, timeout=15) as db:
-        db.execute('BEGIN IMMEDIATE')
-        db.execute('UPDATE city_codex_agent_usage SET consumed=MAX(0,consumed-?), '
-                   'fallback_calls=MAX(0,fallback_calls-1) WHERE day=? AND fallback_calls>0',
-                   (CODEX_DAILY_USAGE_PERCENT / CODEX_DAILY_FALLBACK_CALLS, day))
+    """Compatibility hook: City does not reserve daily slots."""
 
 
 def change_proposal(request: str) -> dict:
@@ -248,7 +238,8 @@ def review_repository() -> dict:
         schema.write_text(json.dumps({'type':'object','additionalProperties':False,
             'properties':{key:{'type':'string'} for key in ('summary','request','evidence','limitations')},
             'required':['summary','request','evidence','limitations']}),encoding='utf-8')
-        command = [binary,'--sandbox','read-only','-a','never','exec','--ignore-user-config',
+        command = [binary,'--sandbox','read-only','-a','never','--model',CODEX_AGENT_MODEL,
+                   '-c','model_reasoning_effort="medium"','exec','--ignore-user-config',
                    '--ephemeral','--skip-git-repo-check','--disable','apps','--disable','plugins',
                    '-c','features.shell_tool=false','-c','web_search="disabled"',
                    '-c','forced_login_method="chatgpt"','-C',str(directory),'--json',
@@ -300,19 +291,45 @@ def _execute(command: list[str], directory: Path, prompt: str, env: dict,
                                    start_new_session=os.name != 'nt',
                                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         try:
-            stdout, _ = process.communicate(prompt, timeout=timeout_seconds)
+            stdout, stderr = process.communicate(prompt, timeout=timeout_seconds)
         except subprocess.TimeoutExpired:
-            if os.name == 'nt':
-                subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'], capture_output=True, timeout=15)
-            else:
-                import signal
-                os.killpg(process.pid, signal.SIGKILL)
-            process.kill()
-            process.communicate()
+            # Tree termination is best effort; always kill and reap the direct child.
+            try:
+                if os.name == 'nt':
+                    subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'], capture_output=True, timeout=15,
+                                   creationflags=subprocess.CREATE_NO_WINDOW)
+                else:
+                    import signal
+                    os.killpg(process.pid, signal.SIGKILL)
+            except (OSError, subprocess.SubprocessError):
+                pass
+            finally:
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+                try:
+                    process.communicate()
+                except (OSError, subprocess.SubprocessError):
+                    pass
             raise CityError(f'Codex a dépassé {timeout_seconds // 60} minutes. Examine l’espace de la mission avant de réessayer.')
     except OSError as exc:
         raise CityError('Codex n’a pas pu démarrer. Vérifie son installation et sa connexion ChatGPT.') from exc
     if process.returncode:
+        failure = (stderr or '').lower()
+        for line in stdout.splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(event, dict) and event.get('type') in {'error', 'turn.failed'}:
+                failure += ' ' + str(event.get('message') or event.get('error') or '').lower()
+        if any(term in failure for term in ('stream disconnected', 'connection reset', 'connection closed', 'network error')):
+            raise CityError('Connexion Codex interrompue ; le travail isolé est conservé pour une reprise.')
+        if any(term in failure for term in ('usage limit', 'rate limit', 'quota exceeded')):
+            raise CityError('Quota Codex indisponible : limite signalée par ChatGPT ; travail isolé conservé.')
+        if any(term in failure for term in ('not logged in', 'authentication failed', 'token expired')):
+            raise CityError('Connecte Codex à ChatGPT pour reprendre la mission ; le travail isolé est conservé.')
         raise CityError('Codex n’a pas terminé la mission (connexion, quota ou sandbox). '
                         'Aucun changement intégré ; examine l’espace de la mission avant de réessayer.')
     events = []
@@ -337,11 +354,7 @@ AUTONOMOUS_FOCUS = {
                          'choisis le défaut visible qui gêne le plus un parcours utilisateur et corrige-le de bout en bout. '
                          'Vérifie le rendu ou le build et décris précisément ce qui change à l’écran. '
                          'Évite de revenir aux Contacts si aucun défaut visuel concret ne le justifie.'),
-    'internships_engineer': ('Priorité : accélérer la collecte des sources Internships et améliorer leur fiabilité. '
-                             'Mesure un chargement lent, corrige sa cause et vérifie le gain. '
-                             'La première mission quotidienne est réservée à une nouvelle source carrière, '
-                             'en priorité une petite banque ou société de gestion française. '
-                             'Ne prétends pas avoir validé un site externe sans accès.'),
+    'internships_engineer': SACHA_DAILY_SOURCE_REQUEST,
     'quality_engineer': ('Priorité : éliminer les causes des échecs récurrents des missions et des collectes — '
                           'reprises, concurrence, dépendances manquantes, tests serveur et intégration. '
                           'Corrige le comportement en production avec sa vérification ; évite les tests seuls '
@@ -363,6 +376,18 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
     except OSError as exc:
         raise CityError('Git est en lecture seule pour City. Relance le serveur avec accès en écriture au dépôt.') from exc
     if self_chosen:
+        recent_work = proposal.get('recent_work') or []
+        history = []
+        for item in recent_work[:16]:
+            if not isinstance(item, dict):
+                continue
+            agent = AGENT_BY_ID.get(item.get('agent_id'), {}).get('name', 'Équipe')
+            line = f"{agent} · {item.get('status', '')} · {item.get('description', '')}"
+            if item.get('summary'):
+                line += f" — {item['summary']}"
+            elif item.get('error'):
+                line += f" — {item['error']}"
+            history.append(line[:650])
         request = ('Analyse ton périmètre dans le dépôt actuel, choisis toi-même une amélioration utile et complète '
                    'pour le produit ou sa fiabilité. Compare deux ou trois problèmes vérifiables et choisis celui '
                    'qui gêne le plus l’utilisateur : mission bloquée, information fausse ou parcours difficile. '
@@ -370,6 +395,11 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
                    'Une petite modification est bienvenue si elle règle un vrai problème ; évite les tests seuls, '
                    'les retouches cosmétiques et le simple nettoyage interne. Si aucun problème important '
                    'n’est démontrable, explique-le sans modifier de fichier.')
+        if history:
+            request += (' Les éléments suivants viennent de la mémoire commune des quatre programmeurs : '
+                        'ne répète pas une amélioration terminée ou déjà en cours ; choisis un autre problème '
+                        'observable, sauf si tu peux démontrer une lacune restante.\nHistorique récent :\n- '
+                        + '\n- '.join(history))
     directory = root/'.city-worktrees'/task_id
     branch = 'marketdesk/'+('jules' if agent_id == 'job_hunter' else agent_id.replace('_', '-'))+'-'+task_id[:12]
     resume_incomplete = auto_integrate and directory.exists()
@@ -379,8 +409,6 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
         raise CityError('Branche de travail inattendue : reprise suspendue.')
     revision = (git(directory, 'rev-parse', 'HEAD') if resume_incomplete else
                 git(root, 'rev-parse', 'HEAD') if auto_integrate else approved_base(root, proposal))
-    if auto_integrate and git(root, 'status', '--porcelain', '--untracked-files=no'):
-        raise CityError('Développement suspendu : le dépôt courant contient des modifications locales suivies.')
     binary, env = codex_binary(), codex_environment()
     env['PATH'] = str(Path(sys.executable).parent)+os.pathsep+env.get('PATH','')
     require_chatgpt(binary, env)
@@ -393,7 +421,22 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
     try:
         if not resume_incomplete:
             directory.parent.mkdir(exist_ok=True)
+            if auto_integrate:
+                directory.with_suffix('.baseline.json').write_text(json.dumps({'initializing': True}), encoding='utf-8')
             git(root,'worktree','add','-b',branch,directory.relative_to(root).as_posix(),revision)
+        baseline_file = directory.with_suffix('.baseline.json')
+        if auto_integrate and baseline_file.is_file():
+            baseline = json.loads(baseline_file.read_text(encoding='utf-8'))
+            if baseline.get('initializing'):
+                from .city_worktree import snapshot
+                initial = revision
+                revision, _ = snapshot(root, directory)
+                if revision != initial or git(root, 'status', '--porcelain', '--untracked-files=no'):
+                    baseline_file.write_text(json.dumps({'revision': revision}), encoding='utf-8')
+                else:
+                    baseline_file.unlink()
+                if on_progress:
+                    on_progress('Copie isolée du code actuel prête ; les modifications locales sont préservées.')
         report = directory/'.jules-result.json'
         schema = directory/'.jules-schema.json'
         if resume_incomplete:
@@ -404,8 +447,10 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
     except Exception:
         release_unused_codex_reservation(usage_before)
         raise
-    command = [binary,'--sandbox','workspace-write','--model','gpt-6.1-sol',
-               '-c','model_reasoning_effort="medium"','exec','--approve-for-me',
+    model = development_model(agent_id)
+    effort = 'high' if agent_id == 'internships_engineer' else 'medium'
+    command = [binary,'--sandbox','workspace-write','--model',model,
+               '-c',f'model_reasoning_effort="{effort}"','exec','--approve-for-me',
                '--ignore-user-config','--ephemeral','--disable','apps','--disable','plugins',
                '-C',str(directory),'-c','web_search="disabled"',
                '-c','default_permissions=":workspace"','-c','forced_login_method="chatgpt"',
@@ -459,13 +504,16 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
                if resume_incomplete else ''))
     if on_progress:
         on_progress('Codex examine le projet et prépare une modification.')
+    if agent_id=='internships_engineer':
+        from .city_source_strategy import RULES,source_selection_context
+        prompt+='\n\n'+RULES+source_selection_context(root,agent_id=proposal.get('source_agent_id',agent_id))
     try:
         events = _execute(command, directory, prompt, env)
     finally:
         record_daily_codex_usage(binary, env, usage_before)
     try:
         result = json.loads(report.read_text(encoding='utf-8'))
-        if not isinstance(result,dict) or not all(isinstance(result.get(key),str) for key in ('summary','tests','limitations')):
+        if not _valid_development_report(result):
             raise ValueError()
     except (OSError, ValueError) as exc:
         raise CityError('Rapport Codex incomplet. La branche reste disponible pour examen manuel.') from exc
@@ -476,8 +524,12 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
     if git(directory,'rev-parse','HEAD') != revision:
         raise CityError('La révision de la branche de travail a changé pendant la mission. Examine-la avant toute intégration.')
     tracked = git(directory,'diff','--name-only','--no-renames','HEAD').splitlines()
+    if auto_integrate:tracked=_source_worktree_files(directory,tracked,agent_id)
     added = [name for name in git(directory,'ls-files','--others','--exclude-standard').splitlines()
              if name != '.jules-complete.json']
+    if auto_integrate:
+        from .city_worktree import code_path
+        added = [name for name in added if code_path(name)]
     files = sorted(set(tracked+added))
     if not files:
         if auto_integrate:
@@ -485,7 +537,7 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
             return {'title': 'Analyse sans changement', 'branch': branch, 'files': [], 'integrated': False,
                     'plain_summary': result['summary'],
                     'text': result['summary']+'\n\n'+result['limitations'], 'codex_usage': {},
-                    'provider': 'Codex · connexion ChatGPT locale', 'model': 'gpt-6.1-sol', 'role_version': VERSION}
+                    'provider': 'Codex · connexion ChatGPT locale', 'model': development_model(agent_id), 'role_version': VERSION}
         raise CityError('Codex n’a produit aucun changement. '+result['limitations'][:600])
     diff = git(directory,'diff','--no-ext-diff','--no-textconv','--no-renames','HEAD','--','.')
     for name in added:
@@ -515,12 +567,13 @@ def implement_change(task_id: str, proposal: dict, *, agent_id: str = 'job_hunte
             'branch':branch,**context,**integration,
             'file':str(directory.relative_to(root)), 'files':files, 'plain_summary':result['summary'], 'diff':diff[:120_000],
             'diff_truncated':len(diff)>120_000, 'checks':checks,'codex_usage':usage,
-            'provider':'Codex · connexion ChatGPT locale','model':'gpt-6.1-sol',
+            'limitations': result.get('limitations', ''),
+            'provider':'Codex · connexion ChatGPT locale','model':development_model(agent_id),
             'role_version':VERSION,'approval_required':False,
             'text':result['summary']+'\n\nVérifications rapportées par Codex :\n'+result['tests']+
                    '\n\nLimites :\n'+result['limitations']+
                    f'\n\n{len(files)} fichier(s) modifié(s) dans {branch}. '+
-                   ('Tests serveur validés ; commit intégré au dépôt local. Aucun push ou déploiement.' if integration else
+                   (_integration_note(integration) if integration else
                     'Modifications locales à examiner ; aucun commit, push ou merge effectué par City.')+'\n\n'+context['base_note']}
 
 
@@ -532,15 +585,17 @@ def _resume_autonomous_change(root: Path, directory: Path, branch: str, agent_id
     marker = directory/'.jules-complete.json'
     try:
         result = json.loads(marker.read_text(encoding='utf-8'))
-        if not isinstance(result, dict) or not all(isinstance(result.get(key), str)
-                                                   for key in ('summary', 'tests', 'limitations')):
+        if not _valid_development_report(result):
             raise ValueError()
     except (OSError, ValueError) as exc:
         raise CityError('Travail Codex non terminé : la branche reste disponible pour examen.') from exc
     head = git(directory, 'rev-parse', 'HEAD')
     pending = git(directory, 'diff', '--name-only', '--no-renames', 'HEAD').splitlines()
+    pending=_source_worktree_files(directory,pending,agent_id)
     added = [name for name in git(directory, 'ls-files', '--others', '--exclude-standard').splitlines()
              if name not in {'.jules-result.json', '.jules-schema.json', '.jules-complete.json'}]
+    from .city_worktree import code_path
+    added = [name for name in added if code_path(name)]
     # The base commit may belong to an earlier mission by this same agent.
     committed = (not pending and not added and
                  git(directory, 'log', '-1', '--format=%s') == 'Improve MarketDesk with '+agent_id)
@@ -575,35 +630,55 @@ def _resume_autonomous_change(root: Path, directory: Path, branch: str, agent_id
     return {'title': 'Développement intégré', 'branch': branch, **context, **integration,
             'file': str(directory.relative_to(root)), 'files': files, 'plain_summary': result['summary'],
             'diff': diff[:120_000], 'diff_truncated': len(diff) > 120_000,
-            'checks': [], 'codex_usage': {}, 'provider': 'Codex · connexion ChatGPT locale',
-            'model': 'gpt-6.1-sol', 'role_version': VERSION, 'approval_required': False,
+            'checks': [], 'limitations': result.get('limitations', ''), 'codex_usage': {}, 'provider': 'Codex · connexion ChatGPT locale',
+            'model': development_model(agent_id), 'role_version': VERSION, 'approval_required': False,
             'text': result['summary']+'\n\nVérifications :\n'+result['tests']+'\n\nLimites :\n'+
                     result['limitations']+f'\n\n{len(files)} fichier(s) modifié(s) dans {branch}. '+
-                    'Tests serveur validés ; commit intégré au dépôt local. Aucun push ou déploiement.\n\n'+
+                    _integration_note(integration)+'\n\n'+
                     context['base_note']}
+
+
+def _integration_note(integration: dict) -> str:
+    if integration.get('integration_mode') == 'working_tree':
+        return ('Tests serveur validés ; changements appliqués au code local, modifications personnelles préservées. '
+                'Commit de la mission conservé dans sa branche isolée. Activation au prochain redémarrage City.')
+    return 'Tests serveur validés ; commit intégré au dépôt local. Activation au prochain redémarrage City.'
 
 
 def _auto_integrate(root: Path, directory: Path, branch: str, revision: str,
                     files: list[str], agent_id: str, *, committed: bool = False,
                     on_progress: Callable[[str], None] | None = None) -> dict:
-    """Validate in the worktree, then integrate one completed branch at a time."""
+    """Validate the current integration candidate, then apply one completed branch at a time."""
     allowed = ('internships_project/', 'src/', 'tests/', 'scripts/', '.github/workflows/')
     for name in files:
         path = directory / name
+        deleted_tracked_file = False
+        if not path.exists():
+            try:
+                git(directory, 'ls-files', '--error-unmatch', '--', name)
+                deleted_tracked_file = True
+            except CityError:
+                pass
         if (not name.startswith(allowed) or '/vendor/' in name or name.endswith(('.env', '.db', '.sqlite3'))
-                or not path.exists() or path.is_symlink() or not path.resolve().is_relative_to(directory.resolve())):
+                or (not path.exists() and not deleted_tracked_file) or path.is_symlink()
+                or not path.resolve().is_relative_to(directory.resolve())):
             raise CityError('Intégration suspendue : fichier hors du code autorisé. La branche reste disponible.')
-        if path.stat().st_size > 2_000_000:
+        if path.exists() and path.stat().st_size > 2_000_000:
             raise CityError('Intégration suspendue : fichier trop volumineux. La branche reste disponible.')
-    test_file = _integration_checks(root, directory, files, agent_id, committed=committed)
-    if on_progress:
-        on_progress('Tests ciblés réussis ; intégration de la branche en cours.')
     with _integration_lock:
-        if git(root, 'status', '--porcelain', '--untracked-files=no'):
-            raise CityError('Intégration suspendue : le dépôt courant contient des modifications locales suivies.')
+        local_changes = directory.with_suffix('.baseline.json').is_file() or bool(git(root, 'status', '--porcelain', '--untracked-files=no'))
+        # On a locally modified repository, the combined current code is the authoritative
+        # candidate. Testing the old baseline first can reject fixes already present locally.
+        test_file = '' if local_changes else _integration_checks(root, directory, files, agent_id, committed=committed)
+        if on_progress:
+            on_progress('Préparation de la version à vérifier avant intégration.' if local_changes else
+                        'Tests ciblés réussis ; intégration de la branche en cours.')
         if not committed:
             git(directory, 'add', '--', *files)
             git(directory, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Improve MarketDesk with '+agent_id)
+        if local_changes:
+            from .city_worktree import integrate_patch
+            return integrate_patch(root, directory, revision, files, agent_id, _integration_checks, on_progress)
         current = git(root, 'rev-parse', 'HEAD')
         if current != revision:
             try:
@@ -631,7 +706,7 @@ def _integration_checks(root: Path, directory: Path, files: list[str], agent_id:
     git(directory, '-c', 'core.whitespace=cr-at-eol', 'show' if committed else 'diff',
         '--check', *(['HEAD'] if committed else []))
     for name in files:
-        if name.endswith('.py'):
+        if name.endswith('.py') and (directory / name).is_file():
             import ast
             ast.parse((directory / name).read_text(encoding='utf-8-sig'), filename=name)
     tests = {'desk_manager': ['tests/test_marketdesk_city.py'],
@@ -659,24 +734,31 @@ def _integration_checks(root: Path, directory: Path, files: list[str], agent_id:
         raise CityError('Tests serveur indisponibles dans cette branche : intégration suspendue.')
     test_file = ', '.join(test_files)
     try:
-        # Git fixtures create nested repositories; a worktree-local pytest path exceeds MAX_PATH on Windows.
+        # Git fixtures create nested repositories; keep pytest's temporary files outside the worktree.
         with tempfile.TemporaryDirectory(prefix='city-tests-') as temporary:
             check_args = test_files + ['-q', '--maxfail=1', '--tb=short', '--basetemp='+temporary]
-            check_script = ("import sys; sys.path[:0] = ["+repr(str(root/'.venv/Lib/site-packages'))+",'.']; "
-                            "import pytest; raise SystemExit(pytest.main("+repr(check_args)+"))")
-            check = subprocess.run([sys.executable, '-c', check_script], cwd=directory, capture_output=True,
-                                   text=True, encoding='utf-8', errors='replace', timeout=240)
+            runner = directory/'scripts/city_test.py'
+            if not runner.is_file():
+                raise CityError('Lanceur des tests serveur indisponible : intégration suspendue.')
+            environment = {**os.environ, 'MARKETDESK_TEST_SITE_PACKAGES':
+                           str(root/'.venv/Lib/site-packages')}
+            check = subprocess.run([sys.executable, str(runner), *check_args], cwd=directory, env=environment,
+                                   capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=240,
+                                   creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise CityError('Tests serveur indisponibles : intégration suspendue.') from exc
     if check.returncode:
-        failed = re.search(r'^(?:FAILED|ERROR) (tests[\\/][^\s]+)', check.stdout, re.MULTILINE)
-        missing = re.search(r'^ERROR: file or directory not found: (tests[\\/][^\s]+)', check.stdout, re.MULTILINE)
+        output = check.stdout+'\n'+check.stderr
+        failed = re.search(r'^(?:FAILED|ERROR) (tests[\\/][^\s]+)', output, re.MULTILINE)
+        missing = re.search(r'^ERROR: file or directory not found: (tests[\\/][^\s]+)', output, re.MULTILINE)
         detail = (failed or missing).group(1) if (failed or missing) else 'résultat non disponible'
         raise CityError('Tests serveur en échec : '+detail+'. Intégration suspendue ; consulte la branche de travail.')
     if any(name.startswith('internships_project/city_frontend/src/') for name in files):
         frontend = directory/'internships_project/city_frontend'
         dependencies = root/'internships_project/city_frontend/node_modules'
         node = next(iter(sorted((root/'.codex-tools/node24').glob('node-v*-win-x64/node.exe'), reverse=True)), None)
+        if node is None and (root/'.codex-tools/node22-city-build/node.exe').is_file():
+            node = root/'.codex-tools/node22-city-build/node.exe'
         node = str(node) if node else shutil.which('node')
         if not node or not dependencies.is_dir():
             raise CityError('Build frontend indisponible : intégration suspendue.')
@@ -684,7 +766,7 @@ def _integration_checks(root: Path, directory: Path, files: list[str], agent_id:
             link = frontend/'node_modules'
             if os.name == 'nt':
                 linked = subprocess.run(['cmd', '/c', 'mklink', '/J', str(link), str(dependencies)],
-                                        capture_output=True, timeout=30)
+                                        capture_output=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
                 ready = linked.returncode == 0 and link.is_junction()
             else:
                 link.symlink_to(dependencies, target_is_directory=True)
@@ -695,7 +777,11 @@ def _integration_checks(root: Path, directory: Path, files: list[str], agent_id:
         commands = ([node, str(dependencies/'typescript/bin/tsc'), '--noEmit', '-p', str(frontend/'tsconfig.json')],
                     [node, str(frontend/'build.mjs')])
         for command in commands:
-            build = subprocess.run(command, cwd=frontend, env=environment, capture_output=True, timeout=180)
+            build = subprocess.run(command, cwd=frontend, env=environment, capture_output=True, timeout=180,
+                                   creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
             if build.returncode:
                 raise CityError('Build frontend en échec : intégration suspendue.')
+        bundle = 'internships_project/city_assets/city.js'
+        if bundle not in files:
+            files.append(bundle)
     return test_file
