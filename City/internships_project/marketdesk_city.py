@@ -2547,8 +2547,10 @@ class CityWorker:
             elif isinstance(exc, CityCollectionBusyError):
                 self.store.defer_coding(task['id'], safe, delay_minutes=5)
             elif isinstance(exc, (TimeoutError, ConnectionError)) or (
-                    type(exc).__name__ in {'Timeout', 'ConnectTimeout', 'ReadTimeout'}
-                    and type(exc).__module__.startswith(('requests.', 'urllib3.'))):
+                    type(exc).__name__ in {'Timeout', 'ConnectTimeout', 'ReadTimeout',
+                                           'ConnectError', 'ReadError', 'WriteError',
+                                           'NetworkError', 'RemoteProtocolError'}
+                    and type(exc).__module__.startswith(('requests.', 'urllib3.', 'httpx.'))):
                 # Network-backed agents often surface transient transport failures
                 # directly. Treat them like collection contention so one blip does
                 # not permanently lose a user's mission.

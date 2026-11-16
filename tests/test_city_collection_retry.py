@@ -54,3 +54,20 @@ def test_transient_agent_network_failure_is_rescheduled(tmp_path, monkeypatch, f
     assert detail['status'] == 'queued'
     assert detail['error'] is None
     assert detail['scheduled_at']
+
+
+@pytest.mark.parametrize('failure_name', ['ConnectError', 'ReadTimeout'])
+def test_httpx_transport_failure_is_rescheduled(tmp_path, monkeypatch, failure_name):
+    monkeypatch.setattr(state_store, 'USER_DB_PATH', tmp_path / 'accounts.sqlite3')
+    store = CityStore(state_store.USER_DB_PATH)
+    task = store.create_task('alice', 'market_analyst', 'Analyse publique', {'discover_public': True})
+    failure_type = type(failure_name, (Exception,), {'__module__': 'httpx._exceptions'})
+    from internships_project import city_services
+    monkeypatch.setattr(city_services, 'run_agent', lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        failure_type('temporary transport failure')))
+
+    assert CityWorker(store).run_once()
+    detail = store.task_detail('alice', task['id'])
+    assert detail['status'] == 'queued'
+    assert detail['error'] is None
+    assert detail['scheduled_at']
