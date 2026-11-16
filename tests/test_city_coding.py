@@ -267,8 +267,10 @@ def test_development_report_requires_a_nonempty_user_summary(repo, monkeypatch):
         coding.implement_change(task_id, {'coding_request': ''},
                                 agent_id='job_hunter', auto_integrate=True)
     assert (root/'.city-worktrees'/task_id/'internships_project/city_sample.py').is_file()
-    assert coding._valid_development_report({'summary': 'Une correction.', 'tests': '', 'limitations': ''})
+    assert coding._valid_development_report({'summary': 'Une correction.', 'tests': 'Test ciblé réussi.', 'limitations': 'Aucune.'})
     assert not coding._valid_development_report({'summary': '', 'tests': 'OK', 'limitations': ''})
+    assert not coding._valid_development_report({'summary': 'Une correction.', 'tests': '  ', 'limitations': 'Aucune.'})
+    assert not coding._valid_development_report({'summary': 'Une correction.', 'tests': 'Test passé.', 'limitations': '  '})
 
 
 def test_autonomous_worktree_integrates_without_discarding_local_edits(repo, monkeypatch):

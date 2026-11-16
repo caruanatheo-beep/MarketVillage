@@ -57,11 +57,11 @@ class CodexTemporaryQuotaError(CityError):
 
 
 def _valid_development_report(result: object) -> bool:
-    """Require a user-facing summary before a mission can be called complete."""
+    """Require a summary and a test outcome before a mission can be called complete."""
     return (isinstance(result, dict)
             and all(isinstance(result.get(key), str)
                     for key in ('summary', 'tests', 'limitations'))
-            and bool(result['summary'].strip()))
+            and all(result[key].strip() for key in ('summary', 'tests', 'limitations')))
 
 
 def codex_binary() -> str:
