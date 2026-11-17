@@ -133,6 +133,9 @@ CAREER_PORTALS = {
     "BNY": "https://eofe.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/BNY-Careers/jobs",
 }
 CAREER_LISTINGS = {
+    "Nomura": (
+        "https://nomuracampus.tal.net/vx/lang-en-GB/mobile-0/appcentre-ext/brand-4/candidate/jobboard/vacancy/1/adv/",
+        "nomuracampus.tal.net", "/vx/lang-en-GB/mobile-0/appcentre-1/brand-4/candidate/so/pm/1/pl/1/opp/"),
     "Fidelity International": (
         "https://fidelityinternational.tal.net/vx/lang-en-GB/mobile-0/brand-5/candidate/jobboard/vacancy/1/adv/",
         "fidelityinternational.tal.net", "/vx/lang-en-GB/mobile-0/brand-5/candidate/so/pm/1/pl/1/opp/"),
@@ -330,6 +333,7 @@ JOBTEASER_CITIES = {
 # Brand icons are requested from the employer's own site. If an icon is absent,
 # the card keeps its initials; no third-party logo service receives the visit.
 COMPANY_ICON_HOSTS = {
+    "nomura": "www.nomura.com",
     "rbccapitalmarkets": "jobs.rbc.com",
     "murex": "www.murex.com",
     "pimco": "www.pimco.com",
@@ -1223,7 +1227,7 @@ def is_trusted_offer_url(url: str) -> bool:
         "jobs.commerzbank.com", "jobs.standardchartered.com", "apply.careers.hsbc.com",
         "www.akunacapital.com", "akunacapital.com", "careers.sig.com",
         "careers.aqr.com", "bloomberg.avature.net", "careers.bankofamerica.com",
-        "morganstanley.eightfold.ai",
+        "morganstanley.eightfold.ai", "nomuracampus.tal.net",
         *(board[0] for board in WORKDAY.values()),
     }
     try:
@@ -1749,12 +1753,74 @@ def _career_publication_date(raw: str) -> str:
         return ""
 
 
+def _nomura_detail(url: str, page_html: str, page: _CareerHTML,
+                   fallback_title: str = "") -> Opportunity | None:
+    """Read only this Tal.net vacancy's fields, never related vacancies or navigation."""
+    text = " ".join(page.parts)
+    if re.search(r"no longer (?:accepting applications|available)|(?:vacancy|opportunity) (?:is )?closed", text, re.I):
+        return None
+    if (fallback_title and page.primary_headings
+            and _canonical_title(page.primary_headings[0]) != _canonical_title(fallback_title)):
+        raise ValueError("Fiche Nomura sans annonce correspondante")
+    form = re.search(r'<form\b[^>]*class=["\'][^"\']*\bform-view\b[^"\']*["\'][^>]*>(.*?)</form>',
+                     page_html, re.I | re.S)
+    if not form or not page.primary_headings:
+        raise ValueError("Fiche Nomura incomplète")
+    sections = re.split(r'<span\b[^>]*class=["\']hform_lbl_text["\'][^>]*>\s*([^<]+?)\s*</span>',
+                        form[1], flags=re.I)
+    fields = {}
+    for label, raw in zip(sections[1::2], sections[2::2]):
+        field = _CareerHTML()
+        field.feed(raw)
+        fields[label.casefold()] = " ".join(field.parts).strip()
+    title = page.primary_headings[0]
+    description = fields.get("job description", "")
+    location = fields.get("location", "")
+    programme = fields.get("program type", "")
+    if not description or not _plausible_location(location) or not programme:
+        raise ValueError("Fiche Nomura sans description, lieu ou contrat")
+    identity = re.search(r"/opp/(\d+)-", url)
+    apply_links = re.findall(r'<form\b[^>]*action=["\']([^"\']+)["\']', page_html, re.I)
+    if not identity or not any(
+            (parsed := urlparse(html.unescape(link))).scheme == "https"
+            and parsed.hostname == "nomuracampus.tal.net"
+            and parsed.path.endswith(f"/opp/{identity[1]}/apply/en-GB") for link in apply_links):
+        raise ValueError("Fiche Nomura sans candidature ouverte vérifiable")
+    deadline_match = re.search(r"Application Deadline:\s*(\d{2}/\d{2}/\d{4})", page_html, re.I)
+    deadline = ""
+    if deadline_match:
+        try:
+            deadline = datetime.strptime(deadline_match[1], "%d/%m/%Y").date().isoformat()
+        except ValueError as exc:
+            raise ValueError("Échéance Nomura invalide") from exc
+        if date.fromisoformat(deadline) < datetime.now(timezone.utc).date():
+            return None
+    # This board also contains insight events, technology and support programmes.
+    if (not re.search(r"internship|graduate|full.time|\bVIE\b", programme, re.I)
+            or re.search(r"\b(?:senior|director|head|operations|fsops|digital office|quants?|strats?|technology|retail|corporate)\b", title, re.I)
+            or not re.search(r"\b(?:sales|trading|structur\w*|global markets|rates|credit|dcm)\b", title, re.I)):
+        return None
+    # Some live descriptions advertise two cohorts then retain an older start
+    # date in their body. Preserve the text without choosing a misleading date.
+    start = "" if re.search(r"following (?:start )?dates", description, re.I) else _start_period(description)
+    posting = _jsonld_jobposting(page_html)
+    published = (_jsonld_job_posted(page_html) if posting.get("title")
+        and _canonical_title(str(posting["title"])) == _canonical_title(title) else "")
+    job = _opportunity(title, "Nomura", location, programme, url,
+        published, start, role_context=description)
+    family = ("Sales" if job and job.family == "Risk / Support"
+        and re.search(r"(?:work with|join).{0,40}\b(?:structured |fixed income )?sales team\b", description, re.I)
+        else job.family if job else "")
+    return replace(job, description=description[:12_000], deadline=deadline, family=family,
+        source="Site carrière · Nomura") if job else None
+
+
 def _career_detail(url: str, company: str, fallback_title: str = "",
                    html_override: str | None = None) -> Opportunity | None:
     portal_company = company
     if html_override is None:
         response = requests.get(url, timeout=(8, 20))
-        if company == "Fidelity International" and response.status_code in (404, 410):
+        if company in {"Fidelity International", "Nomura"} and response.status_code in (404, 410):
             return None
         response.raise_for_status()
         page_html = response.text
@@ -1763,6 +1829,8 @@ def _career_detail(url: str, company: str, fallback_title: str = "",
     page = _CareerHTML()
     page.feed(page_html)
     text = " ".join(page.parts)
+    if company == "Nomura":
+        return _nomura_detail(url, page_html, page, fallback_title)
     if company == "Fidelity International":
         # Tal.net's visible job fields are authoritative; navigation, unrelated
         # programmes and the programme year cannot supply missing offer data.
@@ -2437,6 +2505,7 @@ def _axa_jobs() -> list[Opportunity]:
 def _career_page_jobs(company: str, config: tuple[str, str, str]) -> list[Opportunity]:
     listing, host, path_prefix = config
     links: dict[str, str] = {}
+    nomura_ids: set[str] = set()
     listings = [listing]
     if company == "Crédit Mutuel / CIC":
         listings.append("https://recrutement.creditmutuel.fr/fr/etudiants/stage.html")
@@ -2476,7 +2545,7 @@ def _career_page_jobs(company: str, config: tuple[str, str, str]) -> list[Opport
                 successful_pages += 1
                 page = _CareerHTML()
                 page.feed(html)
-                if company == "Fidelity International":
+                if company in {"Fidelity International", "Nomura"}:
                     # This public board currently exposes all programmes at once.
                     # Refuse a truncated/paginated response rather than silently
                     # publishing only the first page or inventing pagination URLs.
@@ -2485,7 +2554,7 @@ def _career_page_jobs(company: str, config: tuple[str, str, str]) -> list[Opport
                         if urlparse(href).scheme == "https" and urlparse(href).hostname == host
                         and (match := re.search(re.escape(path_prefix) + r"(\d+)-[^/]+/en-GB$", urlparse(href).path))}
                     if not total or len(identities) != int(total[1]):
-                        raise ValueError("Catalogue Fidelity incomplet : pagination non vérifiée")
+                        raise ValueError(f"Catalogue {'Fidelity' if company == 'Fidelity International' else company} incomplet : pagination non vérifiée")
                 if company == "HSBC Continental Europe":
                     total = re.search(r'jobRecordsFound:\s*parseInt\("(\d+)"\)', html)
                     per_page = re.search(r'jobRecordsPerPage:\s*parseInt\("(\d+)"\)', html)
@@ -2527,7 +2596,7 @@ def _career_page_jobs(company: str, config: tuple[str, str, str]) -> list[Opport
                 for href, label in links_to_process:
                     url = urljoin(listing_url, href)
                     parsed = urlparse(url)
-                    if company == "Fidelity International" and not re.fullmatch(
+                    if company in {"Fidelity International", "Nomura"} and not re.fullmatch(
                             re.escape(path_prefix) + r"\d+-[^/]+/en-GB", parsed.path):
                         continue
                     if company == "La Banque Postale" and parsed.hostname == host:
@@ -2555,10 +2624,15 @@ def _career_page_jobs(company: str, config: tuple[str, str, str]) -> list[Opport
                         ))
                     )
                     if market_label:
+                        if company == "Nomura":
+                            identity = re.search(r"/opp/(\d+)-", parsed.path)[1]
+                            if identity in nomura_ids:
+                                continue
+                            nomura_ids.add(identity)
                         links[url] = label
     if not successful_pages and last_error:
         raise last_error
-    if successful_pages and not direct_links and company != "Fidelity International":
+    if successful_pages and not direct_links and company not in {"Fidelity International", "Nomura"}:
         raise ValueError("aucun lien d'offre directe dans les pages carrières publiques")
     detail_errors: list[Exception] = []
     failed_urls: list[str] = []

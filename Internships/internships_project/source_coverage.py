@@ -13,6 +13,7 @@ class SourceCoverage:
 
 
 SOURCE_COVERAGE: dict[str, SourceCoverage] = {
+    "Nomura": SourceCoverage("connected", "https://nomuracampus.tal.net/vx/lang-en-GB/mobile-0/appcentre-ext/brand-4/candidate/jobboard/vacancy/1/adv/", "Official Early Careers Tal.net board without country or nationality filters; complete programme count and open live vacancy fields required; currently EMEA programmes only, not a claim of worldwide employer coverage; no API or browser fallback"),
     "RBC Capital Markets": SourceCoverage("connected", "https://rbc.wd3.myworkdayjobs.com/en-US/RBCEARLYTALENT1", "Official RBC careers listing links this global campus Workday board; live open details, complete pagination, Sales/Trading and debt origination only; no HTML fallback; experienced hiring board not included"),
     "Murex": SourceCoverage("connected", "https://murex.wd3.myworkdayjobs.com/en-US/MurexCareerPage1", "Official employer site links this public global Workday board; complete pagination and live open details required; client-facing trading solutions separated from markets Sales and Trading; no HTML fallback"),
     "PIMCO": SourceCoverage("connected", "https://pimco.wd1.myworkdayjobs.com/en-US/pimco-careers", "Official global career page links this public Workday board; complete global pagination and live details required; client management and product roles distinguished from markets Sales; no HTML fallback"),
