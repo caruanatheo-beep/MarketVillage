@@ -35,6 +35,7 @@ def screen(browser):
         offer('Portfolio Graduate','Asset Management','2027-06',today-timedelta(days=20),'Graduate',['Graduate'])],
         'sources':{'checked':1,'unavailable':0,'retained':0},'updated':datetime.now().astimezone().isoformat()}
     page = browser.new_page(viewport={'width':1440,'height':1000})
+    page.clock.install()
     errors = []
     page.on('pageerror',lambda error:errors.append(str(error)))
     def route(request):
@@ -121,6 +122,41 @@ def test_reloading_data_preserves_selection_or_falls_back_when_removed(screen):
     page.evaluate('load()')
     assert page.locator('#family-trigger').inner_text()=='Tous métiers'
     assert page.locator('.card h3').inner_text()=='Portfolio Graduate'
+
+
+def test_visible_page_automatically_updates_timestamp_and_keeps_filters(screen):
+    page,data=screen
+    choose(page,'family','Sales')
+    data['offers'][0]['title']='Nouvelle publication Sales'
+    data['updated']='2026-11-17T17:54:00+00:00'
+    page.clock.fast_forward(5*60*1000)
+    page.get_by_role('heading',name='Nouvelle publication Sales',exact=True).wait_for()
+    assert page.locator('#family-trigger').inner_text()=='Sales'
+    assert '18:54' in page.locator('#updated').inner_text()
+
+
+def test_hidden_page_waits_for_return_before_fetching_new_data(screen):
+    page,data=screen
+    calls=[]
+    def respond(route):
+        calls.append(route.request.url)
+        route.fulfill(body=json.dumps(data),content_type='application/json')
+    page.route(BASE+'offers.json',respond)
+    page.evaluate("Object.defineProperty(document,'hidden',{configurable:true,value:true})")
+    data['offers'][0]['title']='Publication au retour'
+    page.clock.fast_forward(5*60*1000)
+    assert not calls
+    page.evaluate("""Object.defineProperty(document,'hidden',{configurable:true,value:false});
+        document.dispatchEvent(new Event('visibilitychange'));""")
+    page.get_by_role('heading',name='Publication au retour',exact=True).wait_for()
+    assert len(calls)==1
+
+
+def test_browser_back_forward_cache_restoration_refreshes_data(screen):
+    page,data=screen
+    data['offers'][0]['title']='Publication après restauration'
+    page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}))")
+    page.get_by_role('heading',name='Publication après restauration',exact=True).wait_for()
 
 
 def test_date_menu_fits_short_mobile_viewport_and_keyboard_scrolls_options(screen):

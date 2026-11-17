@@ -116,6 +116,14 @@ def main():
     report = ROOT/'artifacts/internships-refresh-watchdog.json'
     report.parent.mkdir(exist_ok=True)
     report.write_text(json.dumps(result,indent=2),encoding='utf-8')
+    history_path = report.with_name('internships-refresh-watchdog-history.json')
+    try:
+        history = json.loads(history_path.read_text(encoding='utf-8'))
+        if not isinstance(history,list):
+            history = []
+    except (OSError,ValueError):
+        history = []
+    history_path.write_text(json.dumps([*history[-95:],result],indent=2),encoding='utf-8')
     print(json.dumps(result))
     return exit_code
 

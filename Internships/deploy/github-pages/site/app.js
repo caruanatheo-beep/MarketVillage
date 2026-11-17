@@ -142,7 +142,10 @@ function options(id, pairs) {
   for (const [value,label] of pairs) { const o = document.createElement("option"); o.value = value; o.textContent = label; $(id).append(o); }
   filterViews.get(id)?.refresh();
 }
+let loading = false;
 async function load() {
+  if (loading) return;
+  loading = true;
   try {
     const response = await fetch("offers.json", {cache: "no-cache", credentials: "omit"});
     if (!response.ok) throw new Error("load");
@@ -163,6 +166,7 @@ async function load() {
     $("updated").title = `Heure de Paris · ${s.checked} sources · ${s.unavailable} sources indisponibles · ${s.partial || 0} collectes partielles · ${s.retained} sources avec offres conservées`;
     $("message").textContent = ""; render();
   } catch { $("message").textContent = "Impossible de charger les nouvelles données. Réessaie dans un instant. Les offres déjà affichées sont conservées."; }
+  finally { loading = false; }
 }
 for (const id of controls) $(id).addEventListener(id === "search" ? "input" : "change", () => {page=1;render();});
 for (const button of $("sort-options").querySelectorAll("button")) {
@@ -172,3 +176,6 @@ $("previous").addEventListener("click",()=>{page--;render();$("count").scrollInt
 $("next").addEventListener("click",()=>{page++;render();$("count").scrollIntoView({block:"start"});});
 for (const id of controls.slice(1)) enhanceFilter($(id));
 load();
+setInterval(() => { if (!document.hidden) load(); }, 5 * 60 * 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+window.addEventListener("pageshow", event => { if (event.persisted) load(); });

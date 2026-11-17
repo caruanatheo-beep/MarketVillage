@@ -56,6 +56,19 @@ def test_fresh_publication_needs_no_credential_or_api_request(monkeypatch):
     assert watchdog.check(NOW,recover=True)['status'] == 'fresh'
 
 
+def test_watchdog_keeps_a_bounded_history_of_recovery_checks(tmp_path,monkeypatch):
+    monkeypatch.setattr(watchdog,'ROOT',tmp_path)
+    monkeypatch.setattr(watchdog.sys,'argv',['watchdog'])
+    monkeypatch.setattr(watchdog,'check',lambda *a,**k:{'status':'fresh'})
+    directory=tmp_path/'artifacts';directory.mkdir()
+    path=directory/'internships-refresh-watchdog-history.json'
+    path.write_text(json.dumps([{'status':'old','number':i} for i in range(100)]))
+    assert watchdog.main()==0
+    history=json.loads(path.read_text())
+    assert len(history)==96 and history[0]['number']==5
+    assert history[-1]['status']=='fresh' and history[-1]['checked_at']
+
+
 @pytest.mark.parametrize('now,updated,active',[(NOW,NOW.isoformat(),False),(NOW,'2026-11-16T12:00:00+00:00',True),(NOW.replace(hour=5),'',False)])
 def test_recovery_dispatch_rechecks_window_and_freshness_on_github(tmp_path,monkeypatch,now,updated,active):
     monkeypatch.setenv('GITHUB_EVENT_NAME','workflow_dispatch')
