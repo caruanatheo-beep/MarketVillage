@@ -32,6 +32,25 @@ def test_invalid_queued_payload_does_not_block_valid_mission(tmp_path, monkeypat
     assert store.task_detail("alice", invalid["id"])["status"] == "cancelled"
 
 
+@pytest.mark.parametrize("invalid_dependencies", ["not-json", "{}", '["valid", 3]'])
+def test_invalid_queued_dependencies_do_not_block_valid_mission(tmp_path, monkeypatch, invalid_dependencies):
+    monkeypatch.setattr(state_store, "USER_DB_PATH", tmp_path / "private.db")
+    store = CityStore(tmp_path / "city.db")
+    invalid = store.create_task("alice", "market_analyst", "Invalid dependencies",
+                                {"operation": "collect_markets"})
+    valid = store.create_task("alice", "developer", "Prepare questions",
+                              {"operation": "daily_questions"})
+    with store.db() as db:
+        db.execute("UPDATE city_tasks SET depends_on_json=?,priority=10 WHERE id=?",
+                   (invalid_dependencies, invalid["id"]))
+
+    claimed = store.claim_next()
+    assert claimed["id"] == valid["id"]
+    detail = store.task_detail("alice", invalid["id"])
+    assert detail["status"] == "cancelled"
+    assert "Dépendances" in detail["error"]
+
+
 def test_connection_interruption_retries_only_once(tmp_path, monkeypatch):
     from internships_project import city_coding
     from internships_project.marketdesk_city import CityError

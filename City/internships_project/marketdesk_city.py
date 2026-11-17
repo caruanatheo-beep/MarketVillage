@@ -1434,7 +1434,18 @@ class CityStore:
                     self._event(db, row, 'cancelled', str(exc))
                     self._refresh_workflow(db, row['workflow_id'])
                     continue
-                dependencies = json.loads(row["depends_on_json"] or "[]")
+                try:
+                    dependencies = json.loads(row["depends_on_json"] or "[]")
+                    if (not isinstance(dependencies, list) or
+                            any(not isinstance(item, str) or not item for item in dependencies)):
+                        raise ValueError("invalid dependencies")
+                except (ValueError, TypeError):
+                    message = "Dépendances de mission invalides : recrée la mission depuis le Desk Manager."
+                    db.execute("UPDATE city_tasks SET status='cancelled',finished_at=?,error=? WHERE id=?",
+                               (_utc(), message, row['id']))
+                    self._event(db, row, 'cancelled', message)
+                    self._refresh_workflow(db, row['workflow_id'])
+                    continue
                 if dependencies:
                     marks = ",".join("?" for _ in dependencies)
                     predecessors = db.execute(f"SELECT id,status FROM city_tasks WHERE username=? AND id IN ({marks})",
