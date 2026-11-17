@@ -292,7 +292,7 @@ SOURCE_CONNECTOR_VERSIONS = {
     **{name: 4 for name in GREENHOUSE.values()},
     **{name: 2 for name in LEVER.values()},
     **{name: 2 for name in SMARTRECRUITERS.values()},
-    **{name: 4 for name in ORACLE_CAREER_BOARDS},
+    **{name: 5 for name in ORACLE_CAREER_BOARDS},
     "Banque de France": 2,
     "AXA": 2,
     "BBVA": 6,
@@ -4554,7 +4554,7 @@ def _oracle_jobs(board_name: str, board: tuple[str, str, str]) -> list[Opportuni
     )
     site_number = site_number_match.group(1) if site_number_match else site
 
-    def requisitions(offset: int) -> tuple[list[dict], int]:
+    def requisitions(offset: int) -> tuple[list[dict], int, int]:
         response = session.get(endpoint, params={
             "onlyData": "true", "expand": "requisitionList",
             "finder": f"findReqs;siteNumber={site_number},limit=100,offset={offset}",
@@ -4569,19 +4569,26 @@ def _oracle_jobs(board_name: str, board: tuple[str, str, str]) -> list[Opportuni
             rows = payload.get("requisitionList") or []
         total = int((items[0].get("TotalJobsCount") if items and isinstance(items[0], dict) else 0)
                     or payload.get("TotalJobsCount") or len(rows))
-        return rows, total
+        metadata = items[0] if items and isinstance(items[0], dict) else payload
+        # Oracle can hide closed rows inside a page; Offset/Limit still count those slots.
+        page_size = metadata.get("Limit")
+        if isinstance(page_size, int) and page_size > 0:
+            if metadata.get("Offset", offset) != offset:
+                raise ValueError("Position de page Oracle incohérente")
+            return rows, total, offset + page_size
+        return rows, total, offset + len(rows)
 
     candidates: dict[str, tuple[Opportunity, str]] = {}
     offset, total = 0, 0
     seen: set[str] = set()
     while True:
-        rows, reported_total = requisitions(offset)
+        rows, reported_total, next_offset = requisitions(offset)
         total = max(total, reported_total)
         identities = {str(row.get("Id") or row.get("RequisitionId") or "") for row in rows}
         if rows and (not identities - seen or "" in identities):
             raise ValueError("Pagination Oracle sans progression")
         seen.update(identities)
-        if not rows and len(seen) < total:
+        if not rows and offset < total and next_offset <= offset:
             raise ValueError("Catalogue Oracle incomplet")
         for row in rows:
             title = str(row.get("Title") or row.get("JobTitle") or "").strip()
@@ -4611,9 +4618,9 @@ def _oracle_jobs(board_name: str, board: tuple[str, str, str]) -> list[Opportuni
             if job:
                 job = replace(job, description=description_text[:12_000])
                 candidates[job_id] = (replace(job, source=f"Site carrière · Oracle · {board_name}"), description_text)
-        if not rows or len(seen) >= total:
+        if next_offset >= total:
             break
-        offset += len(rows)
+        offset = next_offset
 
     def enrich(item: tuple[str, tuple[Opportunity, str]]) -> Opportunity:
         job_id, (job, existing_description) = item

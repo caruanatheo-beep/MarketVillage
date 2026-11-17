@@ -86,6 +86,31 @@ def test_axa_collects_pages_beyond_ten(monkeypatch):
     assert pages == list(range(1, 12))
 
 
+def test_oracle_uses_declared_page_slots_when_closed_rows_are_hidden(monkeypatch):
+    offsets = []
+    class Session:
+        headers = {}
+        def get(self, url, **kwargs):
+            if '/hcmUI/' in url:
+                return response(text='{"siteNumber":"CX"}')
+            if url.endswith('recruitingCEJobRequisitionDetails'):
+                return response({'ExternalDescription': 'Fixed income sales internship.'})
+            offset = int(re.search(r'offset=(\d+)', kwargs['params']['finder'])[1])
+            offsets.append(offset)
+            rows = [{'Id': str(i), 'Title': 'Sales Intern' if i == 304 else 'Accountant',
+                     'PrimaryLocation': 'London', 'WorkerType': 'Internship'}
+                    for i in range(offset, min(305, offset+100)) if i % 100 != 1]
+            # The second page has only closed rows; the provider still advances it.
+            if offset == 100:
+                rows = []
+            return response({'items': [{'TotalJobsCount': 305, 'Limit': 100,
+                'Offset': offset, 'requisitionList': rows}]})
+    monkeypatch.setattr(m.requests, 'Session', Session)
+    found = m._oracle_jobs('BNY', m.ORACLE_CAREER_BOARDS['BNY'])
+    assert offsets == [0, 100, 200, 300]
+    assert len(found) == 1 and found[0].url.endswith('/job/304/')
+
+
 @pytest.mark.parametrize('source', ['smart', 'bdf', 'oracle', 'axa'])
 def test_repeated_pages_fail_instead_of_silently_reporting_complete(monkeypatch, source):
     if source == 'smart':
