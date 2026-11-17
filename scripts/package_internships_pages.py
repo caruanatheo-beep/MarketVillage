@@ -44,6 +44,7 @@ FILES = {
     "tests/test_internships_reliability.py": "tests/test_internships_reliability.py",
     "tests/test_internships_offer_metadata.py": "tests/test_internships_offer_metadata.py",
     "tests/test_workday_pagination.py": "tests/test_workday_pagination.py",
+    "tests/test_internships_collection_limits.py": "tests/test_internships_collection_limits.py",
     "deploy/github-pages/requirements.txt": "deploy/github-pages/requirements.txt",
     "deploy/github-pages/site/index.html": "deploy/github-pages/site/index.html",
     "deploy/github-pages/site/site.css": "deploy/github-pages/site/site.css",

@@ -291,7 +291,10 @@ SOURCE_CONNECTOR_VERSIONS = {
     **{name: 6 for name in WORKDAY},
     **{name: 4 for name in GREENHOUSE.values()},
     **{name: 2 for name in LEVER.values()},
-    **{name: 3 for name in ORACLE_CAREER_BOARDS},
+    **{name: 2 for name in SMARTRECRUITERS.values()},
+    **{name: 4 for name in ORACLE_CAREER_BOARDS},
+    "Banque de France": 2,
+    "AXA": 2,
     "BBVA": 6,
     "ING": 6,
     "Optiver": 3,
@@ -1285,13 +1288,22 @@ def is_trusted_offer_url(url: str) -> bool:
 def _smart_jobs(slug: str, company: str) -> list[Opportunity]:
     url = f"https://api.smartrecruiters.com/v1/companies/{slug}/postings"
     jobs: list[Opportunity] = []
-    for offset in range(0, 1000, 100):
+    offset = 0
+    seen: set[str] = set()
+    while True:
         response = requests.get(
             url, params={"limit": 100, "offset": offset, "destination": "PUBLIC"}, timeout=(8, 20)
         )
         response.raise_for_status()
         payload = response.json()
         rows = payload.get("content") or []
+        identities = {str(item.get("id") or "") for item in rows}
+        total = payload.get("totalFound")
+        if rows and (not identities - seen or "" in identities):
+            raise ValueError("Pagination SmartRecruiters sans progression")
+        seen.update(identities)
+        if not rows and isinstance(total, int) and len(seen) < total:
+            raise ValueError("Catalogue SmartRecruiters incomplet")
         for item in rows:
             location = item.get("location") or {}
             employment = (item.get("typeOfEmployment") or {}).get("label", "")
@@ -1303,8 +1315,9 @@ def _smart_jobs(slug: str, company: str) -> list[Opportunity]:
             )
             if job:
                 jobs.append(replace(job, source=f"SmartRecruiters Â· {company}"))
-        if len(rows) < 100 or offset + 100 >= int(payload.get("totalFound") or 0):
+        if not rows or isinstance(total, int) and len(seen) >= total:
             break
+        offset += len(rows)
     def enrich(job: Opportunity) -> Opportunity:
         reused = _cached_detail(job)
         if reused and reused.description:
@@ -2493,9 +2506,9 @@ def _axa_jobs() -> list[Opportunity]:
     params = {"acm": "ALL", "alrpm": "ALL", "ascf": '[{"key":"custom_fields.LocalContractType","value":"Stage"}]'}
     candidates: dict[str, tuple[str, str, str]] = {}
     pages = 1
-    for number in range(1, 11):
-        if number > pages:
-            break
+    number = 1
+    seen: set[str] = set()
+    while number <= pages:
         response = requests.get(listing, params={**params, **({"p": number} if number > 1 else {})}, timeout=(8, 25))
         response.raise_for_status()
         body = response.text
@@ -2504,7 +2517,11 @@ def _axa_jobs() -> list[Opportunity]:
             raise ValueError("AXA : aucune fiche de stage dans la liste publique")
         total = re.search(r'class="pagination-current"[^>]*max="(\d+)"', body)
         if total:
-            pages = min(10, int(total.group(1)))
+            pages = max(pages, int(total.group(1)))
+        links = {anchor.group() for anchor in anchors}
+        if not links - seen:
+            raise ValueError("Pagination AXA sans progression")
+        seen.update(links)
         for index, anchor in enumerate(anchors):
             tag = anchor.group()
             href = re.search(r'\bhref="([^"]+)"', tag)
@@ -2525,6 +2542,7 @@ def _axa_jobs() -> list[Opportunity]:
             if field("contract").casefold() != "stage" or not field("location"):
                 continue
             candidates[url] = (title, field("location"), field("entity") or "AXA")
+        number += 1
     detail_errors: list[requests.RequestException] = []
     def load(pair: tuple[str, tuple[str, str, str]]) -> Opportunity | None:
         url, (title, location, company) = pair
@@ -4470,21 +4488,31 @@ def _banque_de_france_jobs(_slug: str = "", _company: str = "") -> list[Opportun
     candidates: dict[str, tuple[str, str, str]] = {}
     detail_errors: list[Exception] = []
     for term in ("march", "quant", "trading", "ALM"):
-        for offset in range(0, 200, 20):
+        offset, total = 0, 0
+        seen: set[str] = set()
+        while True:
             response = requests.post(base + "/jobs", json={
                 "appliedFacets": {}, "limit": 20, "offset": offset, "searchText": term,
             }, timeout=(8, 20))
             response.raise_for_status()
             payload = response.json()
             rows = payload.get("jobPostings") or []
+            total = max(total, int(payload.get("total") or 0))
+            identities = {str(item.get("externalPath") or "") for item in rows}
+            if rows and (not identities - seen or "" in identities):
+                raise ValueError("Pagination Banque de France sans progression")
+            seen.update(identities)
+            if not rows and len(seen) < total:
+                raise ValueError("Catalogue Banque de France incomplet")
             for item in rows:
                 path = str(item.get("externalPath") or "")
                 title = str(item.get("title") or "")
                 if path.startswith("/job/") and (_market_relevant(title) or "analyste des marchés" in title.casefold()):
                     candidates[path] = (title, str(item.get("locationsText") or ""),
                                         str(item.get("postedOn") or ""))
-            if len(rows) < 20 or offset + 20 >= int(payload.get("total") or 0):
+            if not rows or total and len(seen) >= total:
                 break
+            offset += len(rows)
 
     def load(pair: tuple[str, tuple[str, str, str]]) -> Opportunity | None:
         path, (title, location, posted_on) = pair
@@ -4544,8 +4572,17 @@ def _oracle_jobs(board_name: str, board: tuple[str, str, str]) -> list[Opportuni
         return rows, total
 
     candidates: dict[str, tuple[Opportunity, str]] = {}
-    for offset in range(0, 3000, 100):
-        rows, total = requisitions(offset)
+    offset, total = 0, 0
+    seen: set[str] = set()
+    while True:
+        rows, reported_total = requisitions(offset)
+        total = max(total, reported_total)
+        identities = {str(row.get("Id") or row.get("RequisitionId") or "") for row in rows}
+        if rows and (not identities - seen or "" in identities):
+            raise ValueError("Pagination Oracle sans progression")
+        seen.update(identities)
+        if not rows and len(seen) < total:
+            raise ValueError("Catalogue Oracle incomplet")
         for row in rows:
             title = str(row.get("Title") or row.get("JobTitle") or "").strip()
             location = str(row.get("PrimaryLocation") or row.get("Location") or "").strip()
@@ -4574,8 +4611,9 @@ def _oracle_jobs(board_name: str, board: tuple[str, str, str]) -> list[Opportuni
             if job:
                 job = replace(job, description=description_text[:12_000])
                 candidates[job_id] = (replace(job, source=f"Site carrière · Oracle · {board_name}"), description_text)
-        if not rows or offset + len(rows) >= total:
+        if not rows or len(seen) >= total:
             break
+        offset += len(rows)
 
     def enrich(item: tuple[str, tuple[Opportunity, str]]) -> Opportunity:
         job_id, (job, existing_description) = item
@@ -4891,7 +4929,8 @@ def _eligible_offer(job: Opportunity) -> bool:
         pass
     if job.employment is not None:
         kind = (_tp_icap_kind(job.title, job.employment, job.description) if job.company == "TP ICAP" else
-                _factset_kind(job.title, job.employment, job.description) if job.company == "FactSet" else
+                _factset_kind(job.title, job.employment, job.description)
+                if job.company == "FactSet" or job.company in FINANCIAL_DATA_EMPLOYERS else
                 _morgan_stanley_kind(job.title, job.employment, job.description)
                 if job.company == "Morgan Stanley" else _kind(job.title, job.employment))
         if kind != job.kind:
@@ -4908,7 +4947,8 @@ def _eligible_offer(job: Opportunity) -> bool:
                  _murex_relevant(job.title, job.description) if job.company == "Murex" else
                  _pimco_relevant(job.title, job.description) if job.company == "PIMCO" else
                  _market_relevant_with_context(job.title, job.description)
-                 or job.company == "FactSet" and _factset_client_solutions(job.title))
+                 or (job.company == "FactSet" or job.company in FINANCIAL_DATA_EMPLOYERS)
+                 and _factset_client_solutions(job.title))
             and (job.source == "JobTeaser · sitemap" or _plausible_location(job.location)))
 
 

@@ -62,7 +62,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r deploy/github-pages/requirements.txt pytest
       - name: Check public export boundaries
-        run: python -m pytest -q tests/test_pages_export.py tests/test_pages_email.py tests/test_workday_pagination.py tests/test_internships_publication_sort.py tests/test_internships_source_browser_repair.py tests/test_internships_graduate_coverage.py tests/test_internships_refresh_window.py tests/test_internships_deduplication.py tests/test_internships_location_display.py tests/test_internships_candriam_bny.py tests/test_internships_commerz_standard.py tests/test_internships_reliability.py tests/test_internships_offer_metadata.py tests/test_internships_recommended_sources.py tests/test_internships_nomura.py tests/test_internships_rbc.py tests/test_internships_pimco.py tests/test_internships_murex.py
+        run: python -m pytest -q tests/test_pages_export.py tests/test_pages_email.py tests/test_workday_pagination.py tests/test_internships_publication_sort.py tests/test_internships_source_browser_repair.py tests/test_internships_graduate_coverage.py tests/test_internships_refresh_window.py tests/test_internships_deduplication.py tests/test_internships_location_display.py tests/test_internships_candriam_bny.py tests/test_internships_commerz_standard.py tests/test_internships_reliability.py tests/test_internships_offer_metadata.py tests/test_internships_recommended_sources.py tests/test_internships_nomura.py tests/test_internships_rbc.py tests/test_internships_pimco.py tests/test_internships_murex.py tests/test_internships_collection_limits.py
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .collection-cache
