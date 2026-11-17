@@ -83,7 +83,7 @@ def test_source_card_category_pending_publication_and_verified_official_logo():
     source, = [s for s in public_source_catalog() if s["name"] == COMPANY]
     assert source["category"] == "Banques & services titres"
     assert source["url"] == CONFIG[0] and len(source["feeds"]) == 1
-    assert source["added_on"] == ""  # Actual publication belongs to the controller.
+    assert source["added_on"] == "2026-11-17"  # Verified first public release.
     assert SOURCE_COVERAGE[COMPANY].status == "connected"
     path = jobs.COMPANY_LOGO_DIR / (jobs.COMPANY_ICON_HOSTS["nomura"] + ".png")
     assert 0 < path.stat().st_size <= 512 * 1024
@@ -100,6 +100,14 @@ def test_live_fields_dates_language_visa_duration_and_duplicate_tiles(serve):
     assert job.description == TEXT and jobs.is_trusted_offer_url(job.url)
     assert calls == [CONFIG[0], URL] and jobs._eligible_offer(job)
     assert len(jobs._deduplicate_opportunities([job, job])) == 1
+
+
+def test_summer_internship_is_not_a_graduate_job_because_of_graduation_year(serve):
+    title='2027 Global Markets Summer Internship - London (for 2028 Graduates)'
+    serve(board=listing(links=[(URL,title)]),
+          offer=detail(title=title,programme='Summer internship',location='London'))
+    job, = collect()
+    assert job.kind == 'Stage'
 
 
 @pytest.mark.parametrize("status", [403, 429, 500])

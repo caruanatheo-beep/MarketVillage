@@ -43,7 +43,7 @@ def test_registry_source_card_category_date_and_official_png():
         (jobs._workday_jobs, (COMPANY, BOARD))]
     source, = [s for s in public_source_catalog() if s["name"] == COMPANY]
     assert source == {"name": COMPANY, "category": "Information financière & relation clients",
-        "url": f"https://{BOARD[0]}/en-US/{BOARD[2]}", "added_on": "2026-11-16",
+        "url": f"https://{BOARD[0]}/en-US/{BOARD[2]}", "added_on": "2026-11-17",
         "feeds": [{"name": COMPANY, "url": f"https://{BOARD[0]}/en-US/{BOARD[2]}"}]}
     assert SOURCE_COVERAGE[COMPANY].status == "connected"
     path = jobs.COMPANY_LOGO_DIR / (jobs.COMPANY_ICON_HOSTS["murex"] + ".png")

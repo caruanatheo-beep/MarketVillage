@@ -34,6 +34,9 @@ SMARTRECRUITERS = {
     "Financeactive": "Finance Active",
 }
 GREENHOUSE = {
+    "xtxmarketstechnologies": "XTX Markets",
+    "wehrtyou": "Hudson River Trading",
+    "marketaxesscorporation": "MarketAxess",
     "jumptrading": "Jump Trading",
     "fiveringsllc": "Five Rings",
     "drweng": "DRW",
@@ -54,6 +57,9 @@ LEVER = {
 }
 ASHBY = {}
 WORKDAY = {
+    "S&P Global Market Intelligence": ("spgi.wd5.myworkdayjobs.com", "spgi", "SPGI_Careers"),
+    "LSEG": ("lseg.wd3.myworkdayjobs.com", "lseg", "Careers"),
+    "Mizuho": ("mizuho.wd1.myworkdayjobs.com", "mizuho", "mizuhoamericas"),
     "RBC Capital Markets": ("rbc.wd3.myworkdayjobs.com", "rbc", "RBCEARLYTALENT1"),
     "Murex": ("murex.wd3.myworkdayjobs.com", "murex", "MurexCareerPage1"),
     "PIMCO": ("pimco.wd1.myworkdayjobs.com", "pimco", "pimco-careers"),
@@ -133,6 +139,12 @@ CAREER_PORTALS = {
     "BNY": "https://eofe.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/BNY-Careers/jobs",
 }
 CAREER_LISTINGS = {
+    "BlackRock": ("https://careers.blackrock.com/category/students-and-graduates-jobs/45831/9022304/1",
+                  "careers.blackrock.com", "/job/"),
+    "SMBC": ("https://careers.smbcgroup.com/search/?q=&sortColumn=referencedate&sortDirection=desc",
+             "careers.smbcgroup.com", "/smbc/job/"),
+    "Intesa Sanpaolo IMI CIB": ("https://jobs.intesasanpaolo.com/search/?q=IMI+CIB&sortColumn=referencedate&sortDirection=desc",
+                              "jobs.intesasanpaolo.com", "/job/"),
     "Nomura": (
         "https://nomuracampus.tal.net/vx/lang-en-GB/mobile-0/appcentre-ext/brand-4/candidate/jobboard/vacancy/1/adv/",
         "nomuracampus.tal.net", "/vx/lang-en-GB/mobile-0/appcentre-1/brand-4/candidate/so/pm/1/pl/1/opp/"),
@@ -163,6 +175,8 @@ CAREER_LISTINGS = {
 }
 ODDO_ALTAYS_LISTING = "https://recrutement.altays-progiciels.com/oddo/en/recherche.html"
 ORACLE_CAREER_BOARDS = {
+    "Tradeweb": ("https://ecnf.fa.us2.oraclecloud.com", "CX", "Tradeweb"),
+    "Edmond de Rothschild AM": ("https://evht.fa.ocs.oraclecloud.eu", "CX_2001", "Edmond de Rothschild AM"),
     "BNY": ("https://eofe.fa.us2.oraclecloud.com", "BNY-Careers", "BNY"),
     "Lazard Student Careers": (
         "https://icbpjb.fa.ocs.oraclecloud.com",
@@ -333,6 +347,24 @@ JOBTEASER_CITIES = {
 # Brand icons are requested from the employer's own site. If an icon is absent,
 # the card keeps its initials; no third-party logo service receives the visit.
 COMPANY_ICON_HOSTS = {
+    "ostrum": "www.ostrum.com",
+    "labanquepostaleam": "www.lbpam.com",
+    'spglobalmarketintelligence': 'www.spglobal.com',
+    'lseg': 'www.lseg.com',
+    'mizuho': 'www.mizuhogroup.com',
+    'tradeweb': 'www.tradeweb.com',
+    'edmondderothschildam': 'www.edmond-de-rothschild.com',
+    'xtxmarkets': 'www.xtxmarkets.com',
+    'hudsonrivertrading': 'www.hudsonrivertrading.com',
+    'marketaxess': 'www.marketaxess.com',
+    'blackrock': 'careers.blackrock.com',
+    'smbc': 'www.smbcgroup.com',
+    'intesasanpaoloimicib': 'group.intesasanpaolo.com',
+    'mirova': 'www.mirova.com',
+    'cpram': 'cpram.com',
+    'icedataservices': 'www.ice.com',
+    'marketsecurities': 'www.market-securities.com',
+
     "nomura": "www.nomura.com",
     "rbccapitalmarkets": "jobs.rbc.com",
     "murex": "www.murex.com",
@@ -1161,13 +1193,16 @@ def _rbc_relevant(title: str, context: str = "", *, candidate: bool = False) -> 
                           r"derivatives|currencies|institutional clients|repo)\b", context, re.I))
 
 
+FINANCIAL_DATA_EMPLOYERS = frozenset({'S&P Global Market Intelligence','LSEG','Tradeweb','ICE Data Services','MarketAxess'})
+
+
 def _opportunity(title: str, company: str, location: str, employment: str,
                  url: str, published: str, start_period: str = "",
                  role_context: str = "", *, defer_junior_context: bool = False) -> Opportunity | None:
     title = title.strip()
     location = _clean_job_location(location, title)
     kind = (_tp_icap_kind(title, employment, role_context) if company == "TP ICAP" else
-            _factset_kind(title, employment, role_context) if company == "FactSet" else
+            _factset_kind(title, employment, role_context) if company == "FactSet" or company in FINANCIAL_DATA_EMPLOYERS else
             _morgan_stanley_kind(title, employment, role_context)
             if company == "Morgan Stanley" else _kind(title, employment))
     market = (_rbc_relevant(title, role_context, candidate=defer_junior_context)
@@ -1176,10 +1211,13 @@ def _opportunity(title: str, company: str, location: str, employment: str,
               if company == "Murex" else
               _pimco_relevant(title, role_context, candidate=defer_junior_context)
               if company == "PIMCO" else _market_relevant_with_context(title, role_context))
-    if company == "FactSet" and _factset_client_solutions(title):
+    if (company == "FactSet" or company in FINANCIAL_DATA_EMPLOYERS) and _factset_client_solutions(title):
         market = True
         if defer_junior_context and not role_context and re.search(r"\bassociate\b", title, re.I):
             kind = kind or "Graduate"  # Candidate only; the live detail must confirm early careers.
+    if company == 'S&P Global Market Intelligence' and not defer_junior_context:
+        if not re.search(r'market intelligence',role_context,re.I):
+            return None
     pending_junior = defer_junior_context and not role_context and _junior_analyst(title) and _market_candidate(title)
     if (not kind or not (market or pending_junior) or _excluded_employer(company) or not _plausible_location(location)
             or kind == "Graduate" and _junior_analyst(title) and _experienced_junior(role_context)):
@@ -1195,7 +1233,7 @@ def _opportunity(title: str, company: str, location: str, employment: str,
     family = _family(title, role_context)
     if company == "PIMCO" and _pimco_client_role(title):
         family = "Asset Management" if re.search(r"\bproduct\b", title, re.I) else "Client Service / Financial Solutions"
-    elif company == "Murex" or company == "FactSet" and _factset_client_solutions(title):
+    elif company == "Murex" or (company == "FactSet" or company in FINANCIAL_DATA_EMPLOYERS) and _factset_client_solutions(title):
         family = "Client Service / Financial Solutions"
     elif company == "RBC Capital Markets" and re.search(r"\borigination\b", title, re.I):
         family = "Capital Markets"
@@ -1229,6 +1267,11 @@ def is_trusted_offer_url(url: str) -> bool:
         "careers.aqr.com", "bloomberg.avature.net", "careers.bankofamerica.com",
         "morganstanley.eightfold.ai", "nomuracampus.tal.net",
         *(board[0] for board in WORKDAY.values()),
+        *(config[1] for config in CAREER_LISTINGS.values()),
+        *(urlparse(board[0]).hostname for board in ORACLE_CAREER_BOARDS.values()),
+        "www.hudsonrivertrading.com", "www.marketaxess.com",
+        "careers.ice.com", "marketsecurities.bamboohr.com",
+        "www.lbpam.com",
     }
     try:
         parsed = urlparse(url)
@@ -1811,7 +1854,8 @@ def _nomura_detail(url: str, page_html: str, page: _CareerHTML,
     family = ("Sales" if job and job.family == "Risk / Support"
         and re.search(r"(?:work with|join).{0,40}\b(?:structured |fixed income )?sales team\b", description, re.I)
         else job.family if job else "")
-    return replace(job, description=description[:12_000], deadline=deadline, family=family,
+    return replace(job, kind='Stage' if re.search(r'internship',programme,re.I) else job.kind,
+        description=description[:12_000], deadline=deadline, family=family,
         source="Site carrière · Nomura") if job else None
 
 
@@ -2555,6 +2599,25 @@ def _career_page_jobs(company: str, config: tuple[str, str, str]) -> list[Opport
                         and (match := re.search(re.escape(path_prefix) + r"(\d+)-[^/]+/en-GB$", urlparse(href).path))}
                     if not total or len(identities) != int(total[1]):
                         raise ValueError(f"Catalogue {'Fidelity' if company == 'Fidelity International' else company} incomplet : pagination non vérifiée")
+                if company in {"SMBC", "Intesa Sanpaolo IMI CIB"}:
+                    for href in re.findall(r'href=["\']([^"\']+)["\']', html, re.I):
+                        candidate = urljoin(listing_url, __import__('html').unescape(href))
+                        parsed_page = urlparse(candidate)
+                        offset = dict(parse_qsl(parsed_page.query)).get('startrow', '')
+                        if (parsed_page.scheme == 'https' and parsed_page.hostname == host
+                                and parsed_page.path == urlparse(listing).path and offset.isdigit()
+                                and candidate not in visited and candidate not in listings):
+                            if int(offset) >= 2500 or len(listings) >= 100:
+                                raise ValueError('SuccessFactors pagination exceeds verified limit')
+                            listings.append(candidate)
+                if company == "BlackRock":
+                    pages = re.search(r'data-total-pages="(\d+)"', html)
+                    if not pages or not 1 <= int(pages[1]) <= 50:
+                        raise ValueError('BlackRock campus pagination requires verification')
+                    for number in range(2,int(pages[1])+1):
+                        candidate = listing.rstrip('/')+'/'+str(number)
+                        if candidate not in visited and candidate not in listings:
+                            listings.append(candidate)
                 if company == "HSBC Continental Europe":
                     total = re.search(r'jobRecordsFound:\s*parseInt\("(\d+)"\)', html)
                     per_page = re.search(r'jobRecordsPerPage:\s*parseInt\("(\d+)"\)', html)
@@ -2617,7 +2680,7 @@ def _career_page_jobs(company: str, config: tuple[str, str, str]) -> list[Opport
                     if parsed.path.rstrip("/") == path_prefix.rstrip("/") and not parsed.query:
                         continue
                     direct_links += 1
-                    market_label = _market_candidate(label) or (
+                    market_label = _market_candidate(label) or (company == "BlackRock" and bool(_kind(label,""))) or (
                         company == "Ofi Invest" and bool(re.search(
                             r"analyste\s+(?:cr[eÃ©]dit|obligataire)|fixed\s+income\s+analyst|credit\s+analyst",
                             label, re.IGNORECASE,
@@ -3656,11 +3719,144 @@ def _covea_finance_jobs(_slug: str = "", _company: str = "") -> list[Opportunity
     return _career_rss_jobs("Covéa Finance", "coveafinance-recrute.talent-soft.com", (579,))
 
 
+def _ice_data_jobs() -> list[Opportunity]:
+    """Read the public iCIMS/Jibe catalogue; never use login/application URLs."""
+    found, seen = [], set()
+    for page in range(1,101):
+        response = requests.get('https://careers.ice.com/api/jobs',
+                                params={'page':page,'limit':100},timeout=(8,25))
+        response.raise_for_status()
+        payload = response.json()
+        rows, total = payload.get('jobs'), payload.get('totalCount')
+        if not isinstance(rows,list) or type(total) is not int or total < 0:
+            raise ValueError('Invalid ICE public catalogue')
+        before = len(seen)
+        for row in rows:
+            item = row.get('data') if isinstance(row,dict) else None
+            if not isinstance(item,dict) or not re.fullmatch(r'\d+',str(item.get('slug',''))):
+                raise ValueError('Invalid ICE public posting')
+            identity = str(item['slug'])
+            if identity in seen:
+                continue
+            seen.add(identity)
+            if item.get('external') is False or item.get('applyable') is False:
+                continue
+            description = _plain_text(str(item.get('description') or ''))
+            # The group also recruits in mortgage technology and other divisions.
+            if not re.search(r'ICE Data|market data|reference data|fixed income|pricing data',description,re.I):
+                continue
+            published = str(item.get('posted_date') or '')[:10]
+            try:
+                published = date.fromisoformat(published).isoformat()
+            except ValueError:
+                published = ''
+            job = _opportunity(str(item.get('title') or ''),'ICE Data Services',
+                str(item.get('full_location') or item.get('location_name') or item.get('city') or ''),
+                str(item.get('employment_type') or ''),f'https://careers.ice.com/jobs/{identity}',
+                published,role_context=description)
+            if job:
+                found.append(replace(job,description=description[:12_000],source='Site carrière · ICE Data Services'))
+        if len(seen) >= total:
+            return found
+        if len(seen) == before:
+            raise _PartialSourceError(found,[],search_failures=1)
+    raise _PartialSourceError(found,[],search_failures=1)
+
+
+def _market_securities_jobs() -> list[Opportunity]:
+    """BambooHR exposes a public list and a separate, current vacancy detail."""
+    base = 'https://marketsecurities.bamboohr.com/careers'
+    response = requests.get(base+'/list',timeout=(8,20))
+    response.raise_for_status()
+    rows = response.json().get('result')
+    if not isinstance(rows,list):
+        raise ValueError('Invalid Market Securities catalogue')
+    found, failed = [], []
+    for row in rows:
+        if not isinstance(row,dict) or not re.fullmatch(r'\d+',str(row.get('id',''))):
+            raise ValueError('Invalid Market Securities posting')
+        title = str(row.get('jobOpeningName') or '')
+        if re.search(r'referral|talent pool|spontaneous',title,re.I) or not _market_candidate(title):
+            continue
+        if not _kind(title,str(row.get('employmentStatusLabel') or '')):
+            continue
+        url = base+'/'+str(row['id'])
+        try:
+            detail = requests.get(url+'/detail',timeout=(8,20))
+            if detail.status_code in (404,410):
+                continue
+            detail.raise_for_status()
+            info = (detail.json().get('result') or {}).get('jobOpening')
+            if (not isinstance(info,dict) or info.get('jobOpeningShareUrl') != url
+                    or not info.get('jobOpeningName') or not info.get('description')):
+                raise ValueError('Incomplete Market Securities detail')
+            if info.get('jobOpeningStatus') != 'Open':
+                continue
+            place = info.get('location') or {}
+            location = ', '.join(str(place[k]) for k in ('city','state','addressCountry') if place.get(k))
+            description = _plain_text(str(info['description']))
+            job = _opportunity(str(info['jobOpeningName']),'Market Securities',location,
+                str(info.get('employmentStatusLabel') or ''),url,str(info.get('datePosted') or ''),
+                role_context=description)
+            if job:
+                found.append(replace(job,description=description[:12_000],source='Site carrière · Market Securities'))
+        except (requests.RequestException,ValueError,TypeError,AttributeError):
+            failed.append(url)
+    if failed:
+        raise _PartialSourceError(found,failed)
+    return found
+
+
+def _lbpam_jobs() -> list[Opportunity]:
+    """Use the same public Minotore catalogue as the employer's jobs screen."""
+    response = requests.post('https://www.lbpam.com/mapi/PageContentAPI/getRelatedContentByModuleAndContext',
+        json={'context':{'countryCode':'WORLD','languageCode':'fr','userProfileName':'ALL'},
+              'moduleKeyword':'offer','nbrOfElements':-1},timeout=(8,25))
+    response.raise_for_status()
+    rows = response.json().get('pages')
+    if not isinstance(rows,list):
+        raise ValueError('Invalid LBP AM public catalogue')
+    found = []
+    for row in rows:
+        if not isinstance(row,dict) or row.get('module') != 'offer':
+            raise ValueError('Invalid LBP AM public posting')
+        seo = row.get('seoData') or {}
+        url = str(seo.get('canonical') or '')
+        if row.get('moduleLandingPage') or not url.startswith('https://www.lbpam.com/fr/carrieres/offre/') or not is_trusted_offer_url(url):
+            continue
+        tags = row.get('tags') or []
+        contract = ' '.join(tag[len('CARRIERE_CONTRAT_'):].replace('_',' ') for tag in tags if isinstance(tag,str) and tag.startswith('CARRIERE_CONTRAT_'))
+        location = ', '.join(tag[len('CARRIERE_LOCATION_'):].replace('_',' ') for tag in tags if isinstance(tag,str) and tag.startswith('CARRIERE_LOCATION_'))
+        title, description = str(seo.get('title') or ''), _plain_text(str(seo.get('description') or ''))
+        if not title or not description or not location or not contract:
+            raise ValueError('Incomplete LBP AM public posting')
+        published = ''
+        stamp = row.get('publishingDate')
+        if isinstance(stamp,(int,float)) and not isinstance(stamp,bool):
+            published = datetime.fromtimestamp(stamp/1000,timezone.utc).date().isoformat()
+            if published > datetime.now(timezone.utc).date().isoformat():
+                continue
+        job = _opportunity(title,'La Banque Postale AM',location,contract,url,published,role_context=description)
+        if job:
+            found.append(replace(job,description=description[:12_000],source='Site carrière · La Banque Postale AM'))
+    return found
+
+
+def _subsidiary_jobs(company: str) -> list[Opportunity]:
+    if company == 'CPR AM':
+        return [job for job in _amundi_jobs() if _canonical_company(job.company) in {'cpram','cprassetmanagement'}]
+    return _bpce_open_data_jobs('',company)
+
+
 def _bpce_open_data_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]:
     """Use the public BPCE dataset; never synthesize a direct offer URL."""
     endpoint = ("https://bpce.opendatasoft.com/api/explore/v2.1/catalog/datasets/"
                 "groupe-bpce-offres-emploi/exports/json")
-    response = requests.get(endpoint, timeout=(5, 45))
+    if _company in {'Ostrum AM','Mirova'}:
+        term = 'Ostrum' if _company == 'Ostrum AM' else 'Mirova'
+        response = requests.get(endpoint,params={'where':f'search(organization,"{term}")'},timeout=(5,45))
+    else:
+        response = requests.get(endpoint, timeout=(5, 45))
     response.raise_for_status()
     payload = response.json()
     rows = payload.get("results", []) if isinstance(payload, dict) else payload
@@ -3691,6 +3887,11 @@ def _bpce_open_data_jobs(_slug: str = "", _company: str = "") -> list[Opportunit
         if not _market_relevant(title):
             continue
         company = field(row, "organization", "entreprise", "employeur", "entite", "entite_recruteuse", "societe", "company", "brand")
+        if _company in {'Ostrum AM','Mirova'}:
+            expected = 'ostrum' if _company == 'Ostrum AM' else 'mirova'
+            if expected not in _canonical_company(company):
+                continue
+            company = _company
         description = field(row, "description", "descriptif", "description_du_poste", "mission", "missions")
         if not company:
             company = "Employeur non précisé (BPCE)"
@@ -3945,7 +4146,7 @@ def _rbc_posting_dates(info: dict, description: str) -> tuple[str, str]:
 
 
 def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) -> list[Opportunity]:
-    verified_feed = company in {"TP ICAP", "Capital Group", "FactSet", "PIMCO", "Murex", "RBC Capital Markets"}
+    verified_feed = company in {"TP ICAP", "Capital Group", "FactSet", "PIMCO", "Murex", "RBC Capital Markets", "S&P Global Market Intelligence", "LSEG", "Mizuho"}
     if company == "BBVA" and _client is None:
         # Reuse one connection: repeated parallel TLS connections to BBVA time out.
         with requests.Session() as session:
@@ -4179,7 +4380,7 @@ def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) ->
             return job
 
     selected = dict(sorted(candidates.items(), key=lambda pair: -pair[1].score)[:50])
-    if company in {"Capital Group", "FactSet", "PIMCO", "Murex", "RBC Capital Markets"}:
+    if company in {"Capital Group", "FactSet", "PIMCO", "Murex", "RBC Capital Markets", "S&P Global Market Intelligence", "LSEG", "Mizuho"}:
         selected = dict(candidates)  # Every offer needs a verified live detail.
     selected.update((path, job) for path, job in candidates.items() if _junior_analyst(job.title))
     selected = list(selected.items())
@@ -4848,6 +5049,12 @@ def _opportunity_source_tasks() -> list[tuple[str, object, tuple]]:
         ("Commerzbank", _commerzbank_jobs, ("", "")),
         ("Standard Chartered", _standard_chartered_jobs, ("", "")),
         ("BPCE Open Data", _bpce_open_data_jobs, ("", "")),
+        ("Ostrum AM", _subsidiary_jobs, ("Ostrum AM",)),
+        ("Mirova", _subsidiary_jobs, ("Mirova",)),
+        ("CPR AM", _subsidiary_jobs, ("CPR AM",)),
+        ("ICE Data Services", _ice_data_jobs, ()),
+        ("La Banque Postale AM", _lbpam_jobs, ()),
+        ("Market Securities", _market_securities_jobs, ()),
         ("JobTeaser \u00b7 sitemap", _jobteaser_jobs, ("", "")),
         ("ODDO BHF", lambda *_: _oddo_jobs(), ()),
         ("Tikehau Capital", lambda *_: _tikehau_jobs(), ()),

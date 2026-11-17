@@ -47,7 +47,7 @@ def test_registered_once_with_asset_management_card_date_and_official_png():
     source, = [source for source in public_source_catalog() if source["name"] == COMPANY]
     assert source["category"] == "Gestion d’actifs"
     assert source["url"] == f"https://{BOARD[0]}/en-US/{BOARD[2]}"
-    assert source["added_on"] == "2026-11-16"
+    assert source["added_on"] == "2026-11-17"
     assert SOURCE_COVERAGE[COMPANY].status == "connected"
     path = jobs.COMPANY_LOGO_DIR / (jobs.COMPANY_ICON_HOSTS["pimco"] + ".png")
     assert 0 < path.stat().st_size <= 512 * 1024

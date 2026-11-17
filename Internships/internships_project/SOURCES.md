@@ -273,3 +273,53 @@ now traverses both `graduate-programme-cdi` and `cdd`, reusing the isolated brow
 and pagination. Only Graduate-classified market roles are retained; failures of
 one catalogue preserve verified results and cached offers. BNP English detail
 labels for job type and location are parsed when structured metadata is missing.
+
+## Recommandations traitées — 17 novembre 2026
+
+Les connecteurs ci-dessous ont été contrôlés sur les catalogues publics réels.
+Leur ajout est daté de leur première publication, et non de la rédaction locale
+du code. Murex, PIMCO, RBC et Nomura avaient du code local mais n'étaient pas dans
+le catalogue publié au début de cette revue.
+
+| Source | Collecte utilisée |
+|---|---|
+| S&P Global Market Intelligence | Workday ; division Market Intelligence et profils débutants vérifiés dans la fiche |
+| LSEG | Workday ; catalogue complet et fiches des candidats retenus |
+| Mizuho | Workday Americas, relié au site officiel ; filtres marchés et début de carrière |
+| Murex | Workday ; consulting fonctionnel de marchés et stages |
+| PIMCO | Workday ; gestion, produits et relation clients |
+| RBC Capital Markets | Workday Early Talent ; marchés et origination obligataire |
+| Nomura | Tal.net ; contrats, dates et formulaire de candidature vérifiés |
+| XTX Markets | Greenhouse public ; aucune offre éligible lors du contrôle, source fonctionnelle |
+| Hudson River Trading | Greenhouse public ; stages quant research/trading |
+| MarketAxess | Greenhouse public ; aucune offre éligible lors du contrôle, source fonctionnelle |
+| Tradeweb | Oracle public ; stage Brokerage Sales vérifié |
+| Edmond de Rothschild AM | Oracle public ; filtres métiers et contrat existants |
+| BlackRock | Catalogue étudiant officiel et fiches JSON-LD ; pagination complète |
+| SMBC | SuccessFactors public ; pagination par startrow |
+| Intesa Sanpaolo IMI CIB | SuccessFactors, recherche du périmètre IMI CIB ; pagination complète |
+| Ostrum AM | Entrée dédiée, flux public BPCE filtré sur l'employeur Ostrum |
+| Mirova | Entrée dédiée, flux public BPCE filtré sur l'employeur Mirova |
+| CPR AM | Entrée dédiée ; seules les offres attribuées explicitement à CPR dans le flux Amundi |
+| ICE Data Services | Catalogue public iCIMS/Jibe ; périmètre données de marchés, hors mortgage technology |
+| Market Securities | BambooHR public ; fiches ouvertes, hors programmes de recommandation de candidats |
+| La Banque Postale AM | API publique Minotore utilisée par la page officielle ; type de contrat et lieu explicites |
+
+Une source accessible sans offre correspondant aux filtres reste connectée :
+elle n'est ni déclarée cassée ni retirée pour ce seul motif. Les offres de
+carrière restent prioritaires sur les agrégateurs et les doublons sont conservés
+sur leur lien employeur. Les nouveaux logos proviennent des sites officiels
+lorsqu'ils sont accessibles ; sinon l'interface conserve son repli par initiales.
+
+### Retraits des recommandations d'intégration automatique
+
+Ces retraits demandés par l'utilisateur ne signifient pas que l'employeur ne
+recrute pas. Ils évitent de relancer indéfiniment la même tentative ; une reprise
+manuelle reste possible si un nouveau flux public apparaît.
+
+| Source | Motif constaté | Lien manuel conservé |
+|---|---|---|
+| Tradition | La page officielle propose des candidatures spontanées par e-mail, sans catalogue public d'offres | https://www.tradition.com/careers/launching-your-career.aspx |
+| TSAF OTC | Site du groupe et contacts, sans flux public distinct identifié | https://www.tsaf-paris.com/ |
+| Aurel BGC | HTTP 403 sur les pages officielles Aurel/BGC ; ancien domaine de recrutement inaccessible ; aucun contournement tenté | https://www.aurel-bgc.com/ |
+| Citadel Securities | Stages pertinents visibles publiquement, mais lecture automatisée refusée par HTTP 403 et aucun flux public réutilisable vérifié | https://www.citadelsecurities.com/careers/open-opportunities/ |

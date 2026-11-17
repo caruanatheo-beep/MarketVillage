@@ -17,6 +17,12 @@ GROUPS = {
     'Business France VIE':'Business France',
 }
 EXTRA_URLS = {
+    'La Banque Postale AM':'https://www.lbpam.com/fr/carrieres/liste-des-postes',
+    'Ostrum AM':'https://recrutement.bpce.fr/offres-emploi?tax_brands=ostrum-asset-management,ostrum-asset-management-en&external=false',
+    'Mirova':'https://recrutement.natixis.com/en/our-job-offers?tax_brands=mirovaen-en,mirova-usen-en&external=false',
+    'CPR AM':'https://jobs.amundi.com/offre-de-emploi/liste-offres.aspx?LCID=1036',
+    'ICE Data Services':'https://careers.ice.com/jobs',
+    'Market Securities':'https://marketsecurities.bamboohr.com/careers',
     'AQR Capital Management': 'https://careers.aqr.com/',
     'Société Générale Careers':'https://careers.societegenerale.com/',
     'Société Générale':'https://careers.societegenerale.com/',
@@ -31,6 +37,8 @@ EXTRA_URLS = {
     'AXA':"https://recrutement.axa.fr/recherche-d%27offres",
 }
 ASSET_MANAGERS = {
+    'La Banque Postale AM',
+    'BlackRock', 'Ostrum AM', 'Mirova', 'CPR AM', 'Edmond de Rothschild AM',
     'PIMCO',
     'Fidelity International',
     'Capital Group',
@@ -40,17 +48,35 @@ ASSET_MANAGERS = {
     '21shares','WisdomTree','Amundi','Covéa Finance','Comgest','DNCA','Candriam','Groupama AM',
     'Schroders','La Française','Ofi Invest','Tikehau Capital','CFM',
 }
-TRADING = {'Jump Trading', 'Five Rings', 'DRW', 'Akuna Capital', 'Da Vinci', 'Flow Traders', 'IMC Trading', 'Jane Street', 'Kepler Cheuvreux', 'Marex', 'Maven Securities', 'Optiver', 'Squarepoint Capital', 'Statkraft', 'Susquehanna', 'TP ICAP'}
+TRADING = {'XTX Markets', 'Hudson River Trading', 'Market Securities', 'Jump Trading', 'Five Rings', 'DRW', 'Akuna Capital', 'Da Vinci', 'Flow Traders', 'IMC Trading', 'Jane Street', 'Kepler Cheuvreux', 'Marex', 'Maven Securities', 'Optiver', 'Squarepoint Capital', 'Statkraft', 'Susquehanna', 'TP ICAP'}
 OTHER = {'Finance Active','Banque de France','Business France','JobTeaser','AXA','Euronext'}
-CLIENT_SOLUTIONS = {'Bloomberg', 'FactSet', 'Murex'}
+CLIENT_SOLUTIONS = {'Bloomberg', 'FactSet', 'Murex', 'S&P Global Market Intelligence', 'LSEG', 'Tradeweb', 'ICE Data Services', 'MarketAxess'}
 
 # First live addition, not the collection date. Record new sources here;
 # leave the older baseline undated rather than inventing historical dates.
 SOURCE_ADDED_ON = {
-    'Nomura': '',  # Controller records the actual date after verified first publication.
-    'RBC Capital Markets': '2026-11-16',
-    'Murex': '2026-11-16',
-    'PIMCO': '2026-11-16',
+    'La Banque Postale AM':'2026-11-17',
+    'S&P Global Market Intelligence': '2026-11-17',
+    'LSEG': '2026-11-17',
+    'Mizuho': '2026-11-17',
+    'Tradeweb': '2026-11-17',
+    'Edmond de Rothschild AM': '2026-11-17',
+    'XTX Markets': '2026-11-17',
+    'Hudson River Trading': '2026-11-17',
+    'MarketAxess': '2026-11-17',
+    'BlackRock': '2026-11-17',
+    'SMBC': '2026-11-17',
+    'Intesa Sanpaolo IMI CIB': '2026-11-17',
+    'Ostrum AM': '2026-11-17',
+    'Mirova': '2026-11-17',
+    'CPR AM': '2026-11-17',
+    'ICE Data Services': '2026-11-17',
+    'Market Securities': '2026-11-17',
+
+    'Nomura': '2026-11-17',
+    'RBC Capital Markets': '2026-11-17',
+    'Murex': '2026-11-17',
+    'PIMCO': '2026-11-17',
     'Jump Trading': '2026-11-16',
     'Five Rings': '2026-11-16',
     'DRW': '2026-11-16',
