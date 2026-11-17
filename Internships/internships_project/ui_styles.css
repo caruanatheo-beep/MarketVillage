@@ -286,7 +286,7 @@ body, .gradio-container { background: var(--desk-bg); color: var(--desk-ink); }
 #internships-app .job-key-facts > span > span { color: #243e56; font-size: .78rem; font-weight: 500; line-height: 18px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .job-card-tags { display: flex; align-items: center; align-content: flex-start; flex-wrap: wrap; justify-content: flex-start;
-  gap: 4px 6px; min-width: 0; overflow: hidden; }
+  gap: 4px 6px; min-width: 0; overflow: visible; }
 .job-fact, .job-badge { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 7px;
   border: 1px solid #e4eaf0; border-radius: 5px; color: #596b7b; background: #fff; font-size: .7rem; font-weight: 550; }
 .job-fact.kind, .job-badge.tracked { color: var(--desk-blue-dark); background: var(--desk-blue-soft); border-color: var(--desk-blue-border); }

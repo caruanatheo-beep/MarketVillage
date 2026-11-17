@@ -85,3 +85,36 @@ def test_offer_card_wraps_contract_deadline_and_tracking_tags_on_desktop():
         for index in range(4):
             assert tags.locator(":scope > *").nth(index).is_visible()
         browser.close()
+
+
+def test_offer_card_keeps_all_wrapped_tags_visible_on_desktop():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        labels = [
+            "Stage", "Date limite : 30 juin 2027", "Vente institutionnelle",
+            "Paris", "Finance", "Candidature ouverte", "Début septembre",
+            "Équipe marchés internationaux",
+        ]
+        tags = "".join(f'<span class="job-fact">{label}</span>' for label in labels)
+        page.set_content(
+            '<main id="internships-app"><article class="internship-card" style="width:320px">'
+            '<a class="job-card-main"><span class="job-card-header">Entreprise</span>'
+            '<strong class="job-title">Stage analyste</strong>'
+            '<span class="job-key-facts"><span>Paris</span><span>Septembre 2027</span></span>'
+            f'<span class="job-card-footer"><span class="job-card-tags">{tags}</span>'
+            '<span class="job-card-provenance">Publié le 15 nov. 2026</span></span></a>'
+            '</article></main>'
+        )
+        page.add_style_tag(path=str(STYLES))
+        tag_container = page.locator(".job-card-tags")
+        assert tag_container.evaluate("element => getComputedStyle(element).overflow") == "visible"
+        children = tag_container.locator(":scope > *").evaluate_all(
+            "elements => elements.map(e => {const r=e.getBoundingClientRect();"
+            "return {top:r.top,bottom:r.bottom};})"
+        )
+        container = tag_container.bounding_box()
+        assert len({round(child["top"]) for child in children}) >= 3, children
+        assert all(child["top"] >= container["y"] for child in children), children
+        assert all(child["bottom"] <= container["y"] + container["height"] for child in children), children
+        browser.close()
