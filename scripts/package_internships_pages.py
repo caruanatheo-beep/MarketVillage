@@ -31,6 +31,7 @@ FILES = {
     "tests/test_internships_rbc.py": "tests/test_internships_rbc.py",
     "tests/test_internships_pimco.py": "tests/test_internships_pimco.py",
     "tests/test_internships_murex.py": "tests/test_internships_murex.py",
+    "tests/test_internships_tp_icap.py": "tests/test_internships_tp_icap.py",
     "tests/test_internships_refresh_window.py": "tests/test_internships_refresh_window.py",
     "tests/test_pages_email.py": "tests/test_pages_email.py",
     "tests/test_internships_publication_sort.py": "tests/test_internships_publication_sort.py",
