@@ -44,7 +44,9 @@
     <div class="freshness"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="updated"></span></div>
   </div>
   <p id="message" role="status" aria-live="polite"></p>
-  <div id="offers" class="offers" aria-label="Liste des offres"></div>
+  <div id="offers-window" role="region" aria-label="Liste des offres">
+    <div id="offers" class="offers"></div>
+  </div>
   <nav class="pagination" aria-label="Pages des offres"><button id="previous" type="button">← Précédent</button><span id="page"></span><button id="next" type="button">Suivant →</button></nav>
   </section>
   <section id="sources-view" aria-label="Sources" hidden>

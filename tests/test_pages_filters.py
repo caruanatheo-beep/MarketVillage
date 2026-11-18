@@ -141,6 +141,29 @@ def test_offer_details_align_when_one_title_wraps(screen):
     assert detail_tops[0] == pytest.approx(detail_tops[1], abs=1)
 
 
+def test_compact_offers_scroll_two_rows_on_desktop(screen):
+    page, data = screen
+    data['offers'] *= 5
+    page.evaluate('load()')
+    card = page.locator('.card').first
+    title = card.locator('h3').bounding_box()
+    employer = card.locator('.card-employer').bounding_box()
+    assert 0 <= employer['y'] - title['y'] - title['height'] <= 8
+    window = page.locator('#offers-window')
+    bottom = window.bounding_box()['y'] + window.bounding_box()['height']
+    fourth = page.locator('.card').nth(3).bounding_box()
+    assert fourth['y'] + fourth['height'] <= bottom < page.locator('.card').nth(4).bounding_box()['y']
+    window.evaluate('w => w.scrollTop = w.scrollHeight')
+    position = window.evaluate('w => w.scrollTop')
+    assert position > 0
+    page.evaluate('load()')
+    assert window.evaluate('w => w.scrollTop') == position
+    choose(page, 'family', 'Sales')
+    assert window.evaluate('w => w.scrollTop') == 0
+    page.set_viewport_size({'width': 390, 'height': 844})
+    assert window.evaluate('w => getComputedStyle(w).overflowY') == 'visible'
+
+
 @pytest.mark.parametrize('motion', ['no-preference', 'reduce'])
 def test_filter_motion_respects_user_preference_and_does_not_animate_typing(screen, motion):
     page, _ = screen
