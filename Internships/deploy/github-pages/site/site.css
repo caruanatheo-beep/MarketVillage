@@ -83,7 +83,7 @@ h2{margin:0;font-size:15px;line-height:1.4}
 .sort-options{display:inline-flex;align-items:center;gap:3px;padding:3px;border:1px solid #d7dadd;border-radius:9px;background:#fff}
 .sort-options button{border:1px solid transparent;background:transparent;color:#4b5056;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:550;line-height:18px;white-space:nowrap;box-shadow:none}
 .sort-options button:hover{background:#f0f1f3;color:#30343a}
-.sort-options button[aria-pressed="true"]{background:#30343a;border-color:#30343a;color:#fff;font-weight:700}
+.sort-options button[aria-pressed="true"]{background:#e5e7ea;border-color:#d1d5d9;color:#30343a;font-weight:700}
 #message{color:var(--muted);font-size:13px;margin:10px 0}
 #message:empty{display:none}
 .offers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
