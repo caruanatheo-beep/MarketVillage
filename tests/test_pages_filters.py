@@ -152,7 +152,12 @@ def test_offer_cards_keep_the_same_height_with_long_fields(screen, width):
     location = cards.last.locator('.location')
     assert location.evaluate('el => el.scrollWidth > el.clientWidth && el.clientWidth > 0')
     assert location.get_attribute('title') == locations
-    assert cards.last.locator('.start').evaluate('el => el.getBoundingClientRect().right <= el.closest(".card").getBoundingClientRect().right')
+    assert cards.last.locator('.fact-start').evaluate('''start => {
+        const date = start.getBoundingClientRect();
+        const location = start.previousElementSibling.getBoundingClientRect();
+        const card = start.closest('.card').getBoundingClientRect();
+        return date.right <= card.right && Math.abs(date.top - location.top) <= 1;
+    }''')
     facts = cards.first.locator('.fact').all_inner_texts()
     assert [text.replace('\xa0', ' ').strip() for text in facts] == ['Paris', 'Début : 2027-04']
 

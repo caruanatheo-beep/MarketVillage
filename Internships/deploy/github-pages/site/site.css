@@ -136,7 +136,7 @@ h2{margin:0;font-size:15px;line-height:1.4}
 .card h3{align-self:start;font-size:16px;font-weight:650;line-height:22px;block-size:2lh;letter-spacing:-.015em;margin:8px 0 11px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
 .facts{align-self:start;display:flex;align-items:center;gap:15px;font-size:13px;line-height:18px;font-weight:550;color:#364a5c}
 .fact{display:inline-flex;align-items:center;gap:5px;min-width:0}
-.fact-start{flex-shrink:0;max-width:52%;padding-left:12px;border-left:1px solid #d4dfe5}
+.fact-start{flex-shrink:0;max-width:56%;padding-left:12px;border-left:1px solid #d4dfe5}
 .fact-label{font-weight:450;color:var(--muted)}
 .card-team>span,.fact>span,.date{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .facts .icon{width:14px;height:14px}
@@ -151,10 +151,9 @@ h2{margin:0;font-size:15px;line-height:1.4}
   .date{grid-column:2;text-align:left}
 }
 @container (max-width:325px){
-  .facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 9px}
-  .kind{justify-self:start}
-  .fact-location{grid-column:2}
-  .fact-start{grid-column:2;max-width:100%;padding-left:0;border-left:0}
+  .facts{gap:6px}
+  .kind{padding-inline:5px}
+  .fact-start{padding-left:5px}
 }
 .pagination{display:flex;align-items:center;justify-content:center;gap:24px;margin:24px 0;font-size:12px;color:var(--muted)}
 .pagination button{font-size:12px;padding:10px 16px}
