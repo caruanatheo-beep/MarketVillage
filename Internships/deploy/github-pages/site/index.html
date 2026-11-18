@@ -80,18 +80,26 @@
 <template id="source-template"><article class="source-card"><a class="source-link" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"><span class="logo"><img alt=""><span class="initials" aria-hidden="true"></span></span><div class="source-card-copy"><h3></h3><span class="source-type"></span></div><span class="source-arrow" aria-hidden="true">↗</span></a><details class="source-feeds"><summary></summary><ul></ul></details></article></template>
 <template id="offer-template">
   <a class="card" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">
-    <div class="card-heading">
-      <h3></h3>
-      <span class="arrow" aria-hidden="true">&#8599;</span>
-    </div>
     <div class="card-employer">
       <span class="logo"><img alt="" loading="lazy"><span class="initials" aria-hidden="true"></span></span>
       <div class="card-team">
         <span class="company"></span>
-        <div class="card-discipline"><span class="kind"></span><span class="family"></span></div>
+        <span class="family"></span>
       </div>
+      <span class="date"></span>
     </div>
-    <div class="facts"><div><small><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>Lieu</small><span class="location"></span></div><div><small><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 11h18"/></svg>Début</small><span class="start"></span></div><span class="date"></span></div>
+    <h3></h3>
+    <div class="facts">
+      <span class="kind"></span>
+      <span class="fact">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+        <span class="location"></span>
+      </span>
+      <span class="fact">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 11h18"/></svg>
+        <span>Début&nbsp;: <span class="start"></span></span>
+      </span>
+    </div>
   </a>
 </template>
 </body></html>

@@ -124,21 +124,26 @@ def test_reloading_data_preserves_selection_or_falls_back_when_removed(screen):
     assert page.locator('.card h3').inner_text()=='Portfolio Graduate'
 
 
-def test_offer_details_align_when_one_title_wraps(screen):
+def test_offer_details_align_within_each_pair_of_titles(screen):
     page, data = screen
-    data['offers'][0]['title'] = (
+    long_title = (
         'Assistant produits financiers et coordination internationale en gestion d’actifs '
         'pour les clients institutionnels européens'
     )
+    short, long = data['offers'][0], dict(data['offers'][1], title=long_title)
+    data['offers'] = [short, long, short, short, long, long]
     page.evaluate('load()')
-    heights = page.locator('.card h3').evaluate_all(
-        '(titles) => titles.map(title => title.getBoundingClientRect().height)'
-    )
-    assert heights[0] > heights[1]
-    detail_tops = page.locator('.card .facts').evaluate_all(
-        '(details) => details.map(detail => detail.getBoundingClientRect().top)'
-    )
-    assert detail_tops[0] == pytest.approx(detail_tops[1], abs=1)
+    cards = page.locator('.card')
+    heights = cards.evaluate_all('(cards) => cards.map(card => card.offsetHeight)')
+    assert heights[0] == heights[1] == heights[4] == heights[5]
+    assert heights[2] == heights[3] < heights[0]
+    for selector in ('.card-employer', 'h3', '.facts'):
+        tops = cards.locator(selector).evaluate_all(
+            '(items) => items.map(item => item.getBoundingClientRect().top)'
+        )
+        assert tops[::2] == pytest.approx(tops[1::2], abs=1)
+    facts = cards.first.locator('.fact').all_inner_texts()
+    assert [text.replace('\xa0', ' ').strip() for text in facts] == ['Paris', 'Début : 2027-04']
 
 
 @pytest.mark.parametrize('motion', ['no-preference', 'reduce'])
