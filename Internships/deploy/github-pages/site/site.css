@@ -80,10 +80,10 @@ h2{margin:0;font-size:15px;line-height:1.4}
 .freshness{display:flex;align-items:center;gap:5px;justify-self:end;text-align:right;color:var(--muted);font-size:11px;line-height:1.5}
 .freshness .icon{width:13px;height:13px}
 .sort-toolbar{display:flex;align-items:center;min-width:0}
-.sort-options{display:inline-flex;align-items:center;gap:3px;padding:3px;border:1px solid var(--line);border-radius:9px;background:#e9eeeb}
-.sort-options button{border:1px solid transparent;background:transparent;color:#617168;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:550;line-height:18px;white-space:nowrap;box-shadow:none}
-.sort-options button:hover{background:#f2f6f3;color:var(--accent)}
-.sort-options button[aria-pressed="true"]{background:#fff;border-color:#d3e0d7;color:#35564a;font-weight:700;box-shadow:0 1px 3px #25392d0a}
+.sort-options{display:inline-flex;align-items:center;gap:3px;padding:3px;border:1px solid #d7dadd;border-radius:9px;background:#fff}
+.sort-options button{border:1px solid transparent;background:transparent;color:#4b5056;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:550;line-height:18px;white-space:nowrap;box-shadow:none}
+.sort-options button:hover{background:#f0f1f3;color:#30343a}
+.sort-options button[aria-pressed="true"]{background:#30343a;border-color:#30343a;color:#fff;font-weight:700}
 #message{color:var(--muted);font-size:13px;margin:10px 0}
 #message:empty{display:none}
 .offers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
