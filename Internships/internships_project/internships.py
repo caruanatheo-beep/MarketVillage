@@ -82,6 +82,7 @@ WORKDAY = {
 }
 CAREER_PORTALS = {
     "Morgan Stanley": "https://www.morganstanley.com/careers/career-opportunities-search",
+    "Morgan Stanley Campus": "https://morganstanley.tal.net/vx/lang-en-GB/mobile-0/brand-2/candidate/jobboard/vacancy/1/adv/",
     "Bank of America": "https://careers.bankofamerica.com/en-us/students/job-search",
     "Bloomberg": "https://bloomberg.avature.net/careers/SearchJobs/",
     "Susquehanna": "https://careers.sig.com/institutional-sales/jobs",
@@ -1268,7 +1269,7 @@ def is_trusted_offer_url(url: str) -> bool:
         "jobs.commerzbank.com", "jobs.standardchartered.com", "apply.careers.hsbc.com",
         "www.akunacapital.com", "akunacapital.com", "careers.sig.com",
         "careers.aqr.com", "bloomberg.avature.net", "careers.bankofamerica.com",
-        "morganstanley.eightfold.ai", "nomuracampus.tal.net",
+        "morganstanley.eightfold.ai", "morganstanley.tal.net", "nomuracampus.tal.net",
         *(board[0] for board in WORKDAY.values()),
         *(config[1] for config in CAREER_LISTINGS.values()),
         *(urlparse(board[0]).hostname for board in ORACLE_CAREER_BOARDS.values()),
@@ -1809,6 +1810,21 @@ def _career_publication_date(raw: str) -> str:
         return ""
 
 
+def _talnet_fields(page_html: str) -> dict[str, str]:
+    form = re.search(r'<form\b[^>]*class=["\'][^"\']*\bform-view\b[^"\']*["\'][^>]*>(.*?)</form>',
+                     page_html, re.I | re.S)
+    if not form:
+        return {}
+    sections = re.split(r'<span\b[^>]*class=["\']hform_lbl_text["\'][^>]*>\s*([^<]+?)\s*</span>',
+                        form[1], flags=re.I)
+    fields = {}
+    for label, raw in zip(sections[1::2], sections[2::2]):
+        field = _CareerHTML()
+        field.feed(raw)
+        fields[label.casefold()] = " ".join(field.parts).strip()
+    return fields
+
+
 def _nomura_detail(url: str, page_html: str, page: _CareerHTML,
                    fallback_title: str = "") -> Opportunity | None:
     """Read only this Tal.net vacancy's fields, never related vacancies or navigation."""
@@ -1818,17 +1834,9 @@ def _nomura_detail(url: str, page_html: str, page: _CareerHTML,
     if (fallback_title and page.primary_headings
             and _canonical_title(page.primary_headings[0]) != _canonical_title(fallback_title)):
         raise ValueError("Fiche Nomura sans annonce correspondante")
-    form = re.search(r'<form\b[^>]*class=["\'][^"\']*\bform-view\b[^"\']*["\'][^>]*>(.*?)</form>',
-                     page_html, re.I | re.S)
-    if not form or not page.primary_headings:
+    fields = _talnet_fields(page_html)
+    if not fields or not page.primary_headings:
         raise ValueError("Fiche Nomura incomplète")
-    sections = re.split(r'<span\b[^>]*class=["\']hform_lbl_text["\'][^>]*>\s*([^<]+?)\s*</span>',
-                        form[1], flags=re.I)
-    fields = {}
-    for label, raw in zip(sections[1::2], sections[2::2]):
-        field = _CareerHTML()
-        field.feed(raw)
-        fields[label.casefold()] = " ".join(field.parts).strip()
     title = page.primary_headings[0]
     description = fields.get("job description", "")
     location = fields.get("location", "")
@@ -2903,6 +2911,95 @@ def _morgan_stanley_jobs(_slug: str = "", _company: str = "") -> list[Opportunit
             failed.append(f"https://morganstanley.eightfold.ai/careers/job/{identity}?domain=morganstanley.com")
     if failed or search_failures:
         raise _PartialSourceError(found, failed, search_failures=search_failures) from search_error
+    return found
+
+
+_MS_CAMPUS_POSTING = re.compile(
+    r"(?P<prefix>/vx/lang-en-GB/mobile-0/brand-2/)(?:xf-[0-9a-f]+/)?"
+    r"(?P<vacancy>candidate/so/pm/1/pl/1/opp/(?P<identity>\d+)-[^/]+/en-GB)")
+
+
+def _morgan_stanley_campus_detail(identity: str, url: str, title: str) -> Opportunity | None:
+    response = requests.get(url, timeout=(8, 20), allow_redirects=False)
+    if response.status_code in (404, 410):
+        return None
+    response.raise_for_status()
+    if response.status_code != 200:
+        raise ValueError("Redirection de la fiche Morgan Stanley Campus")
+    page = _CareerHTML()
+    page.feed(response.text)
+    if re.search(r"no longer (?:accepting applications|available)|(?:vacancy|opportunity) (?:is )?closed",
+                 " ".join(page.parts), re.I):
+        return None
+    if not page.primary_headings or _canonical_title(page.primary_headings[0]) != _canonical_title(title):
+        raise ValueError("Fiche Morgan Stanley Campus sans annonce correspondante")
+    actions = re.findall(r'<form\b[^>]*action=["\']([^"\']+)["\']', response.text, re.I)
+    if not any((action := urlparse(urljoin(url, html.unescape(link)))).netloc == "morganstanley.tal.net"
+               and action.scheme == "https"
+               and action.path.endswith(f"/opp/{identity}/apply/en-GB") for link in actions):
+        raise ValueError("Fiche Morgan Stanley Campus sans candidature ouverte vérifiable")
+    fields = _talnet_fields(response.text)
+    location, programme, description = (fields.get(key, "") for key in ("city", "program", "job description"))
+    if not _plausible_location(location) or not programme or not description:
+        raise ValueError("Fiche Morgan Stanley Campus incomplète")
+    if not re.search(r"internship|\b(?:full.time|graduate|summer (?:analyst|associate))\b", programme, re.I):
+        return None
+    posting = _jsonld_jobposting(response.text)
+    job = _opportunity(title, "Morgan Stanley", location, programme, url,
+                       _jsonld_job_posted(response.text),
+                       _structured_job_start(posting) or _start_period(description),
+                       role_context=description)
+    return replace(job, source="Site carrière · morganstanley.tal.net",
+                   description=description[:12_000]) if job else None
+
+
+def _morgan_stanley_campus_jobs() -> list[Opportunity]:
+    """Collect each advertised page of the public early-career programmes board."""
+    board = CAREER_PORTALS["Morgan Stanley Campus"]
+    listings: dict[str, tuple[str, str]] = {}
+    offset, total = 0, None
+    search_error = None
+    try:
+        while True:
+            response = requests.get(board, params={"start": offset} if offset else None,
+                                    timeout=(8, 20), allow_redirects=False)
+            response.raise_for_status()
+            page = _CareerHTML()
+            page.feed(response.text)
+            count = re.search(r"\b(\d+)\s+results? match", " ".join(page.parts), re.I)
+            if response.status_code != 200 or not count or total is not None and int(count[1]) != total:
+                raise ValueError("Catalogue Morgan Stanley Campus incomplet")
+            total = int(count[1])
+            before = len(listings)
+            for href, title in page.links:
+                parsed = urlparse(urljoin(board, href))
+                path = _MS_CAMPUS_POSTING.fullmatch(parsed.path)
+                if parsed.scheme == "https" and parsed.netloc == "morganstanley.tal.net" and path and title:
+                    # Filtered listing pages add an xf path segment to the same vacancy.
+                    url = f"https://{parsed.netloc}{path['prefix']}{path['vacancy']}"
+                    listings.setdefault(path["identity"], (url, title))
+            if len(listings) == total:
+                break
+            next_offset = len(listings)
+            if not before < next_offset < total or not re.search(
+                    rf'<a\b[^>]*href=["\']\?start={next_offset}["\'][^>]*>\s*Next page\s*</a>', response.text, re.I):
+                raise ValueError("Pagination Morgan Stanley Campus sans progression vérifiable")
+            offset = next_offset
+    except (requests.RequestException, ValueError) as exc:
+        search_error = exc
+    found, failed = [], []
+    for identity, (url, title) in listings.items():
+        if (not _kind(title) or not _market_candidate(title)
+                or re.search(r"\b(?:business control unit|transactional management group|developer)\b", title, re.I)):
+            continue
+        try:
+            job = _morgan_stanley_campus_detail(identity, url, title)
+            if job:
+                found.append(job)
+        except (requests.RequestException, ValueError, TypeError):
+            failed.append(url)
+    if failed or search_error:
+        raise _PartialSourceError(found, failed, search_failures=int(search_error is not None)) from search_error
     return found
 
 
@@ -5070,6 +5167,7 @@ def _opportunity_source_tasks() -> list[tuple[str, object, tuple]]:
         ("Susquehanna", _susquehanna_jobs, ("", "")),
         ("Bloomberg", _bloomberg_jobs, ("", "")),
         ("Morgan Stanley", _morgan_stanley_jobs, ("", "")),
+        ("Morgan Stanley Campus", _morgan_stanley_campus_jobs, ()),
         ("Bank of America", _bofa_jobs, ("", "")),
         ("UBS", _ubs_jobs, ("", "")),
         ("Pictet Asset Management", _pictet_jobs, ()),

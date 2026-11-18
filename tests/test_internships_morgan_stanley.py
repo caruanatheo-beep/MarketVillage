@@ -163,6 +163,7 @@ def test_source_card_registration_and_official_logo():
     source, = [s for s in public_source_catalog() if s['name'] == 'Morgan Stanley']
     assert source['category'] == 'Banques & services titres' and source['added_on'] == '2026-11-15'
     assert source['url'] == 'https://www.morganstanley.com/careers/career-opportunities-search'
+    assert {'name': 'Morgan Stanley Campus', 'url': jobs.CAREER_PORTALS['Morgan Stanley Campus']} in source['feeds']
     task, = [t for t in jobs._opportunity_source_tasks() if t[0] == 'Morgan Stanley']
     assert task[1] is jobs._morgan_stanley_jobs
     path = jobs.COMPANY_LOGO_DIR / (jobs.COMPANY_ICON_HOSTS['morganstanley'] + '.png')
@@ -171,6 +172,50 @@ def test_source_card_registration_and_official_logo():
     with Image.open(path) as image:
         assert image.format == 'PNG' and image.size == (196, 196)
         image.verify()
+
+
+@pytest.mark.parametrize('second_page', ['open', 'closed', 'unavailable'])
+def test_campus_trading_uses_public_programmes_and_pagination(monkeypatch, second_page):
+    board = jobs.CAREER_PORTALS['Morgan Stanley Campus']
+    prefix = board.replace('/jobboard/vacancy/1/adv/', '/so/pm/1/pl/1/opp/')
+    title = '2027 Institutional Equities Trading Off-Cycle Internship (Paris)'
+    offer = prefix + '22033-Institutional-Equities-Trading-Paris/en-GB'
+    unrelated = prefix + '22034-Technology-Internship/en-GB'
+    first = f'<h2>2 results match!</h2><a href="{unrelated}">Technology Internship</a><a href="?start=1">Next page</a>'
+    filtered = offer.replace('/brand-2/', '/brand-2/xf-9f4755e53574/')
+    second = f'<h2>2 results match!</h2><a href="{filtered}">{title}</a>'
+    detail = f'''<h1>{title}</h1><form class="form-view">
+      <span class="hform_lbl_text">City</span><div>Paris</div>
+      <span class="hform_lbl_text">Program</span><div>Off-Cycle Internship</div>
+      <span class="hform_lbl_text">Job description</span><p>Join an equity index trading desk.</p>
+      </form><form action="{prefix}22033/apply/en-GB"></form>'''
+    if second_page == 'closed':
+        detail = '<p>This vacancy is closed.</p>'
+
+    def get(url, *, timeout, allow_redirects, params=None):
+        assert timeout == (8, 20) and not allow_redirects
+        if url == board and params is None:
+            return response(text=first)
+        if url == board and params == {'start': 1}:
+            return response(text=second, status=503 if second_page == 'unavailable' else 200)
+        assert url == offer and params is None
+        return response(text=detail)
+
+    monkeypatch.setattr(jobs.requests, 'get', get)
+    if second_page == 'unavailable':
+        with pytest.raises(jobs._PartialSourceError) as error:
+            jobs._morgan_stanley_campus_jobs()
+        assert error.value.preserve_cached
+        return
+    found = jobs._morgan_stanley_campus_jobs()
+    if second_page == 'closed':
+        assert found == []
+        return
+    job, = found
+    assert (job.url, job.company, job.location, job.kind, job.family) == (
+        offer, 'Morgan Stanley', 'Paris', 'Stage', 'Trading / Structuring')
+    assert not job.published and not job.start_period
+    assert jobs.is_trusted_offer_url(job.url) and jobs._eligible_offer(job)
 
 
 def test_verified_junior_keeps_dates_city_languages_visa_and_real_contract(serve):

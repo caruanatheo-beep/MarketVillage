@@ -13,6 +13,7 @@ GROUPS = {
     'BPCE Open Data':'BPCE / Natixis / BRED',
     'Lazard Student Careers':'Lazard', 'Lazard Professional Careers':'Lazard',
     'J.P. Morgan Careers':'J.P. Morgan', 'Goldman Sachs Campus Careers':'Goldman Sachs',
+    'Morgan Stanley Campus':'Morgan Stanley',
     'Schroders Careers':'Schroders', 'JobTeaser · sitemap':'JobTeaser',
     'Business France VIE':'Business France',
 }
