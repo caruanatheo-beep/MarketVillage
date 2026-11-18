@@ -91,7 +91,7 @@ h2{margin:0;font-size:15px;line-height:1.4}
   --card-padding-block: 14px;
   --card-padding-inline: 16px;
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto 1fr auto;
   gap: 8px;
   padding: var(--card-padding-block) var(--card-padding-inline);
   background: var(--surface-card);
@@ -104,38 +104,36 @@ h2{margin:0;font-size:15px;line-height:1.4}
 }
 .card:hover{border-color:#88aea3;box-shadow:0 6px 20px #21334b0c;transform:translateY(-2px)}
 .card:hover h3{color:#165d4e}
-.card-head{display:flex;align-items:center;gap:9px;min-width:0}
+.card-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:8px}
+.card-employer{display:flex;align-items:center;align-self:center;gap:10px;min-width:0}
+.card-team{display:grid;gap:3px;min-width:0}
+.card-discipline{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px}
+.kind:empty,.family:empty,.date:empty{display:none}
 .logo{width:36px;height:36px;flex-shrink:0;display:grid;place-items:center;border:1px solid #e0e8f0;border-radius:9px;background:#fff;position:relative}
 .logo img{width:30px;height:30px;object-fit:contain}
 .logo img[hidden],.initials[hidden]{display:none}
 .initials{font-size:11px;font-weight:750}
 .card .logo{border-color:transparent;background:transparent}
 .company{font-size:14px;font-weight:600;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.kind{margin-left:auto;white-space:nowrap;font-size:10px;padding:3px 7px;background:#eaf4f0;border:1px solid #d8e9e2;border-radius:5px;color:#265c50}
+.kind{white-space:nowrap;font-size:10px;line-height:14px;padding:0 5px;background:#eaf4f0;border:1px solid #d8e9e2;border-radius:4px;color:#265c50}
 .arrow{display:grid;place-items:center;width:23px;height:23px;flex-shrink:0;color:var(--muted);font-size:16px;transition:color .15s}
 .card:hover .arrow{color:#165d4e}
+.card:focus-visible{outline:2px solid #165d4e;outline-offset:2px}
 .card h3{font-size:16px;font-weight:650;line-height:22px;letter-spacing:-.015em;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.facts{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-self:end;font-size:13px;line-height:18px}
+.facts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px 14px;align-items:start;align-self:end;padding-top:8px;border-top:1px solid #e4eaf0;font-size:13px;line-height:18px}
 .facts>div{min-width:0;display:grid;gap:3px}
 .facts small{display:flex;align-items:center;gap:5px;font-size:10px;line-height:13px;font-weight:600;color:var(--muted)}
 .facts .icon{width:12px;height:12px}
 .location,.start{font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-inline: calc(-1 * var(--card-padding-inline));
-  margin-bottom: calc(-1 * var(--card-padding-block));
-  padding: 8px var(--card-padding-inline) var(--card-padding-block);
-  border-top: 1px solid #e0e8ef;
-  border-radius: 0 0 11px 11px;
-  background: #f2f6fa;
-  font-size: 11px;
-  line-height: 16px;
-}
 .family{font-size:11px;line-height:16px;font-weight:550;color:#365364}
-.date{font-size:11px;color:var(--muted);white-space:nowrap}
+.date{align-self:end;font-size:11px;line-height:18px;color:var(--muted)}
+@media(min-width:651px){
+  .card-heading{min-height:44px}
+}
+@media(max-width:1100px){
+  .facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .date{grid-column:1/-1}
+}
 .pagination{display:flex;align-items:center;justify-content:center;gap:24px;margin:24px 0;font-size:12px;color:var(--muted)}
 .pagination button{font-size:12px;padding:10px 16px}
 footer{padding:18px 0 8px;border-top:1px solid var(--line);color:var(--muted);font-size:11px;line-height:1.9}
@@ -213,7 +211,7 @@ footer{padding:18px 0 8px;border-top:1px solid var(--line);color:var(--muted);fo
 @media(max-width:900px){main{padding:18px 20px}.filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.results-header{grid-template-columns:1fr auto;row-gap:6px}.freshness{grid-column:1/-1;justify-self:start;text-align:left}}
 @media(max-width:1000px){.sources-layout{grid-template-columns:minmax(0,1fr) 285px;gap:14px}.source-list{grid-template-columns:1fr}.source-summary{align-items:flex-start;flex-direction:column;gap:4px}}
 @media(max-width:650px){.sources-layout{grid-template-columns:1fr}.sources-intro{align-items:flex-start;flex-direction:column;gap:12px}.source-summary{margin-top:14px}.source-list{grid-template-columns:1fr}.primary-nav{gap:0}.primary-nav .icon{display:none}.masthead{gap:8px}.primary-nav a{padding:6px 7px}.source-request{padding:18px}}
-@media(max-width:650px){main{padding:16px}.masthead{gap:14px;padding:0 0 10px}.primary-nav{padding-left:12px}.primary-nav a{padding:6px 9px}.brand{font-size:17px}.offers{grid-template-columns:1fr}.masthead-note{display:none}.intro{padding:16px 0}h1{font-size:23px}.results-header{grid-template-columns:1fr}.freshness{grid-column:auto}.sort-toolbar{grid-row:2}.sort-options{max-width:100%;flex-wrap:wrap}.sort-options button{padding:6px 10px}.card-foot{gap:8px}.date{white-space:normal;text-align:right}}
+@media(max-width:650px){main{padding:16px}.masthead{gap:14px;padding:0 0 10px}.primary-nav{padding-left:12px}.primary-nav a{padding:6px 9px}.brand{font-size:17px}.offers{grid-template-columns:1fr}.masthead-note{display:none}.intro{padding:16px 0}h1{font-size:23px}.results-header{grid-template-columns:1fr}.freshness{grid-column:auto}.sort-toolbar{grid-row:2}.sort-options{max-width:100%;flex-wrap:wrap}.sort-options button{padding:6px 10px}}
 @media (min-width: 901px) {
   /* Fill the space below the filters with two rows at standard desktop heights. */
   .offers .card {
@@ -232,11 +230,12 @@ footer{padding:18px 0 8px;border-top:1px solid var(--line);color:var(--muted);fo
   .results-header { margin: 10px 0 8px; }
   .sort-options button { padding-block: 4px; }
   .offers .card {
-    --card-padding-block: 12px;
+    --card-padding-block: 10px;
     --card-padding-inline: 14px;
     gap: 6px;
-    min-height: calc((100svh - 342px) / 2);
+    min-height: calc((100svh - 332px) / 2);
   }
+  .facts { padding-top: 6px; }
 }
 @media(prefers-reduced-motion:reduce){.card,button,input,select,.arrow,.filter-trigger,.filter-chevron{transition:none}.card:hover{transform:none}}
 @keyframes surface-enter {
