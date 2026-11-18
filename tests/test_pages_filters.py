@@ -124,24 +124,35 @@ def test_reloading_data_preserves_selection_or_falls_back_when_removed(screen):
     assert page.locator('.card h3').inner_text()=='Portfolio Graduate'
 
 
-def test_offer_details_align_within_each_pair_of_titles(screen):
+@pytest.mark.parametrize('width', [1440, 760, 320])
+def test_offer_cards_keep_the_same_height_with_long_fields(screen, width):
     page, data = screen
+    page.set_viewport_size({'width': width, 'height': 900})
     long_title = (
         'Assistant produits financiers et coordination internationale en gestion d’actifs '
         'pour les clients institutionnels européens'
     )
     short, long = data['offers'][0], dict(data['offers'][1], title=long_title)
-    data['offers'] = [short, long, short, short, long, long]
+    locations = 'Aarhus · Danemark / Budapest · Hongrie / Dubaï · Émirats arabes unis / Londres · Royaume-Uni / Paris · France / Zurich · Suisse'
+    multi_city = dict(short, title='Internship, Quantitative Research and Trading',
+                      company='Qube Research & Technologies', location=locations)
+    data['offers'] = [short, long, short, short, long, long, multi_city]
     page.evaluate('load()')
     cards = page.locator('.card')
     heights = cards.evaluate_all('(cards) => cards.map(card => card.offsetHeight)')
-    assert heights[0] == heights[1] == heights[4] == heights[5]
-    assert heights[2] == heights[3] < heights[0]
+    assert len(set(heights)) == 1
+    assert cards.first.locator('h3').evaluate(
+        'h => h.offsetHeight === 2 * parseFloat(getComputedStyle(h).lineHeight)'
+    )
     for selector in ('.card-employer', 'h3', '.facts'):
-        tops = cards.locator(selector).evaluate_all(
-            '(items) => items.map(item => item.getBoundingClientRect().top)'
-        )
-        assert tops[::2] == pytest.approx(tops[1::2], abs=1)
+        offsets = cards.evaluate_all('''(cards, selector) => cards.map(card =>
+            card.querySelector(selector).getBoundingClientRect().top - card.getBoundingClientRect().top
+        )''', selector)
+        assert max(offsets) - min(offsets) <= 1
+    location = cards.last.locator('.location')
+    assert location.evaluate('el => el.scrollWidth > el.clientWidth && el.clientWidth > 0')
+    assert location.get_attribute('title') == locations
+    assert cards.last.locator('.start').evaluate('el => el.getBoundingClientRect().right <= el.closest(".card").getBoundingClientRect().right')
     facts = cards.first.locator('.fact').all_inner_texts()
     assert [text.replace('\xa0', ' ').strip() for text in facts] == ['Paris', 'Début : 2027-04']
 
