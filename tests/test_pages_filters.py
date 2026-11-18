@@ -124,6 +124,23 @@ def test_reloading_data_preserves_selection_or_falls_back_when_removed(screen):
     assert page.locator('.card h3').inner_text()=='Portfolio Graduate'
 
 
+def test_offer_details_align_when_one_title_wraps(screen):
+    page, data = screen
+    data['offers'][0]['title'] = (
+        'Assistant produits financiers et coordination internationale en gestion d’actifs '
+        'pour les clients institutionnels européens'
+    )
+    page.evaluate('load()')
+    heights = page.locator('.card h3').evaluate_all(
+        '(titles) => titles.map(title => title.getBoundingClientRect().height)'
+    )
+    assert heights[0] > heights[1]
+    detail_tops = page.locator('.card .facts').evaluate_all(
+        '(details) => details.map(detail => detail.getBoundingClientRect().top)'
+    )
+    assert detail_tops[0] == pytest.approx(detail_tops[1], abs=1)
+
+
 @pytest.mark.parametrize('motion', ['no-preference', 'reduce'])
 def test_filter_motion_respects_user_preference_and_does_not_animate_typing(screen, motion):
     page, _ = screen
