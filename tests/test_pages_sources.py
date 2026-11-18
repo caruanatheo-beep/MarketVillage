@@ -193,7 +193,9 @@ def test_recent_additions_use_last_seven_paris_dates_and_keep_filters(sources_sc
     if recent:
         expect(page.locator('.source-group-title').first).to_contain_text('Ajoutées ces 7 derniers jours')
         assert cards.first.bounding_box()['height'] == cards.last.bounding_box()['height']
+        expect(cards.first).to_have_css('background-color', 'rgb(255, 255, 255)')
         page.set_viewport_size({'width':390,'height':844})
+        expect(cards.first).to_have_css('background-color', 'rgb(255, 255, 255)')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     page.locator('#source-search').fill('bnp')
     assert cards.count() == 1 and page.locator('.source-group-title').count() == 0

@@ -155,8 +155,8 @@ footer{padding:18px 0 8px;border-top:1px solid var(--line);color:var(--muted);fo
 .source-group-title{grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:3px 0 0;font-size:12px;font-weight:650;color:var(--blue)}
 .source-group-title:not(:first-child){margin-top:15px;padding-top:16px;border-top:1px solid var(--line)}
 .source-group-title span{padding:2px 7px;border-radius:5px;background:#edf3f9;font-size:10px;font-weight:600}
-.source-card.is-new-source{border-color:#b8cce0;background:linear-gradient(110deg,#f7faff,#fff 65%)}
 .source-card{position:relative;min-width:0;border:1px solid var(--line);border-radius:10px;background:var(--surface-card);transition:border-color .15s,box-shadow .15s}
+.source-card.is-new-source{border-color:#b8cce0}
 .source-card:hover,.source-card:focus-within{border-color:#9eb7cf;box-shadow:0 3px 12px #21334b08}
 .source-card:has(.source-feeds[open]){z-index:3}
 .source-link{display:flex;align-items:center;gap:11px;height:88px;padding:13px 14px;border-radius:9px;text-decoration:none;color:inherit}
@@ -238,7 +238,6 @@ footer{padding:18px 0 8px;border-top:1px solid var(--line);color:var(--muted);fo
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
   :root{--surface-panel:rgba(255,255,255,.64);--surface-edge:rgba(255,255,255,.96)}
   .filters{-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:inset 0 1px 0 #ffffffb3,0 4px 16px #24353e08}
-  .source-card.is-new-source{background:#edf5fbbd;border-color:#b8cce0}
 }
 @media(max-width:650px){
   :root{--surface-panel:rgba(255,255,255,.9)}
@@ -247,5 +246,4 @@ footer{padding:18px 0 8px;border-top:1px solid var(--line);color:var(--muted);fo
 @media(prefers-reduced-transparency:reduce){
   :root{--surface-panel:#f9fbfc;--surface-card:#fff;--surface-edge:#d4dfe5}
   .filters{-webkit-backdrop-filter:none;backdrop-filter:none}
-  .source-card.is-new-source{background:#f2f7fb}
 }
