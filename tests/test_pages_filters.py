@@ -158,6 +158,20 @@ def test_offer_cards_keep_the_same_height_with_long_fields(screen, width):
 
 
 @pytest.mark.parametrize('motion', ['no-preference', 'reduce'])
+def test_offer_hover_respects_reduced_motion(screen, motion):
+    page, _ = screen
+    page.emulate_media(reduced_motion=motion)
+    card = page.locator('.card').first
+    card.hover()
+    offset = card.evaluate('''card => {
+        card.getAnimations().forEach(animation => animation.finish());
+        const transform = getComputedStyle(card).transform;
+        return transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
+    }''')
+    assert offset == (-2 if motion == 'no-preference' else 0)
+
+
+@pytest.mark.parametrize('motion', ['no-preference', 'reduce'])
 def test_filter_motion_respects_user_preference_and_does_not_animate_typing(screen, motion):
     page, _ = screen
     page.emulate_media(reduced_motion=motion)

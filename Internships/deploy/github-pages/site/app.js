@@ -124,6 +124,7 @@ function render(animateResults = false) {
     for (const [selector, value] of [[".company",j.company],["h3",j.title],[".kind",kindLabel],[".location",j.location],[".start",j.start],[".family",j.family],[".date",j.date_label]]) {
       const node = card.querySelector(selector); node.textContent = value; node.title = value;
     }
+    card.querySelector(".kind").dataset.kind = kindLabel;
     const img = card.querySelector("img"), initials = card.querySelector(".initials");
     initials.textContent = j.company.split(/\s+/).slice(0,2).map(s=>s[0] || "").join("").toUpperCase();
     img.hidden = true;
