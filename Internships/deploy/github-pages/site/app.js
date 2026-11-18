@@ -99,23 +99,7 @@ function safeLink(value) {
   try { const u = new URL(value); return u.protocol === "https:" && !u.username && !u.password ? u.href : null; }
   catch { return null; }
 }
-const desktopOffers = matchMedia("(min-width: 901px)");
-const offersWindow = $("offers-window");
-const rowObserver = new ResizeObserver(sizeOffersWindow);
-function sizeOffersWindow() {
-  const grid = $("offers");
-  if (!desktopOffers.matches || grid.childElementCount <= 4) {
-    offersWindow.removeAttribute("tabindex");
-    offersWindow.style.removeProperty("--two-rows");
-    return;
-  }
-  offersWindow.tabIndex = 0;
-  const gap = parseFloat(getComputedStyle(grid).rowGap);
-  const height = grid.children[0].offsetHeight + gap + grid.children[2].offsetHeight;
-  offersWindow.style.setProperty("--two-rows", height + "px");
-}
-desktopOffers.addEventListener("change", sizeOffersWindow);
-function render(animateResults = false, resetScroll = true) {
+function render(animateResults = false) {
   for (const view of filterViews.values()) view.sync();
   const terms = normalize($("search").value).split(/\s+/).filter(Boolean);
   const today = new Intl.DateTimeFormat("en-CA", {timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit"}).format(new Date());
@@ -153,14 +137,7 @@ function render(animateResults = false, resetScroll = true) {
   const grid = $("offers");
   resultsAnimation?.cancel();
   resultsAnimation = undefined;
-  rowObserver.disconnect();
   grid.replaceChildren(fragment);
-  if (grid.childElementCount > 4) {
-    rowObserver.observe(grid.children[0]);
-    rowObserver.observe(grid.children[2]);
-  }
-  sizeOffersWindow();
-  if (resetScroll) offersWindow.scrollTop = 0;
   if (animateResults && !reduceMotion.matches && grid.firstElementChild && grid.animate) {
     resultsAnimation = grid.animate(
       [{opacity: .72, transform: "translateY(3px)"}, {opacity: 1, transform: "none"}],
@@ -198,7 +175,7 @@ async function load() {
     const s = data.sources;
     $("updated").textContent = "Actualisé le " + new Intl.DateTimeFormat("fr-FR", {day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Paris"}).format(new Date(data.updated)) + (s.unavailable || s.partial || s.retained ? " · Certaines sources à vérifier" : "");
     $("updated").title = `Heure de Paris · ${s.checked} sources · ${s.unavailable} sources indisponibles · ${s.partial || 0} collectes partielles · ${s.retained} sources avec offres conservées`;
-    $("message").textContent = ""; render(false, false);
+    $("message").textContent = ""; render();
   } catch { $("message").textContent = "Impossible de charger les nouvelles données. Réessaie dans un instant. Les offres déjà affichées sont conservées."; }
   finally { loading = false; }
 }
