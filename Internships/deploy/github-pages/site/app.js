@@ -4,6 +4,8 @@ const controls = ["search", "category", "family", "period", "start"];
 const normalize = (s) => String(s || "").normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 let offers = [], page = 1;
 let sortMode = "rank";
+let resultsAnimation;
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const size = 50;
 const filterViews = new Map();
 let openFilter = null;
@@ -97,7 +99,7 @@ function safeLink(value) {
   try { const u = new URL(value); return u.protocol === "https:" && !u.username && !u.password ? u.href : null; }
   catch { return null; }
 }
-function render() {
+function render(animateResults = false) {
   for (const view of filterViews.values()) view.sync();
   const terms = normalize($("search").value).split(/\s+/).filter(Boolean);
   const today = new Intl.DateTimeFormat("en-CA", {timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit"}).format(new Date());
@@ -132,7 +134,16 @@ function render() {
     }
     fragment.append(card);
   }
-  $("offers").replaceChildren(fragment);
+  const grid = $("offers");
+  resultsAnimation?.cancel();
+  resultsAnimation = undefined;
+  grid.replaceChildren(fragment);
+  if (animateResults && !reduceMotion.matches && grid.firstElementChild && grid.animate) {
+    resultsAnimation = grid.animate(
+      [{opacity: .72, transform: "translateY(3px)"}, {opacity: 1, transform: "none"}],
+      {duration: 170, easing: "ease-out"},
+    );
+  }
   $("count").textContent = selected.length ? `Offres ${(page-1)*size+1}–${Math.min(page*size,selected.length)} sur ${selected.length}` : "Aucune offre pour ces critères";
   $("page").textContent = `Page ${page} / ${pages}`;
   $("previous").disabled = page <= 1; $("next").disabled = page >= pages;
@@ -168,12 +179,17 @@ async function load() {
   } catch { $("message").textContent = "Impossible de charger les nouvelles données. Réessaie dans un instant. Les offres déjà affichées sont conservées."; }
   finally { loading = false; }
 }
-for (const id of controls) $(id).addEventListener(id === "search" ? "input" : "change", () => {page=1;render();});
-for (const button of $("sort-options").querySelectorAll("button")) {
-  button.addEventListener("click", () => {sortMode=button.dataset.sort;page=1;render();});
+for (const id of controls) {
+  $(id).addEventListener(id === "search" ? "input" : "change", () => {
+    page = 1;
+    render(id !== "search");
+  });
 }
-$("previous").addEventListener("click",()=>{page--;render();$("count").scrollIntoView({block:"start"});});
-$("next").addEventListener("click",()=>{page++;render();$("count").scrollIntoView({block:"start"});});
+for (const button of $("sort-options").querySelectorAll("button")) {
+  button.addEventListener("click", () => {sortMode=button.dataset.sort;page=1;render(true);});
+}
+$("previous").addEventListener("click",()=>{page--;render(true);$("count").scrollIntoView({block:"start"});});
+$("next").addEventListener("click",()=>{page++;render(true);$("count").scrollIntoView({block:"start"});});
 for (const id of controls.slice(1)) enhanceFilter($(id));
 load();
 setInterval(() => { if (!document.hidden) load(); }, 5 * 60 * 1000);

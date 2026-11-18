@@ -124,6 +124,30 @@ def test_reloading_data_preserves_selection_or_falls_back_when_removed(screen):
     assert page.locator('.card h3').inner_text()=='Portfolio Graduate'
 
 
+@pytest.mark.parametrize('motion', ['no-preference', 'reduce'])
+def test_filter_motion_respects_user_preference_and_does_not_animate_typing(screen, motion):
+    page, _ = screen
+    page.emulate_media(reduced_motion=motion)
+    result = page.evaluate('''() => {
+        document.querySelector('#family-trigger').click();
+        const menu = document.querySelector('#family-menu');
+        const menuAnimation = getComputedStyle(menu).animationName;
+        [...menu.children].find(option => option.textContent === 'Sales').click();
+        const grid = document.querySelector('#offers');
+        const filterAnimation = grid.getAnimations().length;
+        const search = document.querySelector('#search');
+        search.value = 'Sales';
+        search.dispatchEvent(new Event('input'));
+        return {menuAnimation, filterAnimation, typingAnimation: grid.getAnimations().length};
+    }''')
+    assert result == {
+        'menuAnimation': 'surface-enter' if motion == 'no-preference' else 'none',
+        'filterAnimation': int(motion == 'no-preference'),
+        'typingAnimation': 0,
+    }
+    assert page.locator('.card h3').inner_text() == 'Assistant Sales'
+
+
 def test_visible_page_automatically_updates_timestamp_and_keeps_filters(screen):
     page,data=screen
     choose(page,'family','Sales')

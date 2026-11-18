@@ -111,7 +111,7 @@ def build_site(output: Path, *, collect: bool = False, force: bool = False) -> i
         target.parent.mkdir(parents=True, exist_ok=True)
         if name == "index.html":
             document = path.read_text(encoding="utf-8")
-            for asset in ("site.css", "app.js", "sources.js"):
+            for asset in ("site.css", "app.js", "sources.js", "marketdesk-icon.svg"):
                 version = hashlib.sha256(assets[asset].read_bytes()).hexdigest()[:12]
                 document = document.replace(f'"{asset}"', f'"{asset}?v={version}"')
             if endpoint:
