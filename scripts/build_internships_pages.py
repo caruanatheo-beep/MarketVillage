@@ -96,7 +96,9 @@ def build_site(output: Path, *, collect: bool = False, force: bool = False) -> i
     validate_source_catalog(catalog)
     sources_payload = json.dumps(catalog, ensure_ascii=False, separators=(",", ":")).encode()
     assert_public(sources_payload, "sources.json")
-    assets = {name: SITE_ROOT / name for name in ("index.html", "site.css", "app.js", "sources.js", "marketdesk-icon.svg")}
+    assets = {name: SITE_ROOT / name for name in (
+        "index.html", "site.css", "app.js", "sources.js", "marketdesk-icon.svg", "frosted-glass.webp",
+    )}
     assets.update(logos)
     # Validate every byte before creating the publish directory.
     for name, path in assets.items():

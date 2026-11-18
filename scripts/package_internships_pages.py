@@ -48,6 +48,7 @@ FILES = {
     "deploy/github-pages/requirements.txt": "deploy/github-pages/requirements.txt",
     "deploy/github-pages/site/index.html": "deploy/github-pages/site/index.html",
     "deploy/github-pages/site/site.css": "deploy/github-pages/site/site.css",
+    "deploy/github-pages/site/frosted-glass.webp": "deploy/github-pages/site/frosted-glass.webp",
     "deploy/github-pages/site/app.js": "deploy/github-pages/site/app.js",
     "deploy/github-pages/site/sources.js": "deploy/github-pages/site/sources.js",
     "deploy/github-pages/site/marketdesk-icon.svg": "deploy/github-pages/site/marketdesk-icon.svg",
