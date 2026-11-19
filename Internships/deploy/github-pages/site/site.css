@@ -1,4 +1,4 @@
-:root{font-family:"Segoe UI",ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#252e2a;background:#eceef2;font-synthesis:none;--muted:#4d5953;--line:#d7dfd9;--accent:#165d4e;--surface-panel:#ffffffc9;--surface-card:#ffffffb8;--surface-edge:#ffffffd1}
+:root{font-family:"Segoe UI",ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#252e2a;background:#eceef1;font-synthesis:none;--muted:#4d5953;--line:#d7dfd9;--accent:#165d4e;--surface-panel:#ffffffc9;--surface-card:#ffffffb8;--surface-edge:#ffffffd1}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;position:relative;isolation:isolate}
 body::before {
@@ -8,9 +8,7 @@ body::before {
   height: clamp(34rem, 82vh, 55rem);
   z-index: -1;
   pointer-events: none;
-  background:
-    linear-gradient(to bottom, #eceef200 35%, #eceef2 100%),
-    linear-gradient(126deg,#f1f3f6 7%,#d6dce7 32%,#f7f8fa 49%,#c3ccd9 52%,#e7ecf2 67%,#fafbfc 79%,#d0d8e5 98%);
+  background: linear-gradient(158deg, #fafbfc 8%, #f4f6f8 31%, #e5e9ee 65%, #eceef1 96%);
 }
 main{max-width:1440px;margin:auto;padding:20px 36px}
 button,input,select{font:inherit}
