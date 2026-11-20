@@ -2180,6 +2180,26 @@ def _render_public_career_page(url: str, link_selector: str) -> str:
         raise ValueError(f"navigateur public indisponible ({type(exc).__name__})") from exc
 
 
+class _RequestPacer:
+    """Space request starts across the collectors that share a provider."""
+
+    def __init__(self, interval: float):
+        self.interval = interval
+        self.next_start = 0.0
+        self.lock = threading.Lock()
+        self.ready = threading.Event()
+
+    def wait(self) -> None:
+        with self.lock:
+            delay = self.next_start - time.monotonic()
+            if delay > 0:
+                self.ready.wait(delay)
+            self.next_start = time.monotonic() + self.interval
+
+
+_bnp_group_pacer = _RequestPacer(0.5)
+
+
 def _bnp_group_jobs(company: str, listing_url: str) -> list[Opportunity]:
     """Read BNP's public listings without opening windows on the user's desktop."""
     if os.name == 'nt':
@@ -2205,11 +2225,12 @@ def _bnp_graduate_jobs(_slug: str = "", _company: str = "") -> list[Opportunity]
             failure_reasons.append(f"{contract}: {exc}")
         except (requests.RequestException, ValueError) as exc:
             failures += 1
-            failure_reasons.append(f"{contract}: {type(exc).__name__}")
+            reason = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
+            failure_reasons.append(f"{contract}: {reason}")
             continue
         found.update((job.url, job) for job in result if job.kind == "Graduate")
     if failures == len(catalogues) and not found:
-        raise ValueError("catalogues Graduate et Junior BNP indisponibles")
+        raise ValueError("Catalogues Graduate et Junior BNP indisponibles · " + failure_reasons[0])
     if failures:
         failure = _PartialSourceError(list(found.values()), [], search_failures=failures)
         failure.args = (str(failure) + "; " + "; ".join(failure_reasons),)
@@ -2233,6 +2254,7 @@ def _bnp_group_jobs_browser(company: str, listing_url: str, *, headless: bool = 
             browser = playwright.chromium.launch(headless=headless)
             try:
                 page = browser.new_page()
+                _bnp_group_pacer.wait()
                 response = page.goto(listing_url, wait_until="domcontentloaded", timeout=20_000)
                 if response is not None and response.status >= 400:
                     raise ValueError(f"liste BNP en HTTP {response.status}; aucun contournement tenté")
@@ -2275,6 +2297,7 @@ def _bnp_group_jobs_browser(company: str, listing_url: str, *, headless: bool = 
                         break
                     visited.add(next_url)
                     try:
+                        _bnp_group_pacer.wait()
                         response = page.goto(next_url, wait_until="domcontentloaded", timeout=20_000)
                         if response is not None and response.status >= 400:
                             raise ValueError(f"pagination BNP HTTP {response.status}")
@@ -2288,10 +2311,12 @@ def _bnp_group_jobs_browser(company: str, listing_url: str, *, headless: bool = 
 
                 detail_company = "BNP Paribas" if company == "BNP Paribas Asset Management" else company
                 jobs: list[Opportunity] = []
+                failed_statuses: set[int] = set()
                 for offer_url, label in candidates.items():
                     try:
                         for attempt in range(2):
                             try:
+                                _bnp_group_pacer.wait()
                                 detail_response = page.goto(offer_url, wait_until="domcontentloaded", timeout=15_000)
                                 if detail_response is not None and detail_response.status in (500,502,503,504) and attempt == 0:
                                     continue
@@ -2301,6 +2326,7 @@ def _bnp_group_jobs_browser(company: str, listing_url: str, *, headless: bool = 
                         if detail_response is not None and detail_response.status in (404,410):
                             continue  # An expired advert must not retain an old cached offer.
                         if detail_response is not None and detail_response.status >= 400:
+                            failed_statuses.add(detail_response.status)
                             failed_urls.append(offer_url)
                             continue
                         job = _career_detail(offer_url, detail_company, label, html_override=page.content())
@@ -2312,8 +2338,11 @@ def _bnp_group_jobs_browser(company: str, listing_url: str, *, headless: bool = 
                         failed_urls.append(offer_url)
                 if listing_failures or failed_urls:
                     failure = _PartialSourceError(jobs, failed_urls, search_failures=listing_failures)
-                    if listing_failure_reason:
-                        failure.args = (str(failure) + "; " + listing_failure_reason,)
+                    reasons = [listing_failure_reason] if listing_failure_reason else []
+                    if failed_statuses:
+                        reasons.append("fiches BNP HTTP " + ", ".join(map(str, sorted(failed_statuses))))
+                    if reasons:
+                        failure.args = (str(failure) + "; " + "; ".join(reasons),)
                     raise failure
                 if jobs:
                     return list({job.url: job for job in jobs}.values())
@@ -2745,13 +2774,15 @@ def _career_page_jobs(company: str, config: tuple[str, str, str]) -> list[Opport
 class _PartialSourceError(ValueError):
     """Keep verified results and identify the still-listed offers that failed."""
 
-    def __init__(self, jobs: list[Opportunity], failed_urls: list[str], *, search_failures: int = 0):
+    def __init__(self, jobs: list[Opportunity], failed_urls: list[str], *, search_failures: int = 0,
+                 retry_not_before: str = ""):
         reason = (f"collecte incomplète : {search_failures} requête(s) source en échec"
                   if search_failures else f"collecte incomplète : {len(failed_urls)} fiche(s) indisponible(s)")
         super().__init__(reason)
         self.jobs = jobs
         self.failed_urls = set(failed_urls)
         self.preserve_cached = bool(search_failures)
+        self.retry_not_before = retry_not_before
 
 
 def _morgan_stanley_sales_candidate(title: str) -> bool:
@@ -4146,6 +4177,32 @@ def _workday_publication_date(start_date: object = "", posted_on: object = "",
 
 
 _workday_requests = threading.BoundedSemaphore(4)
+_workday_pacer = _RequestPacer(0.25)
+
+
+def _workday_request(send, url: str, pauses: list[requests.HTTPError], **kwargs):
+    with _workday_requests:
+        if pauses:
+            raise pauses[0]
+        _workday_pacer.wait()
+        if pauses:
+            raise pauses[0]
+        response = send(url, **kwargs)
+        status = getattr(response, "status_code", 200)
+        if status in (403, 429) or (status == 503 and getattr(response, "headers", {}).get("Retry-After")):
+            try:
+                response.raise_for_status()
+            except requests.HTTPError as exc:
+                pauses.append(exc)
+                raise
+        return response
+
+
+def _workday_pause_details(pauses: list[requests.HTTPError]) -> tuple[str, str]:
+    if not pauses:
+        return "", ""
+    return (f"HTTP {pauses[0].response.status_code}",
+            max(_http_retry_not_before(error) for error in pauses))
 
 
 def _pictet_listing() -> list[dict]:
@@ -4269,18 +4326,18 @@ def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) ->
     client = _client or requests
     host, tenant, site = board
     base = f"https://{host}/wday/cxs/{tenant}/{site}"
+    http_pauses: list[requests.HTTPError] = []
 
     def listing(term: str, offset: int, facets: dict) -> dict:
         attempts = 1 if verified_feed else 3
         for attempt in range(attempts):
             try:
-                with _workday_requests:
-                    response = client.post(
-                        f"{base}/jobs",
-                        json={"appliedFacets": facets, "limit": 20, "offset": offset, "searchText": term},
-                        timeout=(8, 25),
-                    )
-                if getattr(response, 'status_code', 200) in (429, 500, 502, 503, 504) and attempt < attempts - 1:
+                response = _workday_request(
+                    client.post, f"{base}/jobs", http_pauses,
+                    json={"appliedFacets": facets, "limit": 20, "offset": offset, "searchText": term},
+                    timeout=(8, 25),
+                )
+                if getattr(response, 'status_code', 200) in (500, 502, 503, 504) and attempt < attempts - 1:
                     time.sleep(attempt + 1)
                     continue
                 response.raise_for_status()
@@ -4334,6 +4391,7 @@ def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) ->
         found: list[tuple[str, Opportunity]] = []
         seen_pages: set[tuple[str, ...]] = set()
         total = 0
+        invalid_row = False
         for offset in range(0, 5000, 20):
             try:
                 payload = catalogue if catalogue is not None and not facets and offset == 0 else listing("", offset, facets)
@@ -4352,9 +4410,10 @@ def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) ->
                 return found, ValueError("Pagination Workday répétée")
             seen_pages.add(signature)
             for item in rows:
-                if verified_feed and (not isinstance(item, dict)
-                        or not item.get("title") or not str(item.get("externalPath") or "").startswith("/job/")):
-                    return found, ValueError("Annonce Workday incomplète")
+                if verified_feed and (not item.get("title")
+                        or not str(item.get("externalPath") or "").startswith("/job/")):
+                    invalid_row = True
+                    continue
                 path = str(item.get("externalPath") or "")
                 if not path.startswith("/job/"):
                     continue
@@ -4376,7 +4435,7 @@ def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) ->
                 break
         else:
             return found, ValueError("Pagination Workday incomplète")
-        return found, None
+        return found, ValueError("Annonce Workday incomplète") if invalid_row else None
 
     candidates: dict[str, Opportunity] = {}
     search_errors: list[Exception] = []
@@ -4387,15 +4446,21 @@ def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) ->
                 search_errors.append(error)
     if len(search_errors) == len(searches) and not candidates:
         raise search_errors[0]
+    if http_pauses:
+        reason, retry_at = _workday_pause_details(http_pauses)
+        failure = _PartialSourceError([], [], search_failures=len(search_errors), retry_not_before=retry_at)
+        failure.args = (f"{failure} · catalogue Workday {reason}",)
+        raise failure
 
     failed_details: list[str] = []
+
     def enrich(pair: tuple[str, Opportunity]) -> Opportunity | None:
         path, job = pair
         reused = None if verified_feed else _cached_detail(job)
         if reused and reused.description and _display_offer_location(reused.location) != "Non précisé":
             return replace(reused, source=f"Workday career site · {company}")
         try:
-            response = client.get(base + path, timeout=(8, 20))
+            response = _workday_request(client.get, base + path, http_pauses, timeout=(8, 20))
             if getattr(response, "status_code", 200) in (404, 410):
                 return None
             response.raise_for_status()
@@ -4489,7 +4554,7 @@ def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) ->
                 source=f"Workday career site · {detail_company}",
             )
         except (requests.RequestException, ValueError, TypeError):
-            if verified_feed or _junior_analyst(job.title):
+            if verified_feed or _junior_analyst(job.title) or http_pauses:
                 failed_details.append(job.url)
                 return None
             return job
@@ -4504,7 +4569,12 @@ def _workday_jobs(company: str, board: tuple[str, str, str], *, _client=None) ->
     jobs = [verified for path, job in candidates.items() if (verified := enriched.get(path, job)) is not None
             and _eligible_offer(verified)]
     if search_errors or failed_details:
-        raise _PartialSourceError(jobs, failed_details, search_failures=len(search_errors))
+        reason, retry_at = _workday_pause_details(http_pauses)
+        failure = _PartialSourceError(jobs, failed_details, search_failures=len(search_errors),
+                                      retry_not_before=retry_at)
+        if reason or search_errors:
+            failure.args = (f"{failure} · {reason or str(search_errors[0])[:90]}",)
+        raise failure
     return jobs
 
 
@@ -4583,12 +4653,13 @@ def _banque_de_france_jobs(_slug: str = "", _company: str = "") -> list[Opportun
     host, tenant, site = "bdf.wd103.myworkdayjobs.com", "bdf", "recrutement-banque-de-France"
     base = f"https://{host}/wday/cxs/{tenant}/{site}"
     candidates: dict[str, tuple[str, str, str]] = {}
-    detail_errors: list[Exception] = []
+    http_pauses: list[requests.HTTPError] = []
+    failed_urls: list[str] = []
     for term in ("march", "quant", "trading", "ALM"):
         offset, total = 0, 0
         seen: set[str] = set()
         while True:
-            response = requests.post(base + "/jobs", json={
+            response = _workday_request(requests.post, base + "/jobs", http_pauses, json={
                 "appliedFacets": {}, "limit": 20, "offset": offset, "searchText": term,
             }, timeout=(8, 20))
             response.raise_for_status()
@@ -4613,26 +4684,33 @@ def _banque_de_france_jobs(_slug: str = "", _company: str = "") -> list[Opportun
 
     def load(pair: tuple[str, tuple[str, str, str]]) -> Opportunity | None:
         path, (title, location, posted_on) = pair
+        url = f"https://{host}/fr-FR/{site}{path}"
         try:
-            response = requests.get(base + path, timeout=(8, 20))
+            response = _workday_request(requests.get, base + path, http_pauses, timeout=(8, 20))
+            if getattr(response, "status_code", 200) in (404, 410):
+                return None
             response.raise_for_status()
             info = response.json().get("jobPostingInfo") or {}
             description = _plain_text(str(info.get("jobDescription") or ""))
             if not re.search(r"Type de recrutement\s*:[\s\u200e\u200f]*Stage\b", description, re.IGNORECASE):
                 return None
             job = _opportunity(title, "Banque de France", str(info.get("location") or location),
-                               "Stage", f"https://{host}/fr-FR/{site}{path}",
+                               "Stage", url,
                                _workday_publication_date(info.get("startDate"), info.get("postedOn") or posted_on),
                                _start_period(description), description)
             return replace(job, description=description[:12_000], source="Site carrière · Banque de France") if job else None
-        except (requests.RequestException, ValueError, TypeError) as exc:
-            detail_errors.append(exc)
+        except (requests.RequestException, ValueError, TypeError):
+            failed_urls.append(url)
             return None
 
     with ThreadPoolExecutor(max_workers=6) as pool:
         jobs = [job for job in pool.map(load, candidates.items()) if job]
-    if not jobs and detail_errors:
-        raise detail_errors[0]
+    if failed_urls:
+        reason, retry_at = _workday_pause_details(http_pauses)
+        failure = _PartialSourceError(jobs, failed_urls, retry_not_before=retry_at)
+        if reason:
+            failure.args = (f"{failure} · fiches Workday {reason}",)
+        raise failure
     return jobs
 
 
@@ -4884,7 +4962,26 @@ def _source_refresh_seconds(name: str, loader: object) -> int:
     return CACHE_REFRESH_SECONDS
 
 
-def _source_retry_metadata(previous_check: dict, checked_at: str) -> dict:
+def _http_retry_not_before(error: Exception) -> str:
+    """Convert an employer's Retry-After to a persistent UTC deadline."""
+    response = getattr(error, 'response', None)
+    if response is None or response.status_code not in (429, 503):
+        return ""
+    raw = str(getattr(response, 'headers', {}).get('Retry-After') or '').strip()
+    now = datetime.now(timezone.utc)
+    try:
+        if re.fullmatch(r'[0-9]+', raw):
+            deadline = now + timedelta(seconds=int(raw))
+        else:
+            deadline = parsedate_to_datetime(raw)
+            if deadline.tzinfo is None:
+                return ""
+        return deadline.astimezone(timezone.utc).isoformat() if deadline > now else ""
+    except (ValueError, TypeError, OverflowError):
+        return ""
+
+
+def _source_retry_metadata(previous_check: dict, checked_at: str, *, retry_not_before: str = "") -> dict:
     """Back off automatic retries; an explicit refresh may retry immediately."""
     try:
         failures = max(1, int(previous_check.get("failure_count", 0)) + 1)
@@ -4893,7 +4990,12 @@ def _source_retry_metadata(previous_check: dict, checked_at: str) -> dict:
     delay = min(SOURCE_RETRY_MAX_SECONDS,
                 SOURCE_RETRY_BASE_SECONDS * (2 ** min(failures - 1, 10)))
     retry_at = datetime.fromisoformat(checked_at) + timedelta(seconds=delay)
-    return {"failure_count": failures, "next_retry_at": retry_at.isoformat()}
+    if retry_not_before:
+        retry_at = max(retry_at, datetime.fromisoformat(retry_not_before))
+    metadata = {"failure_count": failures, "next_retry_at": retry_at.isoformat()}
+    if retry_not_before:
+        metadata['retry_not_before'] = retry_not_before
+    return metadata
 
 
 def _remember_source_failure(name: str, cached: dict | None, check: dict,
@@ -4926,6 +5028,14 @@ def _collect_source(name: str, loader: object, args: tuple, force: bool) -> tupl
         cached_at = datetime.fromisoformat(str((cached or {}).get("updated") or ""))
         if cached_at.tzinfo is None:
             cached_at = cached_at.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        pass
+    # An explicit employer pause also applies to manual refreshes and new code.
+    try:
+        server_retry = datetime.fromisoformat(str(previous_check.get('retry_not_before') or ''))
+        if server_retry.tzinfo is not None and server_retry > now:
+            check = {**previous_check, 'cache_status': 'backoff', 'duration_ms': 0}
+            return cached_jobs, check, f"{name}: nouvel essai différé par la source"
     except (TypeError, ValueError):
         pass
     if not force and not connector_version_changed:
@@ -4977,7 +5087,7 @@ def _collect_source(name: str, loader: object, args: tuple, force: bool) -> tupl
         check = {"status": "stale", "count": len(found), "checked_at": checked_at,
                  "last_success": str((cached or {}).get("updated") or ""), "error": reason,
                  "duration_ms": round((time.perf_counter() - started) * 1000), "cache_status": "partial",
-                 **_source_retry_metadata(previous_check, checked_at)}
+                 **_source_retry_metadata(previous_check, checked_at, retry_not_before=exc.retry_not_before)}
         # Persist verified partial results too, without advancing the last full success.
         # Otherwise a first partial collection disappears on restart/backoff.
         partial_cache = {**(cached or {}), "jobs": found}
@@ -4996,7 +5106,7 @@ def _collect_source(name: str, loader: object, args: tuple, force: bool) -> tupl
         else:
             reason = type(exc).__name__
         checked_at = datetime.now(timezone.utc).isoformat()
-        retry = _source_retry_metadata(previous_check, checked_at)
+        retry = _source_retry_metadata(previous_check, checked_at, retry_not_before=_http_retry_not_before(exc))
         if cached_jobs:
             check = {"status": "stale", "count": len(cached_jobs), "checked_at": checked_at,
                      "last_success": str((cached or {}).get("updated") or ""), "error": reason,
