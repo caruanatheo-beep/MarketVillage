@@ -327,9 +327,9 @@ footer{padding:18px 0 8px;border-top:1px solid var(--line);color:var(--muted);fo
 /* Phones: sticky search bar, filters in a bottom sheet. */
 @media(max-width:760px){
   #offers-view .filters{position:sticky;top:8px;z-index:6;padding:8px;background:var(--sheet)}
-  #offers-view .results-header{grid-template-columns:auto auto;justify-content:space-between;row-gap:8px}
-  #offers-view .sort-toolbar{grid-row:auto}
-  #offers-view .freshness{grid-column:1/-1}
+  #offers-view .results-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px}
+  #offers-view .sort-toolbar{max-width:100%}
+  #offers-view .freshness{flex-basis:100%}
   #offers-view .search-row{grid-template-columns:minmax(0,1fr) auto;gap:8px}
   #offers-view .search-row input{height:44px;font-size:16px}
   #offers-view .search-icon{top:14px}
@@ -374,6 +374,12 @@ footer{padding:18px 0 8px;border-top:1px solid var(--line);color:var(--muted);fo
   .card-variants summary{min-height:30px;padding-inline:11px}
 }
 @media(max-width:650px){
+  /* Keep the header within the screen whatever the system font: the pill becomes a dot. */
+  .masthead,.primary-nav,.primary-nav a{min-width:0}
+  .brand{flex-shrink:0}
+  .primary-nav a{position:relative}
+  .nav-badge{position:absolute;top:5px;right:2px;width:8px;height:8px;margin:0;padding:0;border-radius:50%;overflow:hidden;color:transparent;font-size:0;background:var(--accent);box-shadow:0 0 0 2px var(--sheet)}
+  .primary-nav a[aria-current="page"] .nav-badge{background:#fff;box-shadow:none}
   .kind{font-size:12px}
   .primary-nav a{font-size:14px}
   .source-request>p{font-size:13px}
