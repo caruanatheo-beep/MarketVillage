@@ -150,6 +150,13 @@ Les critères géographiques et les dates de début sont calculés par le collec
 existant. La pertinence suit son classement ; recherche et filtres s'appliquent
 instantanément dans le navigateur. Aucun appel réseau n'est requis pour filtrer.
 
+Les filtres actifs s'affichent en pastilles amovibles et sont repris dans l'URL
+(`?contrat=VIE&metier=Sales`) pour partager une recherche. Sur téléphone, la recherche
+reste visible en haut de l'écran et les filtres s'ouvrent dans un panneau en bas de
+l'écran. Les variantes d'une même offre qui ne diffèrent que par une parenthèse finale
+(langue, promotion) sont regroupées sur une carte, avec tous leurs liens. Le thème
+sombre suit le réglage de l'appareil.
+
 La barre de tri sous les filtres propose Pertinence et Publication récente.
 Les deux choix sont exclusifs et accessibles au clavier. Les fichiers CSS et JS
 portent une version calculée sur leur contenu pour éviter les mélanges de versions

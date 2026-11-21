@@ -135,36 +135,40 @@ def test_unconfigured_receiver_disables_submission(sources_screen):
     assert not calls
 
 
-def test_announcement_dismissal_persists_and_link_opens_sources(sources_screen):
+def test_sources_badge_disappears_after_visit_and_persists(sources_screen):
     page, calls, _ = sources_screen
-    page.locator('#nav-offers').click()
-    expect(page.locator('#sources-announcement')).to_be_visible()
-    page.locator('#announcement-close').click()
-    expect(page.locator('#sources-announcement')).to_be_hidden()
-    expect(page.locator('#nav-offers')).to_be_focused()
-    page.reload(wait_until='networkidle')
-    expect(page.locator('#sources-announcement')).to_be_hidden()
+    expect(page.locator('#sources-badge')).to_be_hidden()
     page.evaluate('localStorage.clear()')
-    page.reload(wait_until='networkidle')
-    page.locator('#announcement-discover').click()
+    page.goto(BASE, wait_until='networkidle')
+    expect(page.locator('#sources-badge')).to_be_visible()
+    page.locator('#nav-sources').click()
     expect(page.locator('#sources-view')).to_be_visible()
-    expect(page.locator('#sources-announcement')).to_be_hidden()
+    expect(page.locator('#sources-badge')).to_be_hidden()
+    page.locator('#nav-offers').click()
     page.reload(wait_until='networkidle')
-    expect(page.locator('#sources-announcement')).to_be_hidden()
+    expect(page.locator('#sources-badge')).to_be_hidden()
     assert not calls
 
 
-def test_announcement_works_without_browser_storage_on_mobile(sources_screen):
+def test_badge_works_without_browser_storage_and_mobile_suggestion_button(sources_screen):
     page, calls, _ = sources_screen
     page.add_init_script("Object.defineProperty(window, 'localStorage', {get(){throw new Error('blocked')}})")
     page.set_viewport_size({'width':390,'height':844})
-    page.reload(wait_until='networkidle')
-    expect(page.locator('#sources-announcement')).to_be_visible()
+    page.goto(BASE, wait_until='networkidle')
+    expect(page.locator('#sources-badge')).to_be_visible()
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-    page.locator('#announcement-close').click()
-    expect(page.locator('#sources-announcement')).to_be_hidden()
-    page.locator('#nav-offers').click()
-    expect(page.locator('#offers-view')).to_be_visible()
+    page.locator('#nav-sources').click()
+    expect(page.locator('#sources-badge')).to_be_hidden()
+    button = page.locator('#suggest-source')
+    assert button.evaluate('el => getComputedStyle(el).position') == 'fixed'
+    # With two sources the form is already on screen, so the floating shortcut steps aside.
+    expect(page.locator('#source-request-title')).to_be_in_viewport()
+    expect(button).to_have_class('secondary-action is-form-visible')
+    page.locator('#nav-offers').scroll_into_view_if_needed()
+    page.evaluate("document.querySelector('#source-list').style.minHeight = '3000px'; scrollTo(0, 0)")
+    expect(button).to_have_class('secondary-action')
+    button.click()
+    expect(page.locator('#source-request-title')).to_be_in_viewport()
     assert not calls
 
 

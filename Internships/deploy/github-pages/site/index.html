@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#eceef1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121614" media="(prefers-color-scheme: dark)">
   <meta name="description" content="Stages, VIE, graduate et postes junior en finance de marché, réunis pour les étudiants du MSc Financial Markets &amp; Investments de SKEMA.">
   <title>MarketDesk · SKEMA FMI</title>
   <link rel="icon" type="image/svg+xml" sizes="any" href="marketdesk-icon.svg">
@@ -18,34 +21,35 @@
     <a class="brand" href="./" aria-label="MarketDesk, accueil des offres"><img class="brand-mark" src="marketdesk-icon.svg" width="30" height="30" alt="">MarketDesk</a>
     <nav class="primary-nav" aria-label="Navigation principale">
       <a href="#offres" id="nav-offers" aria-current="page"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="14" rx="3"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12a24 24 0 0 0 18 0M12 11v3"/></svg>Offres</a>
-      <a href="#sources" id="nav-sources"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Sources</a>
+      <a href="#sources" id="nav-sources"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Sources<span class="nav-badge" id="sources-badge" hidden>Nouveau</span></a>
     </nav>
     <span class="masthead-note">SKEMA · FMI</span>
   </header>
-  <aside id="sources-announcement" class="announcement" aria-labelledby="announcement-title" hidden>
-    <div class="announcement-copy"><div class="announcement-heading"><span class="announcement-badge">Nouveau</span><h2 id="announcement-title">L’onglet Sources est disponible</h2></div><p>Retrouve les sites carrière suivis et propose de nouvelles entreprises qui pourraient intéresser la promo.</p></div>
-    <a id="announcement-discover" class="announcement-action" href="#sources">Découvrir les sources <span aria-hidden="true">→</span></a>
-    <button id="announcement-close" class="announcement-close" type="button" aria-label="Fermer l’annonce"><span aria-hidden="true">×</span></button>
-  </aside>
   <section id="offers-view" aria-label="Offres">
-  <div class="intro"><div><h1 lang="en">Road to Trading Floors</h1><p>Stages, VIE et premiers postes en finance de marché</p></div></div>
+  <div class="intro offers-intro"><h1 lang="en">Road to Trading Floors</h1><p>Stages, VIE et premiers postes en finance de marché</p></div>
   <section class="filters" aria-label="Rechercher des offres">
-    <div class="search-row"><svg class="icon search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><label class="sr-only" for="search">Poste, entreprise ou ville</label><input id="search" type="search" placeholder="Poste, entreprise ou ville" autocomplete="off"></div>
+    <div class="search-row"><svg class="icon search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><label class="sr-only" for="search">Poste, entreprise ou ville</label><input id="search" type="search" placeholder="Poste, entreprise ou ville" autocomplete="off" enterkeyhint="search"><button id="filters-toggle" class="filters-toggle" type="button" aria-controls="filter-panel" aria-expanded="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filtres<span id="filters-count" class="filters-count" hidden></span></button></div>
+    <div id="filter-panel" class="filter-panel" aria-labelledby="filter-panel-title">
+    <div class="sheet-header"><h2 id="filter-panel-title">Filtres</h2><button id="filters-close" class="sheet-close" type="button" aria-label="Fermer les filtres"><span aria-hidden="true">×</span></button></div>
     <div class="filter-grid">
       <div class="filter-field"><label for="category" id="category-label">Type de contrat</label><select id="category"><option value="">Tous les contrats</option><option>Stages Paris</option><option>Stages International</option><option>VIE</option><option value="Graduate">Graduate / Junior</option></select></div>
       <div class="filter-field"><label for="family" id="family-label">Métier</label><select id="family"><option value="">Tous métiers</option></select></div>
       <div class="filter-field"><label for="period" id="period-label">Publication ou détection</label><select id="period"><option value="">Toutes les dates</option><option value="daily">Aujourd’hui</option><option value="weekly">7 derniers jours</option></select></div>
       <div class="filter-field"><label for="start" id="start-label">Début à partir de</label><select id="start"><option value="">Toutes les dates</option></select></div>
     </div>
+    <div class="sheet-footer"><button id="sheet-reset" class="sheet-reset" type="button">Tout effacer</button><button id="sheet-apply" class="primary-action sheet-apply" type="button">Voir les offres</button></div>
+    </div>
   </section>
+  <div id="sheet-backdrop" class="sheet-backdrop" hidden></div>
+  <div id="active-filters" class="active-filters" aria-label="Filtres actifs" hidden></div>
   <div class="results-header">
     <h2 id="count">Chargement des offres…</h2>
     <div class="sort-toolbar"><span class="sr-only" id="sort-label">Trier les offres</span><div class="sort-options" id="sort-options" role="group" aria-labelledby="sort-label"><button type="button" data-sort="rank" aria-pressed="true" title="Poste et localisation : 50 %, période de début : 35 %, proximité d’avril 2027 : 15 %.">Pertinence</button><button type="button" data-sort="recent" aria-pressed="false">Publication récente</button></div></div>
     <div class="freshness"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="updated"></span></div>
   </div>
   <p id="message" role="status" aria-live="polite"></p>
-  <div id="offers" class="offers" aria-label="Liste des offres"></div>
-  <nav class="pagination" aria-label="Pages des offres"><button id="previous" type="button">← Précédent</button><span id="page"></span><button id="next" type="button">Suivant →</button></nav>
+  <div id="offers" class="offers" aria-label="Liste des offres" aria-busy="true"><div class="skeleton-card" aria-hidden="true"><span></span><span></span><span></span></div><div class="skeleton-card" aria-hidden="true"><span></span><span></span><span></span></div><div class="skeleton-card" aria-hidden="true"><span></span><span></span><span></span></div><div class="skeleton-card" aria-hidden="true"><span></span><span></span><span></span></div><div class="skeleton-card" aria-hidden="true"><span></span><span></span><span></span></div><div class="skeleton-card" aria-hidden="true"><span></span><span></span><span></span></div></div>
+  <div class="load-more"><span id="shown" role="status"></span><button id="more" type="button" hidden>Afficher plus d’offres</button></div>
   </section>
   <section id="sources-view" aria-label="Sources" hidden>
     <div class="intro sources-intro"><div><h1>Sites carrière suivis</h1></div><a class="secondary-action" href="#proposer-source" id="suggest-source">Proposer un site <span aria-hidden="true">+</span></a></div>
@@ -79,7 +83,7 @@
 </main>
 <template id="source-template"><article class="source-card"><a class="source-link" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"><span class="logo"><img alt=""><span class="initials" aria-hidden="true"></span></span><div class="source-card-copy"><h3></h3><span class="source-type"></span></div><span class="source-arrow" aria-hidden="true">↗</span></a><details class="source-feeds"><summary></summary><ul></ul></details></article></template>
 <template id="offer-template">
-  <a class="card" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">
+  <article class="card">
     <div class="card-employer">
       <span class="logo"><img alt="" loading="lazy"><span class="initials" aria-hidden="true"></span></span>
       <div class="card-team">
@@ -88,7 +92,7 @@
       </div>
       <span class="date"></span>
     </div>
-    <h3></h3>
+    <h3><a class="card-link" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"></a></h3>
     <div class="facts">
       <span class="kind"></span>
       <span class="fact fact-location">
@@ -99,7 +103,8 @@
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 11h18"/></svg>
         <span><span class="fact-label">Début&nbsp;:</span> <span class="start"></span></span>
       </span>
+      <details class="card-variants" hidden><summary></summary><ul></ul></details>
     </div>
-  </a>
+  </article>
 </template>
 </body></html>

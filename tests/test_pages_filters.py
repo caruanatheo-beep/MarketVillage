@@ -238,6 +238,7 @@ def test_browser_back_forward_cache_restoration_refreshes_data(screen):
 def test_date_menu_fits_short_mobile_viewport_and_keyboard_scrolls_options(screen):
     page,_=screen
     page.set_viewport_size({'width':390,'height':500})
+    page.locator('#filters-toggle').click()
     trigger=page.locator('#start-trigger')
     trigger.click()
     menu=page.locator('#start-menu')
@@ -267,3 +268,88 @@ def test_location_search_accepts_normalized_and_original_city_names(screen):
         page.locator('#search').fill(query)
         assert page.locator('.card h3').inner_text()=='Assistant Sales'
         assert page.locator('.location').inner_text()=='Londres · Royaume-Uni'
+
+
+def test_filters_are_shareable_removable_and_restored_from_the_url(screen):
+    page,_=screen
+    choose(page,'family','Sales')
+    page.locator('#search').fill('assistant')
+    page.locator('[data-sort="recent"]').click()
+    url=page.url
+    assert 'metier=Sales' in url and 'q=assistant' in url and 'tri=recent' in url
+    chips=page.locator('#active-filters .filter-chip')
+    assert [chip.locator('span').first.inner_text() for chip in chips.all()]==['« assistant »','Sales']
+    assert page.locator('#active-filters .filter-reset').is_visible()
+    page.goto(url,wait_until='networkidle')
+    page.locator('.card').first.wait_for()
+    assert page.locator('#family-trigger').inner_text()=='Sales'
+    assert page.locator('#search').input_value()=='assistant'
+    assert page.locator('[data-sort="recent"]').get_attribute('aria-pressed')=='true'
+    page.get_by_role('button',name='Retirer le filtre Sales').click()
+    assert page.locator('.card').count()==1 and 'metier=' not in page.url
+    page.locator('#search').fill('')
+    assert page.locator('#active-filters').is_hidden()
+    assert page.locator('.card').count()==2
+
+
+def test_load_more_replaces_pagination(screen):
+    page,data=screen
+    base=data['offers'][0]
+    data['offers']=[dict(base,title=f'Offre {i}',url=f'https://careers.example.com/{i}') for i in range(120)]
+    page.evaluate('load()')
+    assert page.locator('.card').count()==50
+    assert page.locator('#count').inner_text()=='120 offres'
+    page.locator('#more').click()
+    assert page.locator('.card').count()==100
+    page.locator('#more').click()
+    assert page.locator('.card').count()==120 and page.locator('#more').is_hidden()
+
+
+def test_trailing_variants_are_grouped_without_losing_links(screen):
+    page,data=screen
+    base=data['offers'][0]
+    data['offers']=[dict(base,title=f'Sales Programme (May class, {lang} Speaker)',url=f'https://careers.example.com/{lang}')
+                    for lang in ('Thai','Japanese','Tagalog')]+[dict(base,title='Sales Programme (Equities) Paris desk',url='https://careers.example.com/other')]
+    page.evaluate('load()')
+    cards=page.locator('.card')
+    assert cards.count()==2
+    grouped=cards.first
+    assert grouped.locator('h3').inner_text()=='Sales Programme'
+    grouped.locator('.card-variants summary').click()
+    links=grouped.locator('.card-variants a')
+    assert links.count()==3 and links.first.inner_text()=='May class, Thai Speaker'
+    assert links.last.get_attribute('href')=='https://careers.example.com/Tagalog'
+    page.keyboard.press('Escape')
+    assert links.first.is_hidden()
+
+
+def test_relative_dates_flag_new_offers(screen):
+    page,_=screen
+    dates=page.locator('.card .date')
+    assert dates.first.inner_text()=='Nouveau · aujourd’hui'
+    assert 'is-new' in dates.first.get_attribute('class')
+    assert dates.last.inner_text()=='Il y a 20 j'
+    assert dates.last.get_attribute('title')=='Publication test'
+
+
+def test_mobile_filters_open_in_a_sheet_with_sticky_search(screen):
+    page,_=screen
+    page.set_viewport_size({'width':390,'height':844})
+    assert page.locator('#category-trigger').is_hidden()
+    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    assert page.locator('#offers-view .filters').evaluate('el => getComputedStyle(el).position')=='sticky'
+    page.locator('#filters-toggle').click()
+    assert page.locator('#filter-panel').get_attribute('role')=='dialog'
+    choose(page,'category','VIE')
+    assert page.locator('#sheet-apply').inner_text()=='Aucune offre'
+    page.locator('#sheet-reset').click()
+    assert page.locator('#sheet-apply').inner_text()=='Voir 2 offres'
+    choose(page,'family','Sales')
+    assert page.locator('#filters-count').inner_text()=='1'
+    page.locator('#sheet-apply').click()
+    assert page.locator('#filter-panel').is_hidden()
+    assert page.locator('.card').count()==1
+    page.locator('#filters-toggle').click()
+    page.keyboard.press('Escape')
+    assert page.locator('#filter-panel').is_hidden()
+    assert page.locator('#filters-toggle').evaluate('el => el === document.activeElement')

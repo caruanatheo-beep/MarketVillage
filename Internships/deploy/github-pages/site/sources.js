@@ -126,7 +126,8 @@
     byId(sources ? "nav-sources" : "nav-offers").setAttribute("aria-current", "page");
     document.title = (sources ? "Sources" : "Offres") + " · MarketDesk";
     if (openFilter) openFilter.close();
-    if (sources) loadSources();
+    if (typeof closeSheet === "function") closeSheet(false);
+    if (sources) { loadSources(); markSourcesSeen(); }
   }
   byId("suggest-source").addEventListener("click", () => {
     byId("proposer-source").scrollIntoView({block:"start"});
@@ -167,23 +168,22 @@
       clearTimeout(timer); sending = false; submit.disabled = false; submit.textContent = "Envoyer la suggestion ↗";
     }
   });
-  window.addEventListener("hashchange", showView); showView();
-  const announcement = byId("sources-announcement"), announcementKey = "marketdesk.sources-announcement.v1";
-  let announcementDismissed = false;
-  try { announcementDismissed = localStorage.getItem(announcementKey) === "dismissed"; } catch { /* Storage may be disabled. */ }
-  announcement.hidden = announcementDismissed;
-  function dismissAnnouncement() {
-    announcement.hidden = true;
-    try { localStorage.setItem(announcementKey, "dismissed"); } catch { /* Keep dismissal effective for this page. */ }
+  // The "Nouveau" pill on the Sources tab disappears once the tab has been visited.
+  const badge = byId("sources-badge"), badgeKey = "marketdesk.sources-announcement.v1";
+  let badgeSeen = false;
+  try { badgeSeen = localStorage.getItem(badgeKey) === "dismissed"; } catch { /* Storage may be disabled. */ }
+  badge.hidden = badgeSeen;
+  function markSourcesSeen() {
+    badge.hidden = true;
+    try { localStorage.setItem(badgeKey, "dismissed"); } catch { /* Keep the change effective for this page. */ }
   }
-  byId("announcement-close").addEventListener("click", () => {
-    dismissAnnouncement();
-    document.querySelector('.primary-nav [aria-current="page"]').focus({preventScroll:true});
-  });
-  byId("announcement-discover").addEventListener("click", () => {
-    dismissAnnouncement();
-    byId("nav-sources").focus({preventScroll:true});
-  });
+  window.addEventListener("hashchange", showView); showView();
+  // Hide the floating suggestion button on phones once the form itself is on screen.
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver(entries => {
+      byId("suggest-source").classList.toggle("is-form-visible", entries.some(entry => entry.isIntersecting));
+    }).observe(byId("proposer-source"));
+  }
   document.addEventListener("click", event => {
     for (const details of document.querySelectorAll(".source-feeds[open]")) if (!details.contains(event.target)) details.open = false;
   });
