@@ -1,0 +1,16 @@
+{
+  "name": "MarketDesk · Road to Trading Floors",
+  "short_name": "MarketDesk",
+  "description": "Stages, VIE, graduate et postes junior en finance de marché pour les étudiants du MSc FMI de SKEMA.",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eceef1",
+  "theme_color": "#142c3c",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

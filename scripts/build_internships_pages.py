@@ -60,9 +60,11 @@ def build_site(output: Path, *, collect: bool = False, force: bool = False) -> i
         return icon
     for job in jobs.matching_opportunities(offers):
         # No description, profile, tracking, raw error, token or account data.
+        place = jobs._display_offer_place(job.location, job.title)
         records.append({
-            "title": jobs._display_offer_title(job.title, job.location), "company": job.company,
-            "location": jobs._display_offer_location(job.location), "location_source": job.location or "Non précisé", "kind": job.kind,
+            "title": jobs._display_offer_title(job.title, place if place != "Non précisé" else job.location),
+            "company": job.company,
+            "location": place, "location_source": job.location or "Non précisé", "kind": job.kind,
             "url": public_job_url(job.url), "published": job.published,
             "date_label": ("Détectée le " if job.published_inferred else "Publiée le ") + jobs._display_offer_date(job.published),
             "start": jobs._display_offer_date(job.start_period), "start_month": jobs.start_month(job.start_period) or "",
@@ -98,6 +100,7 @@ def build_site(output: Path, *, collect: bool = False, force: bool = False) -> i
     assert_public(sources_payload, "sources.json")
     assets = {name: SITE_ROOT / name for name in (
         "index.html", "site.css", "app.js", "sources.js", "marketdesk-icon.svg", "frosted-glass.webp",
+        "og-image.png", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png",
     )}
     assets.update(logos)
     # Validate every byte before creating the publish directory.

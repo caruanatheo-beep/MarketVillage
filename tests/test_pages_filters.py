@@ -62,7 +62,7 @@ def choose(page,field,text):
 
 def test_click_selection_reset_and_contract_are_connected_to_offers(screen):
     page,_=screen
-    assert page.get_by_role('combobox').count()==4
+    assert page.get_by_role('combobox').count()==5
     choose(page,'family','Sales')
     assert page.locator('.card').count()==1
     assert page.locator('.card h3').inner_text()=='Assistant Sales'
@@ -353,3 +353,34 @@ def test_mobile_filters_open_in_a_sheet_with_sticky_search(screen):
     page.keyboard.press('Escape')
     assert page.locator('#filter-panel').is_hidden()
     assert page.locator('#filters-toggle').evaluate('el => el === document.activeElement')
+
+
+def test_place_filter_groups_cities_under_countries_and_is_shareable(screen):
+    page,data=screen
+    base=data['offers'][0]
+    rows=[('Paris · France',3),('Montrouge · France',2),('Londres · Royaume-Uni',2),('Singapour',2),('Paris 8e · France / Londres · Royaume-Uni',1),('Non précisé',1)]
+    data['offers']=[dict(base,title=f'{loc} {i}',location=loc,url=f'https://careers.example.com/{n}-{i}')
+                    for n,(loc,count) in enumerate(rows) for i in range(count)]
+    page.evaluate('load()')
+    page.locator('#place-trigger').click()
+    labels=page.locator('#place-menu [role=option]').all_inner_texts()
+    assert labels[:4]==['Tous les lieux','France (6)','Paris (4)','Montrouge (2)']
+    assert 'Royaume-Uni (3)' in labels and 'Singapour (2)' in labels and not any('Non précisé' in l for l in labels)
+    page.keyboard.press('Escape')
+    choose(page,'place','Paris (4)')
+    assert page.locator('.card').count()==4 and 'lieu=c%3AParis' in page.url
+    assert page.locator('#active-filters .filter-chip span').first.inner_text()=='Paris'
+    choose(page,'place','Royaume-Uni (3)')
+    assert page.locator('.card').count()==3
+
+
+def test_phone_cards_show_city_only_and_unknown_start_is_explicit(screen):
+    page,data=screen
+    data['offers'][0].update(location='Londres · Royaume-Uni / Paris · France',start='Non précisé')
+    page.evaluate('load()')
+    location=page.locator('.card .location').first
+    assert location.inner_text()=='Londres · Royaume-Uni / Paris · France'
+    assert page.locator('.card .start').first.inner_text()=='à confirmer'
+    page.set_viewport_size({'width':390,'height':844})
+    assert location.inner_text()=='Londres / Paris'
+    assert location.get_attribute('title')=='Londres · Royaume-Uni / Paris · France'

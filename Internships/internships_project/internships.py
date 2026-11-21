@@ -5719,6 +5719,8 @@ _LOCATION_COUNTRIES = {
     "Qatar": "QA|QAT|Qatar", "Taïwan": "TW|TWN|Taiwan",
     "Canada": "CA|CAN|Canada", "Suède": "SE|SWE|Sweden|Suede",
     "Belgique": "BE|BEL|Belgium|Belgique",
+    # No two-letter code: "CO" is also the Colorado state abbreviation.
+    "Colombie": "COL|Colombia|Colombie",
 }
 _LOCATION_CITIES = {
     "Paris": ("France", ""), "Montrouge": ("France", ""), "La Défense": ("France", ""),
@@ -5727,7 +5729,7 @@ _LOCATION_CITIES = {
     "Levallois-Perret": ("France", ""), "Boulogne-Billancourt": ("France", ""),
     "Fontenay-sous-Bois": ("France", ""), "Saint-Denis": ("France", ""),
     "Issy-les-Moulineaux": ("France", ""), "Saint-Quentin-en-Yvelines": ("France", ""),
-    "Saint-Grégoire": ("France", ""), "Lyon": ("France", ""), "Lille": ("France", ""),
+    "Saint-Grégoire": ("France", ""), "Le Relecq-Kerhuon": ("France", ""), "Lyon": ("France", ""), "Lille": ("France", ""),
     "Bordeaux": ("France", ""), "Nantes": ("France", ""), "Marseille": ("France", ""),
     "Londres": ("Royaume-Uni", "London|Canary Wharf"), "Glasgow": ("Royaume-Uni", ""),
     "Francfort": ("Allemagne", "Frankfurt am Main|Frankfurt"), "Düsseldorf": ("Allemagne", "Dusseldorf"),
@@ -5746,11 +5748,12 @@ _LOCATION_CITIES = {
     "Dubaï": ("Émirats arabes unis", "Dubai"), "Doha": ("Qatar", ""),
     "Sydney": ("Australie", ""), "Mumbai": ("Inde", "Bombay"), "Casablanca": ("Maroc", ""),
     "Monaco": ("Monaco", ""), "Santiago": ("Chili", ""), "São Paulo": ("Brésil", "Sao Paulo"),
-    "Mexico": ("Mexique", "Mexico City"), "Toronto": ("Canada", ""), "Montréal": ("Canada", "Montreal"),
+    "Mexico": ("Mexique", "Mexico City"), "Bogota": ("Colombie", "Bogotá"), "Toronto": ("Canada", ""), "Montréal": ("Canada", "Montreal"),
     **{city: ("États-Unis", alias) for city, alias in (
         ("New York", "New York City|NYC"), ("Chicago", ""), ("Miami", ""), ("Dallas", ""),
         ("West Palm Beach", ""), ("Salt Lake City", ""), ("Stafford", ""), ("Houston", ""),
-        ("San Francisco", ""), ("Los Angeles", ""), ("Austin", ""), ("Seattle", ""), ("Stamford", ""), ("Boston", ""))},
+        ("San Francisco", ""), ("Los Angeles", ""), ("Austin", ""), ("Seattle", ""), ("Stamford", ""), ("Boston", ""),
+        ("Newport Beach", ""))},
 }
 _LOCATION_COUNTRY_NAMES = {
     _offer_search_text(alias): country
@@ -5769,7 +5772,8 @@ def _display_offer_location(value: str) -> str:
                      html.unescape(value or ""), maxsplit=1, flags=re.I)[0]
     value = _plain_text("".join(char for char in value if unicodedata.category(char) != "Co")).strip(" ,|–-")
     key = _offer_search_text(value)
-    if key in {"", "all", "non precise", "not specified", "unknown", "n a", "multiple locations", "various"}:
+    # "Search" is a listing-page label some career sites leave in the location column.
+    if key in {"", "all", "non precise", "not specified", "unknown", "n a", "multiple locations", "various", "search"}:
         return "Non précisé"
     parts = re.split(r"[,;|·()]+|\s+[-–—]\s+", value)
     countries = {_LOCATION_COUNTRY_NAMES[part] for part in map(_offer_search_text, parts)
@@ -5825,6 +5829,21 @@ def _display_offer_location(value: str) -> str:
     return value
 
 
+def _display_offer_place(location: str, title: str = "") -> str:
+    """Display a location, falling back to a city named at the end of the title."""
+    place = _display_offer_location(location)
+    if place != "Non précisé" or not title:
+        return place
+    tail = re.search(r"[-–—,(]\s*([^-–—,()]+?)\s*\)?\s*$", html.unescape(title))
+    if not tail:
+        return place
+    key = _offer_search_text(tail[1])
+    for pattern, city, country in _LOCATION_CITY_PATTERNS:
+        if (match := pattern.fullmatch(key)) and match[0] == key:
+            return city if city == country else f"{city} · {country}"
+    return place
+
+
 def _display_offer_date(value: str) -> str:
     """Normalize presentation only; retain the source date's precision and ranges."""
     value = (value or "").strip()
@@ -5846,6 +5865,11 @@ def _display_offer_date(value: str) -> str:
     english_day = re.fullmatch(rf"({_MONTH})\s+(\d{{1,2}})(?:st|nd|rd|th)?[,]?\s+(\d{{4}})", value, re.I)
     if english_day:
         value = f"{english_day[2]} {english_day[1]} {english_day[3]}"
+    # "6th September 2027" -> "6 septembre 2027"; "1st" keeps the French "1er".
+    value = re.sub(rf"\b(\d{{1,2}})(?:st|nd|rd|th)\s+(?=(?:of\s+)?(?:{_MONTH})\b)",
+                   lambda match: ("1er" if match[1] in {"1", "01"} else str(int(match[1]))) + " ",
+                   value, flags=re.I)
+    value = re.sub(rf"\b(\d{{1,2}}(?:er)?)\s+of\s+(?=(?:{_MONTH})\b)", r"\1 ", value, flags=re.I)
     return re.sub(rf"\b({_MONTH})\b",
                   lambda match: _MONTH_NAMES[_MONTH_ALIASES[match[0].casefold()] - 1], value, flags=re.I)
 
@@ -5886,7 +5910,9 @@ def _display_offer_title(title: str, location: str = "") -> str:
         for alias in sorted(set(aliases), key=len, reverse=True):
             value = re.sub(r"(?<!\w)" + re.escape(alias) + r"(?!\w)(?!\s+(?:Stock Exchange|Stock Market))",
                            " ", value, flags=re.I)
-    value = re.sub(r"[\[(]\s*[-–—,:|/]*\s*[\])]", " ", value)
+        # A removed city can leave its state or country code behind ("- , CA", "- , UK").
+        value = re.sub(r"(?:\s*[-–—,]|(?<=[\[(]))\s*,\s*[A-Z]{2}\b(?=\s*(?:[|)\]]|$))", " ", value)
+    value = re.sub(r"[\[(][\s\-–—,:|/]*[\])]", " ", value)
     value = re.sub(r"\s+", " ", value).strip(" -–—:|,")
     contract = r"(?:(?:summer|winter|spring|off[ -]?cycle|seasonal|long)\s+)?(?:stage|stagiaire|internship|intern)\b"
     duration = r"(?:de\s+|of\s+)?\d{1,2}\s*[-–]?\s*(?:mois|months?)\b"
@@ -5898,11 +5924,13 @@ def _display_offer_title(title: str, location: str = "") -> str:
     value = re.sub(rf"\s*[-–—:|]?\s+{label}\s*$", keep_stage_type, value, flags=re.I)
     value = re.sub(r"\b\d{1,2}\s*[-–]?\s*(?:mois|months?)\b", " ", value, flags=re.I)
     value = re.sub(r"\(\s*(?:North America|Americas|EMEA|APAC)\s*[-–—]?\s*\)", " ", value, flags=re.I)
-    value = re.sub(r"[\[(]\s*[-–—,:|/]*\s*[\])]", " ", value)
+    value = re.sub(r"[\[(][\s\-–—,:|/]*[\])]", " ", value)
     value = re.sub(r"([\[(])\s+", r"\1", value)
     value = re.sub(r"\s+([)\]])", r"\1", value)
     value = re.sub(r"\s*[-–—,:|]+\s*([)\]])", r"\1", value)
-    value = re.sub(r"\s*[-–—:|](?:\s*[-–—:|])+\s*", " - ", value)
+    # Collapse separator runs such as " - /", ", -" or " - :" into one dash.
+    value = re.sub(r"\s*[-–—:|,/](?:\s*[-–—:|,/])+\s*",
+                   lambda run: " - " if re.search(r"[-–—:|]", run[0]) else run[0], value)
     return re.sub(r"\s+", " ", value).strip(" -–—:|,") or title
 
 

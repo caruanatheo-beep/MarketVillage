@@ -68,3 +68,49 @@ def test_source_location_categories_and_deduplication_are_preserved():
     assert len(jobs._deduplicate_opportunities([job,alternate]))==1
     assert jobs._is_international_location('Shanghai · Chine')
     assert not jobs._is_international_location('Montrouge · France')
+
+
+@pytest.mark.parametrize('title,location,expected', [
+    ('Client Solutions Associate - San Francisco, CA', 'San Francisco, CA, USA', 'Client Solutions Associate'),
+    ('Client Solutions Associate - Enterprise Data Solutions - San Francisco, CA | Boston, MA', 'San Francisco, CA, USA',
+     'Client Solutions Associate - Enterprise Data Solutions | Boston, MA'),
+    ('Equity Research MBA Analyst Summer Internship Programme - London, UK', 'London',
+     'Equity Research MBA Analyst Summer Internship Programme'),
+    ('Client Solutions Internship - Boston, Summer', 'United States, Boston, One Beacon Street', 'Client Solutions Internship - Summer'),
+    ('MBA Summer Intern, Account Manager, APAC (Singapore, Hong Kong, Shanghai)', 'Singapore; Hong Kong; Shanghai, CHN',
+     'MBA Summer Intern, Account Manager, APAC'),
+    ('Analytics & Sales - London/South Africa Rotational Programme', 'London, United Kingdom',
+     'Analytics & Sales - South Africa Rotational Programme'),
+    ('Analytics & Sales Graduate Programme, Sydney - Asian Language Speakers', 'Sydney, Australia',
+     'Analytics & Sales Graduate Programme - Asian Language Speakers'),
+    ('Sales (Paris, FR)', 'Paris', 'Sales'),
+    ('Sales/Trading - Rates', 'Paris', 'Sales/Trading - Rates'),
+])
+def test_removed_city_leaves_no_punctuation_or_code_residue(title, location, expected):
+    result = jobs._display_offer_title(title, location)
+    assert result == expected
+    assert jobs._display_offer_title(result, location) == expected
+
+
+@pytest.mark.parametrize('raw,expected', [
+    ('Search', 'Non précisé'), ('Newport Beach, CA USA', 'Newport Beach · États-Unis'),
+    ('Bogota  Colombia', 'Bogota · Colombie'), ('Le Relecq-Kerhuon (Près de Brest)', 'Le Relecq-Kerhuon · France'),
+    ('Boulder, CO, USA', 'Boulder, CO · États-Unis'),
+])
+def test_listing_labels_and_additional_cities(raw, expected):
+    assert jobs._display_offer_location(raw) == expected
+
+
+def test_missing_location_falls_back_to_the_city_ending_the_title():
+    title = 'Quantitative Masters Internship Program - Technology - Analytics & Modeling - San Francisco'
+    assert jobs._display_offer_place('Search', title) == 'San Francisco · États-Unis'
+    assert jobs._display_offer_place('Search', 'Sales Programme - Global Markets') == 'Non précisé'
+    assert jobs._display_offer_place('Paris', title) == 'Paris · France'
+
+
+@pytest.mark.parametrize('raw,expected', [
+    ('6th September 2027', '6 septembre 2027'), ('1st of June 2027', '1er juin 2027'),
+    ('September 6th, 2027', '6 septembre 2027'), ('21 June 2027', '21 juin 2027'), ('2027-04', 'avril 2027'),
+])
+def test_english_ordinal_start_dates_are_translated(raw, expected):
+    assert jobs._display_offer_date(raw) == expected

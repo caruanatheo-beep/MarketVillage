@@ -156,6 +156,9 @@ reste visible en haut de l'écran et les filtres s'ouvrent dans un panneau en ba
 l'écran. Les variantes d'une même offre qui ne diffèrent que par une parenthèse finale
 (langue, promotion) sont regroupées sur une carte, avec tous leurs liens. Le thème
 sombre suit le réglage de l'appareil.
+Le filtre « Lieu » propose les pays puis leurs villes (`?lieu=p:France`, `?lieu=c:Paris`),
+calculés depuis les lieux normalisés des offres. `og-image.png` sert d'aperçu lors des
+partages et `manifest.webmanifest` permet d'ajouter le site à l'écran d'accueil.
 
 La barre de tri sous les filtres propose Pertinence et Publication récente.
 Les deux choix sont exclusifs et accessibles au clavier. Les fichiers CSS et JS

@@ -1,9 +1,41 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
-const controls = ["search", "category", "family", "period", "start"];
+const controls = ["search", "category", "place", "family", "period", "start"];
 const selects = controls.slice(1);
 // Short, shareable query keys for each control.
-const urlKeys = {search: "q", category: "contrat", family: "metier", period: "publication", start: "debut"};
+const urlKeys = {search: "q", category: "contrat", place: "lieu", family: "metier", period: "publication", start: "debut"};
+// "Paris 8e · France / Londres · Royaume-Uni" -> [{city:"Paris", country:"France"}, …]
+function places(location) {
+  return String(location || "").split(" / ").map(part => part.split(" · "))
+    .filter(bits => bits[0] && bits[0] !== "Non précisé")
+    .map(bits => ({city: bits[0].replace(/^Paris \d{1,2}(?:er|e)$/, "Paris"), country: bits[bits.length - 1]}));
+}
+function placeOptions(list) {
+  const countries = new Map();
+  for (const job of list) {
+    const seen = new Set();
+    for (const {city, country} of places(job.location)) {
+      if (!countries.has(country)) countries.set(country, {count: 0, cities: new Map()});
+      const entry = countries.get(country);
+      if (!seen.has("p:" + country)) { entry.count++; seen.add("p:" + country); }
+      if (city !== country && !seen.has("c:" + city)) { entry.cities.set(city, (entry.cities.get(city) || 0) + 1); seen.add("c:" + city); }
+    }
+  }
+  const options = [];
+  for (const [country, entry] of [...countries].filter(([, e]) => e.count >= 2).sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0], "fr"))) {
+    options.push({value: "p:" + country, name: country, count: entry.count, child: false});
+    const cities = [...entry.cities].filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr"));
+    if (cities.length > 1 || cities.length === 1 && cities[0][1] < entry.count) {
+      for (const [city, count] of cities) options.push({value: "c:" + city, name: city, count, child: true});
+    }
+  }
+  return options;
+}
+function matchesPlace(job, value) {
+  if (!value) return true;
+  const [kind, name] = [value.slice(0, 2), value.slice(2)];
+  return places(job.location).some(place => kind === "c:" ? place.city === name : place.country === name);
+}
 const normalize = (s) => String(s || "").normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 let offers = [], shown = 0;
 let sortMode = "rank";
@@ -71,7 +103,8 @@ function enhanceFilter(select) {
     close(); menu.replaceChildren();
     for (const [i, option] of [...select.options].entries()) {
       const item = document.createElement("div"); item.id = select.id + "-option-" + i;
-      item.className = "filter-option"; item.setAttribute("role", "option"); item.textContent = option.textContent;
+      item.className = "filter-option" + (option.dataset.child ? " is-child" : "");
+      item.setAttribute("role", "option"); item.textContent = option.textContent;
       item.addEventListener("click", () => choose(i));
       item.addEventListener("pointermove", () => highlight(i, false)); menu.append(item);
     }
@@ -115,7 +148,9 @@ function relativeDate(published, today) {
   if (days === 0) return {text: "Nouveau · aujourd’hui", fresh: true};
   if (days === 1) return {text: "Nouveau · hier", fresh: true};
   if (days < 60) return {text: `Il y a ${days} j`, fresh: false};
-  return {text: `Il y a ${Math.floor(days / 30)} mois`, fresh: false};
+  if (days < 365) return {text: `Il y a ${Math.floor(days / 30)} mois`, fresh: false};
+  const years = Math.floor(days / 365);
+  return {text: `Il y a ${years} an${years > 1 ? "s" : ""}`, fresh: false};
 }
 // Variants differ only by a trailing parenthesis (language, class…); everything else must match.
 const baseTitle = (title) => {
@@ -142,6 +177,7 @@ function filteredOffers() {
   const first = week.toISOString().slice(0,10);
   const selected = offers.filter((j) => terms.every((t) => normalize(j.title + " " + j.company + " " + j.location + " " + (j.location_source || "")).includes(t))
     && (!$("category").value || j.categories.includes($("category").value))
+    && matchesPlace(j, $("place").value)
     && (!$("family").value || j.family === $("family").value)
     && (!$("start").value || j.start_month && j.start_month >= $("start").value)
     && (!$("period").value || $("period").value === "daily" && j.published === today
@@ -153,7 +189,10 @@ function activeFilters() {
   const active = [];
   const search = $("search").value.trim();
   if (search) active.push({id: "search", label: "« " + search + " »"});
-  for (const id of selects) if ($(id).value) active.push({id, label: $(id).selectedOptions[0]?.textContent || $(id).value});
+  for (const id of selects) if ($(id).value) {
+    const option = $(id).selectedOptions[0];
+    active.push({id, label: option?.dataset.name || option?.textContent || $(id).value});
+  }
   return active;
 }
 function clearControl(id) {
@@ -210,6 +249,25 @@ function fillCard(entry, today) {
   const kindLabel = j.kind === "Graduate" && /\b(?:junior|jr)\b/i.test(j.title) && !/\bgraduates?\b/i.test(j.title) ? "Junior" : j.kind;
   for (const [selector, value] of [[".company",j.company],[".kind",kindLabel],[".location",j.location],[".start",j.start],[".family",j.family]]) {
     const node = card.querySelector(selector); node.textContent = value; node.title = value;
+  }
+  // Phones hide the country part (CSS) so the city stays readable.
+  const location = card.querySelector(".location"), parts = String(j.location).split(" / ");
+  if (parts.some(part => part.includes(" · "))) {
+    location.replaceChildren();
+    parts.forEach((part, index) => {
+      const [city, ...country] = part.split(" · ");
+      if (index) location.append(" / ");
+      location.append(city);
+      if (country.length) {
+        const suffix = document.createElement("span"); suffix.className = "loc-country";
+        suffix.textContent = " · " + country.join(" · "); location.append(suffix);
+      }
+    });
+  }
+  if (j.start === "Non précisé") {
+    const start = card.querySelector(".start");
+    start.textContent = "à confirmer"; start.title = "Date de début non précisée par l’employeur";
+    start.classList.add("is-unknown");
   }
   card.querySelector(".kind").dataset.kind = kindLabel;
   const date = card.querySelector(".date"), relative = relativeDate(j.published, today);
@@ -302,8 +360,20 @@ async function load() {
     const data = await response.json();
     if (!Array.isArray(data.offers)) throw new Error("schema");
     offers = data.offers;
-    const family = $("family").value, start = $("start").value;
+    const family = $("family").value, start = $("start").value, place = $("place").value;
     options("family", [...new Set(offers.map(j=>j.family).filter(Boolean))].sort().map(v=>[v,v]));
+    $("place").replaceChildren($("place").options[0]);
+    for (const item of placeOptions(offers)) {
+      const option = document.createElement("option");
+      option.value = item.value; option.dataset.name = item.name;
+      if (item.child) option.dataset.child = "1";
+      // Native pickers cannot indent, so child cities get a visual prefix there.
+      option.textContent = (item.child && touchScreen ? " " : "") + `${item.name} (${item.count})`;
+      $("place").append(option);
+    }
+    filterViews.get("place")?.refresh();
+    $("place").value = place;
+    if ($("place").selectedIndex < 0) $("place").selectedIndex = 0;
     const months = new Set(offers.map(j=>j.start_month).filter(Boolean));
     const now = new Date();
     for (let n=0;n<24;n++) months.add(new Date(Date.UTC(now.getFullYear(),now.getMonth()+n,1)).toISOString().slice(0,7));
@@ -311,7 +381,7 @@ async function load() {
     $("family").value = family; $("start").value = start;
     if ($("family").selectedIndex < 0) $("family").selectedIndex = 0;
     if ($("start").selectedIndex < 0) $("start").selectedIndex = 0;
-    if (pendingQuery) { applyQuery(["family", "start"]); pendingQuery = null; }
+    if (pendingQuery) { applyQuery(["place", "family", "start"]); pendingQuery = null; }
     const s = data.sources;
     $("updated").textContent = "Actualisé le " + new Intl.DateTimeFormat("fr-FR", {day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Paris"}).format(new Date(data.updated)) + (s.unavailable || s.partial || s.retained ? " · Certaines sources à vérifier" : "");
     $("updated").title = `Heure de Paris · ${s.checked} sources · ${s.unavailable} sources indisponibles · ${s.partial || 0} collectes partielles · ${s.retained} sources avec offres conservées`;

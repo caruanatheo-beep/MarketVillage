@@ -52,6 +52,11 @@ FILES = {
     "deploy/github-pages/site/app.js": "deploy/github-pages/site/app.js",
     "deploy/github-pages/site/sources.js": "deploy/github-pages/site/sources.js",
     "deploy/github-pages/site/marketdesk-icon.svg": "deploy/github-pages/site/marketdesk-icon.svg",
+    "deploy/github-pages/site/og-image.png": "deploy/github-pages/site/og-image.png",
+    "deploy/github-pages/site/manifest.webmanifest": "deploy/github-pages/site/manifest.webmanifest",
+    "deploy/github-pages/site/icon-192.png": "deploy/github-pages/site/icon-192.png",
+    "deploy/github-pages/site/icon-512.png": "deploy/github-pages/site/icon-512.png",
+    "deploy/github-pages/site/apple-touch-icon.png": "deploy/github-pages/site/apple-touch-icon.png",
     "deploy/github-pages/pages.yml": ".github/workflows/pages.yml",
     "deploy/github-pages/README.md": "README.md",
 }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#eceef1" media="(prefers-color-scheme: light)">
@@ -11,6 +11,21 @@
   <meta name="description" content="Stages, VIE, graduate et postes junior en finance de marché, réunis pour les étudiants du MSc Financial Markets &amp; Investments de SKEMA.">
   <title>MarketDesk · SKEMA FMI</title>
   <link rel="icon" type="image/svg+xml" sizes="any" href="marketdesk-icon.svg">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="canonical" href="https://caruanatheo-beep.github.io/Internships-Offres/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="fr_FR">
+  <meta property="og:site_name" content="MarketDesk">
+  <meta property="og:title" content="Road to Trading Floors · MarketDesk">
+  <meta property="og:description" content="Stages, VIE, graduate et postes junior en finance de marché, réunis pour les étudiants du MSc Financial Markets &amp; Investments de SKEMA.">
+  <meta property="og:url" content="https://caruanatheo-beep.github.io/Internships-Offres/">
+  <meta property="og:image" content="https://caruanatheo-beep.github.io/Internships-Offres/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="MarketDesk · Road to Trading Floors : stages, VIE et premiers postes en finance de marché">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="apple-mobile-web-app-title" content="MarketDesk">
   <link rel="stylesheet" href="site.css">
   <script src="app.js" defer></script>
   <script src="sources.js" defer></script>
@@ -33,6 +48,7 @@
     <div class="sheet-header"><h2 id="filter-panel-title">Filtres</h2><button id="filters-close" class="sheet-close" type="button" aria-label="Fermer les filtres"><span aria-hidden="true">×</span></button></div>
     <div class="filter-grid">
       <div class="filter-field"><label for="category" id="category-label">Type de contrat</label><select id="category"><option value="">Tous les contrats</option><option>Stages Paris</option><option>Stages International</option><option>VIE</option><option value="Graduate">Graduate / Junior</option></select></div>
+      <div class="filter-field"><label for="place" id="place-label">Lieu</label><select id="place"><option value="">Tous les lieux</option></select></div>
       <div class="filter-field"><label for="family" id="family-label">Métier</label><select id="family"><option value="">Tous métiers</option></select></div>
       <div class="filter-field"><label for="period" id="period-label">Publication ou détection</label><select id="period"><option value="">Toutes les dates</option><option value="daily">Aujourd’hui</option><option value="weekly">7 derniers jours</option></select></div>
       <div class="filter-field"><label for="start" id="start-label">Début à partir de</label><select id="start"><option value="">Toutes les dates</option></select></div>
