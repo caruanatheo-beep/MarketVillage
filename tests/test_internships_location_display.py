@@ -87,6 +87,8 @@ def test_source_location_categories_and_deduplication_are_preserved():
     ('Client Solutions Associate - San Francisco, CA, February 2027', 'San Francisco, CA, USA', 'Client Solutions Associate'),
     ('Client Solutions Associate - Boston, MA, February 2027', 'United States, Boston, One Beacon Street',
      'Client Solutions Associate'),
+    ('Client Solutions Associate - San Francisco, CA (February 2027)', 'San Francisco, CA, USA', 'Client Solutions Associate'),
+    ('Client Solutions Associate – Los Angeles, CA – February 2027', 'United States, Los Angeles', 'Client Solutions Associate'),
     ('Sales/Trading - Rates', 'Paris', 'Sales/Trading - Rates'),
 ])
 def test_removed_city_leaves_no_punctuation_or_code_residue(title, location, expected):
