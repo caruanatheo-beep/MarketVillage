@@ -378,7 +378,7 @@ footer{padding:18px 0 8px;border-top:1px solid var(--line);color:var(--muted);fo
   .masthead,.primary-nav,.primary-nav a{min-width:0}
   .brand{flex-shrink:0}
   .primary-nav a{position:relative}
-  .nav-badge{position:absolute;top:5px;right:2px;width:8px;height:8px;margin:0;padding:0;border-radius:50%;overflow:hidden;color:transparent;font-size:0;background:var(--accent);box-shadow:0 0 0 2px var(--sheet)}
+  .primary-nav .nav-badge{position:absolute;top:5px;right:2px;width:8px;height:8px;margin:0;padding:0;border-radius:50%;overflow:hidden;color:transparent;font-size:0;background:var(--accent);box-shadow:0 0 0 2px var(--sheet)}
   .primary-nav a[aria-current="page"] .nav-badge{background:#fff;box-shadow:none}
   .kind{font-size:12px}
   .primary-nav a{font-size:14px}
