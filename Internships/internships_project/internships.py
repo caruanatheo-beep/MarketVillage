@@ -5911,7 +5911,7 @@ def _display_offer_title(title: str, location: str = "") -> str:
             value = re.sub(r"(?<!\w)" + re.escape(alias) + r"(?!\w)(?!\s+(?:Stock Exchange|Stock Market))",
                            " ", value, flags=re.I)
         # A removed city can leave its state or country code behind ("- , CA", "- , UK").
-        value = re.sub(r"(?:\s*[-–—,]|(?<=[\[(]))\s*,\s*[A-Z]{2}\b(?=\s*(?:[|)\]]|$))", " ", value)
+        value = re.sub(r"(?:\s*[-–—,]|(?<=[\[(]))\s*,\s*[A-Z]{2}\b(?=\s*(?:[,;]\s*)*(?:[|)\]]|$))", " ", value)
     value = re.sub(r"[\[(][\s\-–—,:|/]*[\])]", " ", value)
     value = re.sub(r"\s+", " ", value).strip(" -–—:|,")
     contract = r"(?:(?:summer|winter|spring|off[ -]?cycle|seasonal|long)\s+)?(?:stage|stagiaire|internship|intern)\b"
