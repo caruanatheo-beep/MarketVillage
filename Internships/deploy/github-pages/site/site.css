@@ -455,3 +455,29 @@ footer{padding:18px 0 8px;border-top:1px solid var(--line);color:var(--muted);fo
 .start.is-unknown{color:var(--muted);font-weight:450;font-style:italic}
 @media(max-width:650px){.loc-country{display:none}}
 @media(prefers-color-scheme:dark){.filter-option.is-child{color:#b3c2b9}}
+
+/* Lighter layout: one row of filter pills under the search, outlined badges. */
+@media(min-width:761px){
+  #offers-view .filters{display:block;background:transparent;border:0;box-shadow:none;padding:0;-webkit-backdrop-filter:none;backdrop-filter:none}
+  #offers-view .search-row input{height:46px;border-radius:12px;background:var(--surface-card);border-color:var(--line)}
+  #offers-view .search-icon{top:15px}
+  #offers-view .filter-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  #offers-view .filter-field label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  #offers-view .filter-trigger{width:auto;height:34px;padding:6px 14px;border-radius:999px;background:transparent;border-color:var(--line);font-size:13px}
+  #offers-view .filter-trigger.is-selected{background:#eaf3ee;border-color:#bdd6c8}
+}
+.results-header{margin:18px 0 12px}
+.sort-options{border:0;background:transparent;padding:0;gap:2px}
+.sort-options button{border-radius:999px}
+.sort-options button[aria-pressed="true"]{background:#eaf3ee;border-color:transparent;color:var(--accent)}
+.card{box-shadow:none}
+.card .kind[data-kind]{background:transparent;border:1px solid currentColor;padding:1px 7px}
+.date.is-new{background:transparent;padding:0}
+@media(prefers-color-scheme:dark){
+  body::before{background:none}
+  #offers-view .search-row input,#offers-view .filter-trigger{background:#161b19;border-color:#2a332e}
+  #offers-view .filter-trigger.is-selected,.sort-options button[aria-pressed="true"]{background:#1f3a30;border-color:transparent;color:#9fdcc4}
+  .card{background:#171c1a;border-color:#252d29;box-shadow:none}
+  .card .kind[data-kind]{background:transparent}
+  .date.is-new{background:transparent;color:#9fdcc4}
+}

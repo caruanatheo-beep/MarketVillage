@@ -105,10 +105,10 @@ def test_dynamic_start_dates_and_publication_filter(screen):
     page,_=screen
     choose(page,'start','juin 2027')
     assert page.locator('.card h3').inner_text()=='Portfolio Graduate'
-    choose(page,'start','Toutes les dates')
+    choose(page,'start','Tous les débuts')
     choose(page,'period','Aujourd’hui')
     assert page.locator('.card h3').inner_text()=='Assistant Sales'
-    choose(page,'period','Toutes les dates')
+    choose(page,'period','Toutes publications')
     assert page.locator('.card').count()==2
 
 
