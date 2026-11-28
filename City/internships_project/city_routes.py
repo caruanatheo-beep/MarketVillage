@@ -94,6 +94,29 @@ def add_city_routes(server, resolve_user, store: CityStore, worker: CityWorker) 
         return HTMLResponse(html, headers={"Cache-Control": "private, no-store",
                                            "X-Frame-Options": "SAMEORIGIN"})
 
+    # Redesigned interface, served next to the original one until it covers every feature.
+    next_root = (ASSETS / "next").resolve()
+    next_types = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".ttf": "font/ttf", ".txt": "text/plain"}
+
+    @server.get("/city/next/")
+    def city_next_page(request: Request):
+        if not owner(request):
+            return denied()
+        html = (next_root / "index.html").read_text(encoding="utf-8")
+        for name in ("app.css", "app.js"):
+            version = hashlib.sha256((next_root / name).read_bytes()).hexdigest()
+            html = html.replace(f'/city/next/{name}"', f'/city/next/{name}?v={version}"')
+        return HTMLResponse(html, headers={"Cache-Control": "private, no-store", "X-Frame-Options": "SAMEORIGIN"})
+
+    @server.get("/city/next/{asset_path:path}")
+    def city_next_asset(asset_path: str, request: Request):
+        if not owner(request):
+            return denied()
+        asset = (next_root / asset_path).resolve()
+        if not asset.is_relative_to(next_root) or not asset.is_file() or asset.suffix not in next_types:
+            return JSONResponse({"detail": "Fichier introuvable."}, status_code=404)
+        return FileResponse(asset, media_type=next_types[asset.suffix], headers={"Cache-Control": "private, no-cache"})
+
     @server.get("/city/{asset_name}")
     def city_asset(asset_name: str, request: Request):
         if not owner(request):
